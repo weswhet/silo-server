@@ -1,0 +1,7 @@
+// overlay-package: internal/downloads
+
+package downloads
+
+func VectorScriptHashes() map[string]string {
+	return map[string]string{"DOWNLOADS_SHARED_BANDWIDTH": sharedBandwidthScript.Hash()}
+}

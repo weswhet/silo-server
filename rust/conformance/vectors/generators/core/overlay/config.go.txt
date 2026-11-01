@@ -1,0 +1,5 @@
+// overlay-package: internal/config
+
+package config
+
+func VectorDefaultServerID() string { return defaultJellyfinCompatServerID }

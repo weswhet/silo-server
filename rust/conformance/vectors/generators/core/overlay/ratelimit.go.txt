@@ -1,0 +1,8 @@
+// overlay-package: internal/ratelimit
+
+package ratelimit
+
+func VectorScriptHashes() map[string]string {
+	return map[string]string{"RATELIMIT_ATTEMPT": attemptScript.Hash(), "RATELIMIT_QUOTA": quotaScript.Hash(), "RATELIMIT_WINDOW": rateLimitScript.Hash()}
+}
+func VectorAttemptKey(key string) string { return redisAttemptKey(key) }

@@ -1,0 +1,7 @@
+// overlay-package: internal/api/handlers
+
+package handlers
+
+func VectorExpiredStopID(v string) string { return expiredStopID(v) }
+func VectorAbortStopID(v string) string   { return abortStopID(v) }
+func VectorAdminStopID(v string) string   { return adminStopID(v) }

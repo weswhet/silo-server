@@ -56,8 +56,103 @@ an oversized or skipped body, or a feed. `weak_reason` on the route says which, 
 preflight and a slash variant do not count as a success, because middleware and the router
 answer those, not the handler.
 
-A strangler marks proxied answers with the `X-Silo-Strangler-Upstream` response
-header (`--proxied-header` changes the name). Any value counts.
+The Rust front never marks a response, because a marker would change the header set being
+compared. It writes an origin log instead (`SILO_FRONT_ORIGIN_LOG`), one JSON line per request
+before answering it, and `--origin-log` reads it. A case counts as native only if lines exist for
+it and every one says `native`. A candidate that cannot write a log may mark proxied answers with
+the `X-Silo-Strangler-Upstream` response header (`--proxied-header` changes the name) instead; any
+value counts.
+
+Against the front, with a second Go stack behind it:
+
+```sh
+cargo build --manifest-path rust/Cargo.toml -p silo-server -p silo-conformance
+DATABASE_URL='postgres://silo:silo@127.0.0.1:35432/silo?sslmode=disable' \
+SILO_FRONT_WEB_DIST=rust/conformance/baseline/web-dist \
+SILO_FRONT_ORIGIN_LOG=rust/conformance/.run/origin.jsonl \
+rust/target/debug/silo \
+  --front main=127.0.0.1:18080,http://127.0.0.1:38080 \
+  --front jellycompat=127.0.0.1:18096,http://127.0.0.1:38096 \
+  --front abs=127.0.0.1:18378,http://127.0.0.1:38378 \
+  --front metrics=127.0.0.1:19090,http://127.0.0.1:39090 &
+rust/target/debug/silo-conformance run \
+  --reference http://127.0.0.1:28080 --candidate http://127.0.0.1:18080 \
+  --surface jellycompat=http://127.0.0.1:28096,http://127.0.0.1:18096 \
+  --surface abs=http://127.0.0.1:28378,http://127.0.0.1:18378 \
+  --surface metrics=http://127.0.0.1:29090,http://127.0.0.1:19090 \
+  --origin-log rust/conformance/.run/origin.jsonl \
+  --candidate-kind strangler \
+  --reset-reference 'rust/conformance/scripts/reset.sh --fast' \
+  --reset-candidate '<reset for the second stack>'
+```
+
+`SILO_FRONT_FORCE_GO=all` sends every native row to Go too, which is the proxy-all run: every route
+is then `not_ported`, and any difference at all is the front's.
+
+`baseline/web-dist` is the stub frontend the baseline image embeds. `scripts/front-compare.sh` runs
+all of the above, with `--proxy-all` for the proxy-all run.
+
+## Peer lab
+
+The baseline's socat edge makes every client one private, trusted address, on both sides. A run through
+it cannot see what a relay does to the peer trust decision, and it gives the two Go servers different
+client addresses: the edge's on the reference, `127.0.0.1` through the front. The one route that shows
+this, `GET /api/v2/admin/ips` with `ip=127.0.0.1`, therefore differs there.
+
+`scripts/peer-lab.sh` removes both problems:
+
+```sh
+rust/conformance/scripts/self-compare.sh --up-only
+rust/conformance/scripts/peer-lab.sh build    # the Linux front, built in a container
+rust/conformance/scripts/peer-lab.sh up
+rust/conformance/scripts/peer-lab.sh compare --proxy-all --from trusted_a \
+  --baseline rust/conformance/baseline/expected.json
+rust/conformance/scripts/peer-lab.sh compare --from untrusted_a \
+  --baseline rust/conformance/baseline/expected.json
+rust/conformance/scripts/peer-lab.sh compare --go --from trusted_a   # Go vs Go, same topology
+rust/conformance/scripts/peer-lab.sh down
+```
+
+Each client is a socat container with its own address, on a network both stacks share, and the front
+runs in the candidate Go server's network namespace, so it reaches Go on loopback from a per-client
+`127/8` source. That is the deployment the front is designed for, and it needs Linux: macOS cannot bind
+those sources. `203.0.113.0/24` is outside the default trusted list and `10.77.0.0/24` is inside it.
+`--from` picks the client the whole plan runs from. Options the script takes come before any it passes
+to `silo-conformance run`.
+
+`--sources` gives the harness the clients, which also enables the `Peers` phase, the last stage of a
+run. Those cases are in `plan.rs` and name a client each:
+
+| Name | What it compares |
+|---|---|
+| `origin:*` | `request_origin` with forwarded host and scheme, which only a trusted peer may set. |
+| `client:*` | `SessionInfo.RemoteEndPoint` for each branch of `resolver.resolve`, from both kinds of peer. |
+| `activity:*` | The address the activity log files a request under, read from `admin/ips`. |
+| `auth_limit:*` | A per-client budget that new forwarded names cannot refill, and one trusted peer's budget running out without touching another's. |
+| `abs_limit:*` | The Audiobookshelf login limiter, which keys on the peer alone. |
+| `grant:*` | Which address and path may use a Jellyfin stream grant without a credential. |
+| `base_url:*` | The speed test URL, whose code reads forwarding headers and Host directly. |
+| `native:*` | Rows the front answers itself, with spoofed forwarding headers. |
+
+A run without `--sources` does not send them. They are not in `baseline/expected.json`, which comes from
+a run without the lab, so a change in them shows only as a difference in that run, not as a regression
+against the recording.
+
+Both servers see the same client address here, so a run with `--sources` drops the `client-address`
+normalizer and compares those values exactly.
+
+`--pace-ms` slows a run. Some Go state depends on how fast requests arrive, so a difference that shows
+only through a slower candidate needs a Go vs Go run at that pace before anything may excuse it.
+
+These peer cases differ through the front, on purpose or because Go has to change. See
+`crates/silo-front/README.md`:
+
+- `grant:proxy_claiming_direct_client`: a trusted peer naming a directly connected client's address gets
+  that client's stream grant. Go tells a direct client from a proxied one by comparing its peer with its
+  client address, and through the front those always differ.
+- `base_url:ip_host_forwarded_host`, `base_url:proto`, and in a run from an untrusted client
+  `plugin_launch.secure_flag`: Go's raw `X-Forwarded-Host` and `X-Forwarded-Proto` readers believe an
+  untrusted client, and the front strips those headers because `clientip` would otherwise believe them too.
 
 ## What is compared
 
@@ -218,6 +313,8 @@ These lower what a green result proves. Parity counts the first group as not mat
 - WebSocket routes are sent as plain HTTP; no upgrade happens.
 - HTTPS and response compression are not exercised: the client neither speaks TLS nor
   sends `Accept-Encoding`.
+- Activity log rows are only visible through feeds and `admin/ips`, so a route that stops writing one
+  shows nowhere unless it carries a user. Native rows on the front write none.
 - `reset.sh --fast` restores Postgres and Redis only. Files the run writes to the data
   volume, such as catalog exports, survive into later runs.
 - Generated request bodies fill required fields only, so optional-field behaviour is only

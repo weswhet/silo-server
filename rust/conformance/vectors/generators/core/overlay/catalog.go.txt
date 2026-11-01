@@ -1,0 +1,8 @@
+// overlay-package: internal/catalog
+
+package catalog
+
+func VectorSmartDefinitionKey(v string) string { return smartDefinitionKey(v) }
+func VectorMeiliSchemaVersion(embedder string, types []string, semantic, binary bool) int {
+	return catalogSearchMeilisearchSchemaVersion(embedder, types, semantic, binary)
+}

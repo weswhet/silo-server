@@ -1,0 +1,12 @@
+// overlay-package: internal/idgen
+
+package idgen
+
+// VectorNextID mints from a real generator for one machine ID.
+func VectorNextID(machine int) (func() (string, error), error) {
+	g, err := newGenerator(machine)
+	if err != nil {
+		return nil, err
+	}
+	return func() (string, error) { return mintID(g, g.sf.NextID) }, nil
+}

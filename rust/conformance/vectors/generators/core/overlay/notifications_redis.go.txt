@@ -1,0 +1,7 @@
+// overlay-package: internal/notifications
+
+package notifications
+
+func VectorTicketPrefixes() map[string]string {
+	return map[string]string{"EVENTS_WS_TICKET_PREFIX": redisTicketPrefix, "EVENTS_WS_TICKET_PROOF_PREFIX": redisTicketProofPrefix}
+}

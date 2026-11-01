@@ -1,0 +1,5 @@
+// overlay-package: internal/requests
+
+package requests
+
+func VectorAPIKeyAAD(id string) string { return apiKeyAAD(id) }

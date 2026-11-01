@@ -1,0 +1,5 @@
+// overlay-package: internal/catalog
+
+package catalog
+
+func VectorFoldSearchDiacritics(v string) string { return foldSearchDiacritics(v) }

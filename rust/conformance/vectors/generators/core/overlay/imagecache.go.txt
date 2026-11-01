@@ -1,0 +1,10 @@
+// overlay-package: internal/imagecache
+
+package imagecache
+
+import "github.com/Silo-Server/silo-server/internal/imageutil"
+
+func VectorVariantRevision(r *imageutil.VariantResult) string { return variantRevision(r) }
+
+func VectorBuildBasePath(req CacheRequest) string { return buildBasePath(req) }
+func VectorNormalizeImageLanguage(v string) string { return normalizeImageLanguage(v) }

@@ -1,0 +1,10 @@
+// overlay-package: internal/apiv2
+
+package apiv2
+
+import "context"
+
+func VectorViewerScopeDigest(ctx context.Context) string { return viewerScopeDigest(ctx) }
+
+// VectorForge signs an arbitrary cursor body, for testing what Decode does with shapes Encode never mints.
+func VectorForge(c *Cursors, scope CursorScope, body []byte) []byte { return c.sign(scope, body) }

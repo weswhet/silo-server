@@ -1,0 +1,7 @@
+// overlay-package: internal/autoscan
+
+package autoscan
+
+func VectorHashWebhookToken(v string) string  { return hashWebhookToken(v) }
+func VectorWebhookSecretAAD(v string) string  { return webhookSecretAAD(v) }
+func VectorConnectionAPIKeyAAD(v string) string { return connectionAPIKeyAAD(v) }

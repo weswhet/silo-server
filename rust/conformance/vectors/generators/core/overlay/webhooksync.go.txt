@@ -1,0 +1,5 @@
+// overlay-package: internal/webhooksync
+
+package webhooksync
+
+func VectorTokenAAD(id string) string { return webhookTokenAAD(id) }

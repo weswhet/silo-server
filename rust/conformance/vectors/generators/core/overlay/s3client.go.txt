@@ -1,0 +1,12 @@
+// overlay-package: internal/s3client
+
+package s3client
+
+import "time"
+
+func VectorCloudflareTokenURL(endpoint, param, secret, key string, issued int64) string {
+	return (&Client{publicEndpoint: endpoint, tokenParam: param, tokenSecret: secret}).cloudflareTokenURL(key, time.Unix(issued, 0))
+}
+func VectorDeliveryScope(endpoint, bucket, prefix, public, urlAuth, param string) string {
+	return (&Client{endpoint: endpoint, bucket: bucket, keyPrefix: prefix, publicEndpoint: public, urlAuth: urlAuth, tokenParam: param}).ArtworkDeliveryScope()
+}

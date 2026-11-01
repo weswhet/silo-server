@@ -1,0 +1,20 @@
+// overlay-package: internal/plugins
+
+package plugins
+
+import "github.com/Silo-Server/silo-server/internal/secret"
+
+func VectorInstanceStateAAD(id int, scope, key string) string { return instanceStateAAD(id, scope, key) }
+func VectorRuntimeConfigAAD(id int, key string) string        { return runtimeConfigAAD(id, key) }
+func VectorSealInstanceState(c *secret.Cipher, id int, scope, key string, value []byte) ([]byte, error) {
+	return (&InstanceStateStore{cipher: c}).seal(id, scope, key, value)
+}
+func VectorOpenInstanceState(c *secret.Cipher, id int, scope, key string, stored []byte) ([]byte, error) {
+	return (&InstanceStateStore{cipher: c}).open(id, scope, key, stored)
+}
+func VectorEncodeRuntimeConfig(c *secret.Cipher, id int, key string, plaintext []byte) ([]byte, error) {
+	return encodeRuntimeConfigJSON(c, id, key, plaintext)
+}
+func VectorDecodeRuntimeConfig(c *secret.Cipher, id int, key string, stored []byte) (map[string]any, error) {
+	return decodeRuntimeConfigValue(c, id, key, stored)
+}

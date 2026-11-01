@@ -1,0 +1,21 @@
+[package]
+name = "silo-jwt"
+version = "0.1.0"
+description = "golang-jwt v5 semantics: HS256/384/512, RS256 and ES256, with encoding/json claim decoding."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+silo-gocompat = { path = "../silo-gocompat" }
+base64 = "0.22"
+hmac = "0.12"
+p256 = { version = "0.13", features = ["ecdsa"] }
+rsa = { version = "0.9", default-features = false, features = ["std", "sha2"] }
+serde = { version = "1", features = ["derive"] }
+# Without float_roundtrip, a float in a signed claim can come back one ULP off.
+serde_json = { version = "1", features = ["float_roundtrip"] }
+sha2 = "0.10"
+
+[dev-dependencies]
+rand = "0.8"

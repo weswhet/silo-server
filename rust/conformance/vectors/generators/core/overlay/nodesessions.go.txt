@@ -1,0 +1,5 @@
+// overlay-package: internal/nodesessions
+
+package nodesessions
+
+func VectorNodeHash(url string) string { return NewTracker(nil, url, "", "").nodeHash }

@@ -1,0 +1,426 @@
+{
+ "repairs": [
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[{\"path\":\"/m/Movie.sdh.en.srt\",\"language\":\"sdh\",\"hearing_impaired\":false}]",
+   "ok": true,
+   "err": "",
+   "repaired": "[{\"hearing_impaired\":true,\"language\":\"en\",\"path\":\"/m/Movie.sdh.en.srt\"}]"
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[{\"path\":\"/m/Movie.en.srt\",\"language\":\"en\",\"hearing_impaired\":false}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[{\"path\":\"/m/Movie.en.srt\",\"language\":\"en\"}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[{\"path\":\"/m/Movie.fr.forced.srt\",\"language\":\"fra\",\"hearing_impaired\":false,\"forced\":true,\"codec\":\"subrip\"}]",
+   "ok": true,
+   "err": "",
+   "repaired": "[{\"codec\":\"subrip\",\"forced\":true,\"hearing_impaired\":false,\"language\":\"fr\",\"path\":\"/m/Movie.fr.forced.srt\"}]"
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[{\"path\":\"/m/Movie.hi.srt\",\"language\":\"\",\"hearing_impaired\":true}]",
+   "ok": true,
+   "err": "",
+   "repaired": "[{\"hearing_impaired\":false,\"language\":\"hi\",\"path\":\"/m/Movie.hi.srt\"}]"
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[{\"path\":\"/m/Other.en.srt\",\"language\":\"xx\",\"hearing_impaired\":true}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[{\"path\":\"\",\"language\":\"xx\"}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[{\"language\":\"xx\"}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[{}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[null]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[12]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[\"text\"]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[[1]]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[{\"path\":12,\"language\":\"en\"}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[{\"path\":\"/m/Movie.de.srt\",\"language\":12}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[{\"path\":\"/m/Movie.de.srt\",\"hearing_impaired\":\"no\"}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[{\"path\":\"/m/Movie.de.srt\",\"language\":null,\"hearing_impaired\":null}]",
+   "ok": true,
+   "err": "",
+   "repaired": "[{\"hearing_impaired\":false,\"language\":\"de\",\"path\":\"/m/Movie.de.srt\"}]"
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[{\"Path\":\"/m/Movie.de.srt\",\"LANGUAGE\":\"en\"}]",
+   "ok": true,
+   "err": "",
+   "repaired": "[{\"LANGUAGE\":\"en\",\"Path\":\"/m/Movie.de.srt\",\"hearing_impaired\":false,\"language\":\"de\"}]"
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[{\"PATH\":\"/m/Movie.de.srt\",\"path\":\"/m/Movie.fr.srt\",\"language\":\"de\"}]",
+   "ok": true,
+   "err": "",
+   "repaired": "[{\"PATH\":\"/m/Movie.de.srt\",\"hearing_impaired\":false,\"language\":\"fr\",\"path\":\"/m/Movie.fr.srt\"}]"
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[{\"HEARING_IMPAIRED\":true,\"path\":\"/m/Movie.de.srt\",\"language\":\"de\"}]",
+   "ok": true,
+   "err": "",
+   "repaired": "[{\"HEARING_IMPAIRED\":true,\"hearing_impaired\":false,\"language\":\"de\",\"path\":\"/m/Movie.de.srt\"}]"
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[{\"path\":\"/m/Movie.de.srt\",\"language\":\"de\",\"hearing_impaired\":false,\"note\":\"<&>\u2028\",\"n\":1.50}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[{\"path\":\"/m/Movie.日本語.ja.srt\",\"language\":\"ja\"}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[{\"path\":\"/m/movie.PT-br.CC.srt\",\"language\":\"pt\",\"hearing_impaired\":false}]",
+   "ok": true,
+   "err": "",
+   "repaired": "[{\"hearing_impaired\":true,\"language\":\"pt-BR\",\"path\":\"/m/movie.PT-br.CC.srt\"}]"
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[{\"path\":\"/m/Movie.sdh.en.srt\",\"language\":\"sdh\",\"hearing_impaired\":false},{\"path\":\"/m/Movie.en.srt\",\"language\":\"en\",\"hearing_impaired\":false},{\"path\":\"/m/Other.en.srt\",\"language\":\"xx\",\"hearing_impaired\":true},{\"path\":\"/m/Movie.fr.forced.srt\",\"language\":\"fra\",\"hearing_impaired\":false,\"forced\":true,\"codec\":\"subrip\"}]",
+   "ok": true,
+   "err": "",
+   "repaired": "[{\"hearing_impaired\":true,\"language\":\"en\",\"path\":\"/m/Movie.sdh.en.srt\"},{\"path\":\"/m/Movie.en.srt\",\"language\":\"en\",\"hearing_impaired\":false},{\"path\":\"/m/Other.en.srt\",\"language\":\"xx\",\"hearing_impaired\":true},{\"codec\":\"subrip\",\"forced\":true,\"hearing_impaired\":false,\"language\":\"fr\",\"path\":\"/m/Movie.fr.forced.srt\"}]"
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[{\"path\":\"/m/Movie.sdh.en.srt\",\"language\":\"sdh\",\"hearing_impaired\":false}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[{\"path\":\"/m/Movie.en.srt\",\"language\":\"en\",\"hearing_impaired\":false}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[{\"path\":\"/m/Movie.en.srt\",\"language\":\"en\"}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[{\"path\":\"/m/Movie.fr.forced.srt\",\"language\":\"fra\",\"hearing_impaired\":false,\"forced\":true,\"codec\":\"subrip\"}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[{\"path\":\"/m/Movie.hi.srt\",\"language\":\"\",\"hearing_impaired\":true}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[{\"path\":\"/m/Other.en.srt\",\"language\":\"xx\",\"hearing_impaired\":true}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[{\"path\":\"\",\"language\":\"xx\"}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[{\"language\":\"xx\"}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[{}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[null]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[12]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[\"text\"]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[[1]]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[{\"path\":12,\"language\":\"en\"}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[{\"path\":\"/m/Movie.de.srt\",\"language\":12}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[{\"path\":\"/m/Movie.de.srt\",\"hearing_impaired\":\"no\"}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[{\"path\":\"/m/Movie.de.srt\",\"language\":null,\"hearing_impaired\":null}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[{\"Path\":\"/m/Movie.de.srt\",\"LANGUAGE\":\"en\"}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[{\"PATH\":\"/m/Movie.de.srt\",\"path\":\"/m/Movie.fr.srt\",\"language\":\"de\"}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[{\"HEARING_IMPAIRED\":true,\"path\":\"/m/Movie.de.srt\",\"language\":\"de\"}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[{\"path\":\"/m/Movie.de.srt\",\"language\":\"de\",\"hearing_impaired\":false,\"note\":\"<&>\u2028\",\"n\":1.50}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[{\"path\":\"/m/Movie.日本語.ja.srt\",\"language\":\"ja\"}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[{\"path\":\"/m/movie.PT-br.CC.srt\",\"language\":\"pt\",\"hearing_impaired\":false}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.2024.mkv",
+   "stored": "[{\"path\":\"/m/Movie.sdh.en.srt\",\"language\":\"sdh\",\"hearing_impaired\":false},{\"path\":\"/m/Movie.en.srt\",\"language\":\"en\",\"hearing_impaired\":false},{\"path\":\"/m/Other.en.srt\",\"language\":\"xx\",\"hearing_impaired\":true},{\"path\":\"/m/Movie.fr.forced.srt\",\"language\":\"fra\",\"hearing_impaired\":false,\"forced\":true,\"codec\":\"subrip\"}]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[]",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "{}",
+   "ok": false,
+   "err": "json: cannot unmarshal object into Go value of type []json.RawMessage",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "12",
+   "ok": false,
+   "err": "json: cannot unmarshal number into Go value of type []json.RawMessage",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "null",
+   "ok": false,
+   "err": "",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "\"x\"",
+   "ok": false,
+   "err": "json: cannot unmarshal string into Go value of type []json.RawMessage",
+   "repaired": ""
+  },
+  {
+   "video": "/m/Movie.mkv",
+   "stored": "[",
+   "ok": false,
+   "err": "unexpected end of JSON input",
+   "repaired": ""
+  }
+ ],
+ "rewrites": {
+  "rewrite": {
+   " en ": "en",
+   "ENG": "en",
+   "English": "en",
+   "Portuguese (Brazil)": "pt-BR",
+   "en_US": "en-US",
+   "eng": "en",
+   "fre": "fr",
+   "ger": "de",
+   "i-klingon": "tlh",
+   "pt-br": "pt-BR",
+   "spa": "es"
+  },
+  "stored": [
+   "",
+   "en",
+   "eng",
+   "English",
+   "pt-br",
+   "en-US",
+   "zh-Hans",
+   "sr-Latn",
+   "fre",
+   "ger",
+   "spa",
+   "und",
+   "fil",
+   "forced",
+   "Монгол",
+   "x-foo",
+   "i-klingon",
+   "ENG",
+   "Portuguese (Brazil)",
+   " en ",
+   "en_US",
+   "sdh",
+   "cc"
+  ],
+  "unparseable": [
+   "forced",
+   "Монгол"
+  ]
+ }
+}

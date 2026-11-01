@@ -1,0 +1,7 @@
+// overlay-package: internal/watchsync
+
+package watchsync
+
+func VectorAuthStateAAD(provider string, user int, profile string) string {
+	return authStateAAD(provider, user, profile)
+}

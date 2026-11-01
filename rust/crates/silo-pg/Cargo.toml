@@ -1,0 +1,24 @@
+[package]
+name = "silo-pg"
+version = "0.1.0"
+description = "Postgres access with pgx's connection setup and exec modes, plus a goose-compatible migration runner."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+bytes = "1"
+deadpool = { version = "0.12", default-features = false, features = ["managed", "rt_tokio_1"] }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+half = "2"
+lru = "0.16"
+silo-gocompat = { path = "../silo-gocompat" }
+thiserror = "2"
+tokio = { version = "1", features = ["rt", "time", "sync", "macros"] }
+tokio-postgres = { version = "0.7", default-features = false, features = ["runtime"] }
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+serde_json = "1"
+sha2 = "0.10"

@@ -1,0 +1,9 @@
+// overlay-package: internal/playback
+
+package playback
+
+import "encoding/json"
+
+func VectorCopyPlanRecord(planned bool, durations []float64) ([]byte, error) {
+	return json.Marshal(copyPlanRecord{Planned: planned, Durations: durations})
+}

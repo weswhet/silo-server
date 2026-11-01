@@ -7,6 +7,7 @@ pub mod http;
 pub mod model;
 pub mod mutate;
 pub mod normalize;
+pub mod origin;
 pub mod params;
 pub mod plan;
 pub mod report;

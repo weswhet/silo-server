@@ -1,0 +1,8 @@
+// overlay-package: internal/autoscan
+
+package autoscan
+
+func VectorScriptHashes() map[string]string {
+	return map[string]string{"AUTOSCAN_CLAIM_STATE": claimStateScript.Hash(), "AUTOSCAN_RELEASE_STATE": releaseStateScript.Hash()}
+}
+func VectorSuppressKeyPrefix() string { return suppressKeyPrefix }

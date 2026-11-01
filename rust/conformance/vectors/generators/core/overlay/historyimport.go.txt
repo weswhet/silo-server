@@ -1,0 +1,14 @@
+// overlay-package: internal/historyimport
+
+package historyimport
+
+func VectorSourceAdminTokenAAD(id int) string { return sourceAdminTokenAAD(id) }
+func VectorConnectServerAAD(session string, index int, id string) string {
+	return connectServerAccessKeyAAD(session, index, ConnectServer{ID: id})
+}
+func VectorConnectSessionAAD(session string) string { return connectSessionTokenAAD(session) }
+func VectorPlexServerAAD(session string, index int, id string) string {
+	return plexServerAccessTokenAAD(session, index, PlexServer{ClientIdentifier: id})
+}
+func VectorPlexSessionAAD(session string) string { return plexSessionTokenAAD(session) }
+func VectorPersonalCredentialAAD(run string) string { return personalCredentialAAD(run) }

@@ -1,0 +1,5 @@
+// overlay-package: internal/noderecipe
+
+package noderecipe
+
+func VectorDigest(data []byte) string { return nodeAuthorityRecordDigest(data) }

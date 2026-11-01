@@ -1,0 +1,29 @@
+[package]
+name = "silo-core"
+version = "0.1.0"
+description = "Persisted and signed formats shared by every Silo service: secrets, IDs, tokens, signatures, and validators."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+silo-gocompat = { path = "../silo-gocompat" }
+silo-jwt = { path = "../silo-jwt" }
+aes-gcm = "0.10"
+bcrypt = "0.19"
+getrandom = "0.2"
+hkdf = "0.12"
+hmac = "0.12"
+p256 = { version = "0.13", features = ["ecdsa"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+sha1 = "0.10"
+sha2 = "0.10"
+unicode-normalization = "0.1"
+
+[dev-dependencies]
+p256 = { version = "0.13", features = ["ecdsa"] }
+sha2 = "0.10"
+postgres = "0.19"
+rand = "0.8"
+rsa = { version = "0.9", default-features = false, features = ["std", "sha2", "pem"] }

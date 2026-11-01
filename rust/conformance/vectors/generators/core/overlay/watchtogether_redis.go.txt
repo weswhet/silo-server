@@ -1,0 +1,5 @@
+// overlay-package: internal/watchtogether
+
+package watchtogether
+
+func VectorRoomSocketTicketPrefix() string { return roomSocketTicketPrefix }

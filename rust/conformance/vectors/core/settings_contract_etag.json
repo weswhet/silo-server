@@ -1,0 +1,7 @@
+{
+"family": "settings_contract_etag",
+"source": "internal/settingscontract ETag over contracts/settings/v1",
+"cases": [
+{"in":"contracts/settings/v1","out":{"canonical_sha256":"34f733bc644bf531609f9c18b19fe65ef489f768043986a221f5137bee26eb5e","public_sha256":"3b1c46975473f0220707d80358a094e0867c4b2dc14963b5ee53ed460504321a","etag":"\"a829c340954c1f81493674d412b6385c9db148e7457553293da1235bf61d4f07\"","public_etag":"\"bd1ed5202eb076f561b9fc2f67a30735272fe017706dcad3da8178736dc88197\""}}
+]
+}

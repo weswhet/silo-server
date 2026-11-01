@@ -160,6 +160,8 @@ pub enum Phase {
     MutateV1,
     MutateScenarios,
     MutateCompat,
+    /// Requests from named transport peers. They need the peer lab (`--sources`).
+    Peers,
 }
 
 #[derive(Clone, Debug)]
@@ -187,6 +189,13 @@ pub struct Case {
     pub timeout_secs: u64,
     /// Keeps a scenario and its follow-up steps contiguous when sorting.
     pub sort_key: String,
+    /// The peer-lab client to send from, instead of the run's main base URLs.
+    pub source: Option<String>,
+    /// The Host to send, instead of `FIXED_HOST`.
+    pub host: Option<String>,
+    /// Before sending, poll this admin read on both sides until its `items` is not empty, for a
+    /// write the server batches.
+    pub settle_on: Option<String>,
 }
 
 pub const PROXY_MARKER_HEADER: &str = "X-Silo-Strangler-Upstream";

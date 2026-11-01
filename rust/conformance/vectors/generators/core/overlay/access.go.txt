@@ -1,0 +1,21 @@
+// overlay-package: internal/access
+
+package access
+
+import (
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+)
+
+// VectorSign is the signing half of ProfileTokenService.Mint at fixed times.
+func VectorSign(c ProfileTokenClaims, iat int64, exp *int64, secret string) (string, error) {
+	reg := jwt.RegisteredClaims{IssuedAt: jwt.NewNumericDate(time.Unix(iat, 0))}
+	if exp != nil {
+		reg.ExpiresAt = jwt.NewNumericDate(time.Unix(*exp, 0))
+	}
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, profileJWTClaims{
+		UserID: c.UserID, SessionID: c.SessionID, ProfileID: c.ProfileID,
+		PINRevision: &c.PINRevision, PolicyRevision: c.PolicyRevision, RegisteredClaims: reg,
+	}).SignedString([]byte(secret))
+}

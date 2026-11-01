@@ -113,6 +113,18 @@ fn row_for(id: &str) -> Option<Row> {
                 json!("not a timestamp"),
             ],
         ),
+        "telemetry-parity-mismatch-times" => row(
+            "api_v2",
+            "GET /api/v2/admin/stream-telemetry/parity",
+            json!("2026-11-01T00:00:00.5Z"),
+            json!("2026-11-01T00:00:10.25Z"),
+            vec![
+                json!("2026-11-01T00:00:10.25+00:00"),
+                json!("2026-11-02T00:00:00.5Z"),
+                json!("2000-01-01T00:00:00.5Z"),
+                json!("direct"),
+            ],
+        ),
         "stats-window-bounds" => row(
             "api_v2",
             "GET /api/v2/admin/stats/api-clients",
@@ -180,6 +192,9 @@ fn row_for(id: &str) -> Option<Row> {
         "server-gauges" => gauge_row("GET /api/v2/admin/system/resources"),
         "request-count-gauge" => gauge_row("GET /api/v2/admin/users/{id}/ips"),
         "telemetry-build-time" => gauge_row("GET /api/v2/admin/stream-telemetry/parity"),
+        "telemetry-parity-mismatch-sessions" => {
+            uuid_row("api_v2", "GET /api/v2/admin/stream-telemetry/parity")
+        }
         "sync-generation" => uuid_row("api_v2", "GET /api/v2/sync/progress/capabilities"),
         "login-session-ids" => uuid_row("api_v2", "GET /api/v2/auth/sessions"),
         "generated-uuid-ids" => uuid_row("api_v2", "POST /api/v2/collections"),
@@ -581,6 +596,13 @@ fn feed_route(id: &str) -> &'static str {
         "own-session-feed" => "GET /api/v2/admin/sessions",
         other => panic!("feed {other} needs a route in feed_route"),
     }
+}
+
+#[test]
+fn the_peer_lab_compares_client_addresses_exactly() {
+    let lab = load_rules().for_peer_lab();
+    assert!(lab.rules.iter().all(|r| r.spec.id != "client-address"));
+    assert_eq!(lab.rules.len() + 1, load_rules().rules.len());
 }
 
 #[test]

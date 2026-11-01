@@ -1,0 +1,7 @@
+// overlay-package: internal/literaryworks
+
+package literaryworks
+
+func VectorGeneratedWorkID(title string, authors []string) string {
+	return generatedWorkID(MatchItem{Title: title, Authors: authors})
+}

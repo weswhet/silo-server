@@ -1,0 +1,16 @@
+// overlay-package: internal/imageutil
+
+package imageutil
+
+import (
+	"encoding/base64"
+	"image"
+
+	"go.n16f.net/thumbhash"
+)
+
+// VectorThumbhash is Thumbhash after the decode: an NRGBA image through scaleImage and the encoder.
+func VectorThumbhash(w, h int, pix []byte) string {
+	img := &image.NRGBA{Pix: pix, Stride: 4 * w, Rect: image.Rect(0, 0, w, h)}
+	return base64.StdEncoding.EncodeToString(thumbhash.EncodeImage(scaleImage(img, thumbhashSourceDimension)))
+}

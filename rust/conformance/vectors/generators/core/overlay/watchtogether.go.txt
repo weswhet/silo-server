@@ -1,0 +1,20 @@
+// overlay-package: internal/watchtogether
+
+package watchtogether
+
+import (
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+)
+
+// VectorSign is the signing half of RoomTokenService.Mint at fixed times.
+func VectorSign(c RoomTokenClaims, iat, exp int64, secret string) (string, error) {
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, roomJWTClaims{
+		RoomID: c.RoomID, UserID: c.UserID, ProfileID: c.ProfileID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			IssuedAt:  jwt.NewNumericDate(time.Unix(iat, 0)),
+			ExpiresAt: jwt.NewNumericDate(time.Unix(exp, 0)),
+		},
+	}).SignedString([]byte(secret))
+}

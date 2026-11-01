@@ -1,0 +1,10 @@
+// overlay-package: internal/metadata/translation
+
+package translation
+
+func VectorIdempotencyKey(kind, id, lang, model string, children, force bool) string {
+	return idempotencyKey(TargetKind(kind), id, lang, model, children, force)
+}
+func VectorLegacyIdempotencyKey(kind, id, lang, model string) string {
+	return legacyIdempotencyKey(TargetKind(kind), id, lang, model)
+}

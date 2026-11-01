@@ -1,0 +1,8 @@
+// overlay-package: internal/metadata
+
+package metadata
+
+func VectorSidecarEntryKey(name string, size, mod int64) string { return sidecarEntryKey(name, size, mod) }
+func VectorHashSidecarEntries(entries []string) string          { return hashSidecarEntries(entries) }
+func VectorLocalSidecarLockKey(folder int, id string) int64     { return localSidecarLockKey(folder, id) }
+func VectorUploadedSourcePrefix() string                        { return uploadedImageSourcePrefix }

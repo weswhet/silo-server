@@ -1,0 +1,5 @@
+// overlay-package: internal/server
+
+package server
+
+func VectorContentETag(b []byte) string { return contentETag(b) }

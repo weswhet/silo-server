@@ -7,7 +7,7 @@ use silo_conformance::baseline::{self, CandidateKind};
 use silo_conformance::model::{Auth, Case, Identity, Phase, Route, Surface, PROXY_MARKER_HEADER};
 use silo_conformance::normalize::Rules;
 use silo_conformance::report::{route_reports, FlakeSet, RouteState};
-use silo_conformance::runner::{Config, RunOutput, Runner};
+use silo_conformance::runner::{Config, PeerSource, RunOutput, Runner};
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -22,6 +22,8 @@ struct Quirks {
     id_seed: u32,
     drops_cache_control: bool,
     error_shape_differs: bool,
+    /// Write an origin log here, as the front does: a line per request, before answering.
+    origin_log: Option<&'static str>,
 }
 
 #[derive(Default)]
@@ -128,6 +130,22 @@ fn serve(q: Quirks) -> (String, Arc<Mutex<Store>>) {
     (base, store)
 }
 
+/// `stable` is served natively, a read of a thing is forwarded, and a DELETE writes no line.
+fn write_origin_line(log: &str, method: &str, path: &str) {
+    let origin = match (method, path) {
+        ("DELETE", _) => return,
+        (_, "/api/v2/stable") => "native",
+        _ => "go",
+    };
+    let line = json!({"origin": origin, "method": method, "target": path}).to_string() + "\n";
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log)
+        .unwrap();
+    file.write_all(line.as_bytes()).unwrap();
+}
+
 fn connection(mut conn: TcpStream, q: Quirks, store: &Mutex<Store>) {
     let mut buf = Vec::new();
     let mut chunk = [0u8; 4096];
@@ -161,6 +179,9 @@ fn connection(mut conn: TcpStream, q: Quirks, store: &Mutex<Store>) {
             }
         }
         let body = String::from_utf8_lossy(&buf[head_end + 4..head_end + 4 + len]).into_owned();
+        if let Some(log) = q.origin_log {
+            write_origin_line(log, method, path);
+        }
         let reply = handle(q, store, method, path, &head, &body);
         let mut out = format!(
             "HTTP/1.1 {} X\r\nContent-Length: {}\r\n",
@@ -227,6 +248,9 @@ fn world() -> World {
             path_override: None,
             capture_as: None,
             may_mutate: false,
+            source: None,
+            host: None,
+            settle_on: None,
             skip_body: None,
             timeout_secs: 5,
             sort_key: String::new(),
@@ -256,6 +280,14 @@ fn compare(
     reference: Quirks,
     candidate: Quirks,
 ) -> (World, RunOutput, Arc<Mutex<Store>>, Arc<Mutex<Store>>) {
+    compare_with_log(reference, candidate, None)
+}
+
+fn compare_with_log(
+    reference: Quirks,
+    candidate: Quirks,
+    origin_log: Option<std::path::PathBuf>,
+) -> (World, RunOutput, Arc<Mutex<Store>>, Arc<Mutex<Store>>) {
     let w = world();
     let (ra, store_a) = serve(reference);
     let (rb, store_b) = serve(candidate);
@@ -269,14 +301,85 @@ fn compare(
         fixture,
         rules: Rules::default(),
         proxy_header: PROXY_MARKER_HEADER.to_string(),
+        origin_log,
         reset_reference: None,
         reset_candidate: None,
         only: None,
         progress: false,
         tag_cases: false,
+        sources: BTreeMap::new(),
+        pace: std::time::Duration::ZERO,
     };
     let out = Runner::new(&cfg, &w.routes, 0).run(&w.cases).unwrap();
     (w, out, store_a, store_b)
+}
+
+fn peer_run(sources: BTreeMap<String, PeerSource>) -> (RunOutput, Arc<Mutex<Store>>, Case) {
+    let w = world();
+    let (a, b) = seeded();
+    let (ra, store_a) = serve(a);
+    let (rb, _store_b) = serve(b);
+    let mut urls = BTreeMap::new();
+    urls.insert(Surface::ApiV2, (ra, rb));
+    let mut fixture = BTreeMap::new();
+    fixture.insert("CONF_USER_API_KEY".to_string(), "k".to_string());
+    fixture.insert("CONF_ADMIN_API_KEY".to_string(), "k".to_string());
+    let cfg = Config {
+        urls,
+        fixture,
+        rules: Rules::default(),
+        proxy_header: PROXY_MARKER_HEADER.to_string(),
+        origin_log: None,
+        reset_reference: None,
+        reset_candidate: None,
+        only: None,
+        progress: false,
+        tag_cases: false,
+        sources,
+        pace: std::time::Duration::ZERO,
+    };
+    let mut peer = w.cases[1].clone();
+    peer.id = "api_v2 GET /api/v2/stable#peer:lab_client:plain".to_string();
+    peer.name = "peer:lab_client:plain".to_string();
+    peer.phase = Phase::Peers;
+    peer.source = Some("lab_client".to_string());
+    let mut cases = w.cases.clone();
+    cases.push(peer.clone());
+    let out = Runner::new(&cfg, &w.routes, 0).run(&cases).unwrap();
+    (out, store_a, peer)
+}
+
+#[test]
+fn a_peer_case_goes_to_its_client_and_runs_only_with_a_lab() {
+    let stable_reads = |store: &Arc<Mutex<Store>>| {
+        let store = store.lock().unwrap();
+        store.log.iter().filter(|l| l.ends_with("/stable")).count()
+    };
+
+    // Without a lab it is reported as not run, and nothing is sent anywhere.
+    let (out, store, peer) = peer_run(BTreeMap::new());
+    assert!(out.not_run.contains_key(&peer.id));
+    assert!(out.results.iter().all(|r| r.id != peer.id));
+    let main_reads = stable_reads(&store);
+
+    // The main servers agree, so a difference can only come from the servers behind the client.
+    let (a, mut b) = seeded();
+    b.field_as_string = true;
+    let (ra, store_lab) = serve(a);
+    let (rb, _) = serve(b);
+    let mut sources = BTreeMap::new();
+    sources.insert(
+        "lab_client".to_string(),
+        PeerSource {
+            ip: "203.0.113.11".to_string(),
+            urls: BTreeMap::from([(Surface::ApiV2, (ra, rb))]),
+        },
+    );
+    let (out, store_main, peer) = peer_run(sources);
+    let result = out.results.iter().find(|r| r.id == peer.id).unwrap();
+    assert!(!result.diffs.is_empty(), "{result:?}");
+    assert!(stable_reads(&store_lab) > 0);
+    assert_eq!(stable_reads(&store_main), main_reads);
 }
 
 fn seeded() -> (Quirks, Quirks) {
@@ -401,6 +504,30 @@ fn a_candidate_that_ignores_if_none_match_is_caught_by_the_replay() {
         .filter(|l| l.ends_with("/api/v2/stable"))
         .count();
     assert_eq!(count, 2, "one request and one revalidation");
+}
+
+#[test]
+fn the_origin_log_decides_who_answered_and_silence_counts_against_the_route() {
+    let path = std::env::temp_dir().join(format!("conformance-origin-{}", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let leaked: &'static str = Box::leak(path.to_string_lossy().into_owned().into_boxed_str());
+    let (a, mut b) = seeded();
+    b.origin_log = Some(leaked);
+    let (w, out, _, _) = compare_with_log(a, b, Some(path.clone()));
+    let _ = std::fs::remove_file(&path);
+    // No header differs and no body differs on any of these. Only the log tells them apart.
+    assert_eq!(
+        state(&w, &out, "api_v2 GET /api/v2/stable"),
+        RouteState::Matched
+    );
+    assert_eq!(
+        state(&w, &out, "api_v2 GET /api/v2/things/{id}"),
+        RouteState::NotPorted
+    );
+    assert_eq!(
+        state(&w, &out, "api_v2 DELETE /api/v2/things/{id}"),
+        RouteState::NotPorted
+    );
 }
 
 #[test]

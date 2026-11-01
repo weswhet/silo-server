@@ -1,0 +1,24 @@
+// overlay-package: internal/downloads
+
+package downloads
+
+import (
+	"time"
+
+	"github.com/Silo-Server/silo-server/internal/models"
+	"github.com/Silo-Server/silo-server/internal/tonemap"
+)
+
+func VectorParamsHash(format, container, video, audio, resolution string, track, bitrate int, burnIn bool, policy, mode, kind, recipe string, preflight bool, rev tonemap.SourceRevision) string {
+	return paramsHashWithToneMapRevision(paramsHashParams{
+		format: format, container: container, codecVideo: video, codecAudio: audio, resolution: resolution,
+		audioTrackIndex: track, targetBitrateKbps: bitrate, subtitleBurnIn: burnIn,
+		policy: tonemap.Policy(policy), mode: tonemap.Mode(mode), sourceKind: tonemap.SourceKind(kind),
+		recipeVersion: recipe, preflightRequired: preflight, sourceRevision: rev,
+	})
+}
+
+func VectorMetadataETag(id string, revision int, format, quality, effective string, bitrate int, size int64, modified *time.Time) string {
+	dl := &Download{ID: id, Revision: revision, Format: format, Quality: quality, EffectiveQuality: effective, TargetBitrateKbps: bitrate, FileSize: size}
+	return buildIntegrity(dl, &models.MediaFile{FileModifiedAt: modified}).MetadataETag
+}

@@ -1,0 +1,15 @@
+// overlay-package: internal/nodeauth
+
+package nodeauth
+
+import (
+	"net/http"
+	"time"
+)
+
+func VectorSign(req *http.Request, nodeURL, secret string, now time.Time) error {
+	return sign(req, nodeURL, secret, now)
+}
+func VectorVerify(r *http.Request, secret string, now time.Time) error {
+	return verify(r, secret, now)
+}

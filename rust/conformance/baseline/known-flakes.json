@@ -46,6 +46,25 @@
         "ExtraKey $.status"
       ],
       "why": "The refresh cooldown is per item and carried across this run's earlier refresh, so one server can answer before the cooldown clears and the other after."
+    },
+    {
+      "cases": [
+        "api_v2 GET /api/v2/not-interested/{item_id}#after_writes"
+      ],
+      "signatures": [
+        "ValueMismatch $.marked_at"
+      ],
+      "why": "A clock value with one-second resolution: the two servers can land on either side of a second. Seen Go vs Go."
+    },
+    {
+      "cases": [
+        "api_v1 PUT /api/v1/watch-together/rooms/{room_id}/selection#valid",
+        "api_v1 PATCH /api/v1/watch-together/rooms/{room_id}/policy#valid"
+      ],
+      "signatures": [
+        "ValueMismatch $.room.anchor_updated_at"
+      ],
+      "why": "A clock value with one-second resolution: the two servers can land on either side of a second. Seen Go vs Go."
     }
   ]
 }

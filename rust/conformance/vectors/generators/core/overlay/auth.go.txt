@@ -1,0 +1,22 @@
+// overlay-package: internal/auth
+
+package auth
+
+func VectorHashDeviceLoginSecret(v string) string { return hashDeviceLoginSecret(v) }
+func VectorNormalizeUserCode(v string) string     { return normalizeUserCode(v) }
+func VectorFormatUserCode(v string) string        { return formatUserCode(v) }
+func VectorSignInAttemptKey(v string) string      { return signInAttemptKey(v) }
+func VectorBinderHash(v string) string            { return oauthBinderHash(v) }
+func VectorCompletionCodeHash(v string) string    { return oauthCompletionCodeHash(v) }
+func VectorPendingLinkAAD(v string) string        { return pendingLinkAAD(v) }
+func VectorRefreshStateAAD(id int64) string       { return refreshStateAAD(id) }
+func VectorCompletionSeal(material, plaintext []byte, aad string) (string, error) {
+	return NewPGOAuthStore(nil, material).seal(plaintext, aad)
+}
+func VectorCompletionOpen(material []byte, ciphertext, aad string) ([]byte, error) {
+	return NewPGOAuthStore(nil, material).open(ciphertext, aad)
+}
+
+func VectorRandomUserCode() (string, error)         { return randomUserCode() }
+func VectorRandomQuickConnectSecret() (string, error) { return randomQuickConnectSecret() }
+func VectorGenerateAPIKey() (string, error)          { return generateAPIKey() }

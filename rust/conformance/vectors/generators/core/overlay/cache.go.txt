@@ -1,0 +1,6 @@
+// overlay-package: internal/cache
+
+package cache
+
+func VectorRedisChannel(channel string, db int) string { return redisChannel(channel, db) }
+func VectorAPIReplicaKeyPrefix() string { return apiReplicaKeyPrefix }

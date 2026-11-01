@@ -1,0 +1,5 @@
+// overlay-package: internal/audiobooks
+
+package audiobooks
+
+func VectorTokenHash(v string) string { return absTokenHash(v) }

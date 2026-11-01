@@ -36,6 +36,10 @@ pub struct RuleSpec {
     /// After a match, treat this pair of values as equal everywhere they recur.
     #[serde(default)]
     pub alias: bool,
+    /// The value only differs because of the baseline's topology. In the peer lab both servers see the
+    /// same client, so the rule does not apply there.
+    #[serde(default)]
+    pub not_in_peer_lab: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -578,6 +582,12 @@ pub struct Rules {
 }
 
 impl Rules {
+    /// The rules for a run through the peer lab.
+    pub fn for_peer_lab(mut self) -> Rules {
+        self.rules.retain(|r| !r.spec.not_in_peer_lab);
+        self
+    }
+
     pub fn parse(json: &str) -> Result<Rules, String> {
         let file: RuleFile = serde_json::from_str(json).map_err(|e| format!("normalizers: {e}"))?;
         let mut rules = Vec::new();

@@ -1,0 +1,21 @@
+[package]
+name = "silo-gocompat"
+version = "0.1.0"
+description = "Go-compatible primitives: encoding/json output, strings, regexp, path, time, net/url."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+default = []
+# Conversions between GoTime and time::OffsetDateTime.
+time = ["dep:time"]
+
+[dependencies]
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+time = { version = "0.3", optional = true }
+
+[dev-dependencies]
+sha2 = "0.10"

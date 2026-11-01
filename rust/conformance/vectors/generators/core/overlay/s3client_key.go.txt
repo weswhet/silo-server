@@ -1,0 +1,7 @@
+// overlay-package: internal/s3client
+
+package s3client
+
+func VectorPrefixedKey(prefix, key string) string {
+	return (&Client{keyPrefix: NormalizeKeyPrefix(prefix)}).prefixedKey(key)
+}

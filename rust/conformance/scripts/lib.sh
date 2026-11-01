@@ -17,8 +17,8 @@ set -a
 set +a
 
 # The image is tagged by the Go source it was built from. rust/ never reaches the
-# image, so changes under it do not count as dirty.
-conf_revision() { git -C "$CONF_REPO" rev-parse HEAD; }
+# image, so commits and changes under it neither change the tag nor count as dirty.
+conf_revision() { git -C "$CONF_REPO" log -1 --format=%H -- . ':(exclude)rust'; }
 conf_dirty() {
   if [ -n "$(git -C "$CONF_REPO" status --porcelain -- . ':(exclude)rust')" ]; then echo true; else echo false; fi
 }

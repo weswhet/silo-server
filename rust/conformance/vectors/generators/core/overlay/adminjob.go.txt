@@ -1,0 +1,5 @@
+// overlay-package: internal/adminjob
+
+package adminjob
+
+func VectorLibraryRefreshLockKey(id int) int64 { return libraryRefreshLockKey(id) }

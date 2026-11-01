@@ -1,0 +1,2 @@
+# The harness compares servers rather than porting Go behavior, so the workspace bans in
+# ../clippy.toml don't apply. Clippy reads the nearest config, and this one is intentionally empty.

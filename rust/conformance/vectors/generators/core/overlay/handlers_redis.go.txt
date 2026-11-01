@@ -1,0 +1,5 @@
+// overlay-package: internal/api/handlers
+
+package handlers
+
+func VectorControlTicketPrefix() string { return playbackControlTicketRedisKey }

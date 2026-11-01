@@ -1,0 +1,6 @@
+// overlay-package: internal/recommendations
+
+package recommendations
+
+func VectorProfileRefreshLock(user int, profile string) int64 { return profileRefreshLock(user, profile) }
+func VectorRotationUniform(seed, day, item string) float64    { return rotationUniform(seed, day, item) }

@@ -1,0 +1,28 @@
+// overlay-package: internal/jellycompat
+
+package jellycompat
+
+import "time"
+
+func VectorTokenAAD(column, token string) string   { return jellycompatTokenAAD(column, token) }
+func VectorQuickConnectSessionToken(v string) string { return quickConnectSessionToken(v) }
+func VectorTagValue(v string) string               { return tagValue(v) }
+func VectorImageTag(secret, seed, fallback string) string {
+	return newImageTagSigner(secret).Tag(seed, fallback)
+}
+func VectorImageTagSeed(route, imageType, size, rawPath, thumbhash string, updated time.Time) string {
+	return imageTagSeed(route, imageType, size, rawPath, thumbhash, updated)
+}
+func VectorCollageTag(secret, route, key string) string {
+	return collageImageTag(newImageTagSigner(secret), route, key)
+}
+func VectorCardSize() string { return normalizeImageCacheSize(compatCardImageSize) }
+func VectorPackUUID(kind EncodedIDType, id string) (string, bool) {
+	u, ok := packContentIDUUID(kind, id)
+	return u.String(), ok
+}
+func VectorUnpackUUID(kind EncodedIDType, raw string) (string, bool) {
+	return unpackContentIDUUID(kind, raw)
+}
+
+func VectorCanonicalTag(v string) string { return canonicalCompatImageTag(v) }

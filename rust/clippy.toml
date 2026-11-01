@@ -1,0 +1,39 @@
+# Lookalikes of Go standard library functions that behave differently on inputs the server sees.
+# Domain crates call silo-gocompat instead. A site that really wants the Rust behavior, such as a
+# protocol defined in ASCII, adds #[allow(clippy::disallowed_methods)] with a comment saying why.
+disallowed-methods = [
+    # strings.ToLower, ToUpper, and EqualFold use simple case maps from Go's Unicode tables. These feed
+    # content IDs and group keys, so a difference splits watch history.
+    { path = "str::to_lowercase", reason = "use silo_gocompat::strings::to_lower: Go maps İ to i and never makes a final ς" },
+    { path = "str::to_uppercase", reason = "use silo_gocompat::strings::to_upper: Go keeps ß as ß" },
+    { path = "char::to_lowercase", reason = "use silo_gocompat::unicode::to_lower_rune: Go's map is one rune to one rune" },
+    { path = "char::to_uppercase", reason = "use silo_gocompat::unicode::to_upper_rune: Go's map is one rune to one rune" },
+    { path = "str::eq_ignore_ascii_case", reason = "use silo_gocompat::strings::equal_fold: strings.EqualFold folds Unicode, so K (U+212A) equals k" },
+
+    # Go's \d, \s, \w, and \b are ASCII, and its syntax and Unicode tables differ from the regex crate's.
+    { path = "regex::Regex::new", reason = "use silo_gocompat::regexp::GoRegex::compile: Go's syntax and classes differ", allow-invalid = true },
+    { path = "regex::RegexBuilder::new", reason = "use silo_gocompat::regexp::GoRegex::compile: Go's syntax and classes differ", allow-invalid = true },
+    { path = "regex::bytes::Regex::new", reason = "use silo_gocompat::regexp::GoRegex::compile: Go's syntax and classes differ", allow-invalid = true },
+    { path = "regex::bytes::RegexBuilder::new", reason = "use silo_gocompat::regexp::GoRegex::compile: Go's syntax and classes differ", allow-invalid = true },
+
+    # encoding/json writes 120 not 120.0, escapes <, >, and &, and sorts map keys.
+    { path = "serde_json::to_string", reason = "use silo_gocompat::json::marshal_to_string: output must match encoding/json", allow-invalid = true },
+    { path = "serde_json::to_string_pretty", reason = "use silo_gocompat::json::marshal_indent: output must match encoding/json", allow-invalid = true },
+    { path = "serde_json::to_vec", reason = "use silo_gocompat::json::marshal: output must match encoding/json", allow-invalid = true },
+    { path = "serde_json::to_vec_pretty", reason = "use silo_gocompat::json::marshal_indent: output must match encoding/json", allow-invalid = true },
+    { path = "serde_json::to_writer", reason = "use silo_gocompat::json::Encoder: output must match encoding/json", allow-invalid = true },
+    { path = "serde_json::to_writer_pretty", reason = "use silo_gocompat::json::Encoder: output must match encoding/json", allow-invalid = true },
+
+    # path and path/filepath are lexical. Path::join replaces its base on an absolute argument, and
+    # Path::extension has no answer for .bashrc, where filepath.Ext has one.
+    { path = "std::path::Path::join", reason = "use silo_gocompat::filepath::join: Go keeps the base when an element is absolute" },
+    { path = "std::path::Path::extension", reason = "use silo_gocompat::filepath::ext: Go's result includes the dot and treats .bashrc as all extension" },
+    { path = "std::path::Path::file_name", reason = "use silo_gocompat::filepath::base: Go returns . and / where this returns None" },
+
+    # url.QueryEscape and PathEscape have their own byte sets, and time.Time has its own RFC 3339 trimming.
+    { path = "percent_encoding::utf8_percent_encode", reason = "use silo_gocompat::url::{query_escape, path_escape}", allow-invalid = true },
+    { path = "percent_encoding::percent_encode", reason = "use silo_gocompat::url::{query_escape, path_escape}", allow-invalid = true },
+    { path = "serde_urlencoded::to_string", reason = "use silo_gocompat::url::values_encode: Go sorts keys and writes spaces as +", allow-invalid = true },
+    { path = "chrono::DateTime::to_rfc3339", reason = "use silo_gocompat::time::GoTime::rfc3339_nano", allow-invalid = true },
+    { path = "chrono::DateTime::to_rfc3339_opts", reason = "use silo_gocompat::time::GoTime::rfc3339_nano", allow-invalid = true },
+]

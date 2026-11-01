@@ -1,0 +1,5 @@
+// overlay-package: internal/playback
+
+package playback
+
+func VectorStreamDenyKeyPrefix() string { return streamDenyKeyPrefix }

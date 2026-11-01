@@ -1,0 +1,13 @@
+// overlay-package: internal/noderecipe
+
+package noderecipe
+
+func VectorScriptHashes() map[string]string {
+	return map[string]string{"NODERECIPE_PUT": putNodeRecipeScript.Hash(), "NODERECIPE_VALIDATE_LEGACY": validateLegacyNodeRecipeScript.Hash(), "NODERECIPE_REVOKE_NODE": revokeNodeScript.Hash()}
+}
+func VectorPrefixes() map[string]string {
+	return map[string]string{
+		"NODE_RECIPE_KEY_PREFIX": KeyPrefix, "PROXY_GRANT_KEY_PREFIX": ProxyGrantKeyPrefix, "SESSION_RECIPE_KEY_PREFIX": SessionRecipeKeyPrefix,
+		"NODE_AUTHORITY_GENERATION_KEY_PREFIX": nodeAuthorityGenerationKeyPrefix, "NODE_AUTHORITY_RECORD_KEY_PREFIX": nodeAuthorityRecordGenerationKeyPrefix, "NODE_AUTHORITY_DIGEST_KEY_PREFIX": nodeAuthorityRecordDigestKeyPrefix,
+	}
+}

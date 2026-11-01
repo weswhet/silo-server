@@ -1,0 +1,5 @@
+// overlay-package: internal/themesongs
+
+package themesongs
+
+func VectorKey(s *Service) []byte { return s.key }

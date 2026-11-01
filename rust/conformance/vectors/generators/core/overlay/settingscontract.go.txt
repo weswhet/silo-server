@@ -1,0 +1,18 @@
+// overlay-package: internal/settingscontract
+
+package settingscontract
+
+func VectorCanonicalize(raw []byte) ([]byte, error) { return canonicalize(raw) }
+func VectorBuildPublic(raw []byte) ([]byte, error)  { return buildPublic(raw) }
+func VectorFormatECMAScript(v float64) (string, error) { return formatECMAScript(v) }
+
+// VectorDigest is digestWithSchemas over arbitrary schemas, which it otherwise reads from the embed.
+func VectorDigest(manifest []byte, schemas map[string][]byte) (string, error) {
+	if _, err := Load(); err != nil {
+		return "", err
+	}
+	saved := loadedSchemas
+	loadedSchemas = schemas
+	defer func() { loadedSchemas = saved }()
+	return digestWithSchemas(manifest)
+}

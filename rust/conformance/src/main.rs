@@ -77,6 +77,17 @@ struct RunArgs {
     /// Response header that marks a candidate answer as proxied to Go.
     #[arg(long, default_value = PROXY_MARKER_HEADER)]
     proxied_header: String,
+    /// The candidate's origin log (`SILO_FRONT_ORIGIN_LOG`). Each case must have lines in it saying
+    /// `native`, or its route counts as not ported.
+    #[arg(long)]
+    origin_log: Option<PathBuf>,
+    /// The peer lab's clients, as `scripts/peer-lab.sh` writes them. Without it the peer cases do not
+    /// run.
+    #[arg(long)]
+    sources: Option<PathBuf>,
+    /// Milliseconds to wait before each case, to run Go vs Go at a slower candidate's pace.
+    #[arg(long, default_value_t = 0)]
+    pace_ms: u64,
     /// Directory for report.json and summary.txt.
     #[arg(long, default_value = "rust/conformance/.run/report")]
     out: PathBuf,
@@ -246,6 +257,20 @@ fn run(args: RunArgs) -> Result<ExitCode> {
         manual.merge_into(&mut b.known_flakes);
     }
 
+    let peer_sources = match &args.sources {
+        Some(path) => runner::parse_sources(
+            &fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?,
+        )
+        .with_context(|| format!("parsing {}", path.display()))?,
+        None => BTreeMap::new(),
+    };
+
+    let rules = if peer_sources.is_empty() {
+        rules
+    } else {
+        rules.for_peer_lab()
+    };
+
     let src = sources::load(&repo)?;
     let p = plan::build(&src);
     let cfg = Config {
@@ -253,11 +278,14 @@ fn run(args: RunArgs) -> Result<ExitCode> {
         fixture,
         rules,
         proxy_header: args.proxied_header.clone(),
+        origin_log: args.origin_log.clone(),
         reset_reference: args.reset_reference.clone(),
         reset_candidate: args.reset_candidate.clone(),
         only,
         progress: !args.quiet,
         tag_cases: args.tag_cases,
+        sources: peer_sources,
+        pace: std::time::Duration::from_millis(args.pace_ms),
     };
     let mut runs: Vec<RunOutput> = Vec::new();
     for n in 0..args.runs.max(1) {

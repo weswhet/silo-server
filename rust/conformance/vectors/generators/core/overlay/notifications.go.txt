@@ -1,0 +1,17 @@
+// overlay-package: internal/notifications
+
+package notifications
+
+func VectorAPNsTokenHash(v string) string    { return apnsTokenHash(v) }
+func VectorFCMTokenHash(v string) string     { return fcmTokenHash(v) }
+func VectorHashEmailToken(v string) string   { return hashEmailToken(v) }
+func VectorAPNsAAD(v string) string          { return pushDeviceAPNsTokenAAD(v) }
+func VectorFCMAAD(v string) string           { return pushDeviceFCMTokenAAD(v) }
+func VectorWebhookURLAAD(v string) string    { return webhookURLAAD(v) }
+func VectorWebhookSecretAAD(v string) string { return webhookSecretAAD(v) }
+func VectorServerChannelURLAAD(v string) string    { return serverChannelURLAAD(v) }
+func VectorServerChannelSecretAAD(v string) string { return serverChannelSecretAAD(v) }
+func VectorEmailVerificationAAD(v string) string   { return emailVerificationAAD(v) }
+
+func VectorAndroidPushIntent(cmd AndroidPushCommand) string { return androidPushIntent(cmd) }
+func VectorPushDigest(v []byte) string                      { return pushDigest(v) }

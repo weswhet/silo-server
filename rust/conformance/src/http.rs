@@ -50,6 +50,8 @@ pub struct Request<'a> {
     pub headers: &'a [(String, String)],
     pub body: Option<&'a [u8]>,
     pub timeout_secs: u64,
+    /// The Host to send. `None` sends `FIXED_HOST`.
+    pub host: Option<&'a str>,
 }
 
 pub fn client() -> Client {
@@ -73,7 +75,7 @@ pub fn send(client: &Client, req: &Request) -> Exchange {
     let mut builder = client
         .request(method, &url)
         .timeout(Duration::from_secs(req.timeout_secs))
-        .header("Host", FIXED_HOST);
+        .header("Host", req.host.unwrap_or(FIXED_HOST));
     for (k, v) in req.headers {
         builder = builder.header(k.as_str(), v.as_str());
     }

@@ -1,0 +1,7 @@
+// overlay-package: internal/subtitles
+
+package subtitles
+
+func VectorProviderSecretAAD(column, provider string) string {
+	return (&PgRepository{}).providerSecretAAD(column, provider)
+}

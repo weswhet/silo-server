@@ -1,0 +1,7 @@
+// overlay-package: internal/nodesessions
+
+package nodesessions
+
+func VectorPrefixes() map[string]string {
+	return map[string]string{"SESSIONS_KEY_PREFIX": keyPrefix, "PLAYBACK_DELIVERY_KEY_PREFIX": deliveryKeyPrefix}
+}

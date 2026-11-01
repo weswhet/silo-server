@@ -1,0 +1,11 @@
+// overlay-package: internal/naming
+
+package naming
+
+func VectorMakeContentGroupKey(contentType, title string, year int, root, path string) string {
+	return makeContentGroupKey(contentType, title, year, root, path)
+}
+func VectorNormalizeGroupComparable(title string) string { return normalizeGroupComparable(title) }
+func VectorNormalizePresentationGroup(base, matched string) string {
+	return normalizePresentationGroup(base, matched)
+}

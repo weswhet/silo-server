@@ -1,0 +1,33 @@
+[package]
+name = "silo-front"
+version = "0.1.0"
+description = "The test-only front: owns the public listeners, serves the rows ported so far, and relays every other request to the Go reference untouched."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+build = "build.rs"
+
+[dependencies]
+sha2 = "0.10"
+silo-config = { path = "../silo-config" }
+silo-contracts = { path = "../silo-contracts" }
+silo-gocompat = { path = "../silo-gocompat" }
+silo-http = { path = "../silo-http" }
+silo-pg = { path = "../silo-pg" }
+rand = "0.9"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time", "signal"] }
+tokio-util = "0.7"
+tracing = "0.1"
+
+[build-dependencies]
+serde_json = "1"
+
+[dev-dependencies]
+base64 = "0.22"
+tokio = { version = "1", features = ["full"] }
+
+[[test]]
+name = "gateway_differential"
+path = "tests/gateway_differential.rs"

@@ -7,6 +7,7 @@ use crate::diff::{self, Aliases, Diff, DiffKind};
 use crate::http::{self, Exchange, Request};
 use crate::model::*;
 use crate::normalize::Rules;
+use crate::origin::{self, OriginLog};
 use crate::params::{fill, resolve_path, SideState};
 use anyhow::{bail, Result};
 use regex::Regex;
@@ -30,12 +31,52 @@ pub struct Config {
     pub fixture: BTreeMap<String, String>,
     pub rules: Rules,
     pub proxy_header: String,
+    /// The candidate's origin log. With it, a case that was not answered natively counts as proxied.
+    pub origin_log: Option<std::path::PathBuf>,
     pub reset_reference: Option<String>,
     pub reset_candidate: Option<String>,
     pub only: Option<Regex>,
     pub progress: bool,
     /// Name each recorded case on its candidate request, for `conformance-mutproxy`.
     pub tag_cases: bool,
+    /// The peer lab's clients. Without them the `Peers` phase does not run.
+    pub sources: BTreeMap<String, PeerSource>,
+    /// Wait this long before each case. Some Go state depends on how fast requests arrive, so a
+    /// slower candidate can show a difference that only a Go vs Go run at the same pace can explain.
+    pub pace: std::time::Duration,
+}
+
+/// One peer-lab client: an address, and the reference and candidate as reached from it.
+#[derive(Clone, Debug, Default)]
+pub struct PeerSource {
+    pub ip: String,
+    pub urls: BTreeMap<Surface, (String, String)>,
+}
+
+/// Reads the file `scripts/peer-lab.sh` writes.
+pub fn parse_sources(text: &str) -> Result<BTreeMap<String, PeerSource>> {
+    #[derive(Deserialize)]
+    struct Entry {
+        ip: String,
+        main: (String, String),
+        jellycompat: (String, String),
+        abs: (String, String),
+        metrics: (String, String),
+    }
+    let raw: BTreeMap<String, Entry> = serde_json::from_str(text)?;
+    Ok(raw
+        .into_iter()
+        .map(|(name, e)| {
+            let mut urls = BTreeMap::new();
+            for s in NATIVE_SURFACES {
+                urls.insert(s, e.main.clone());
+            }
+            urls.insert(Surface::Jellycompat, e.jellycompat);
+            urls.insert(Surface::Abs, e.abs);
+            urls.insert(Surface::Metrics, e.metrics);
+            (name, PeerSource { ip: e.ip, urls })
+        })
+        .collect())
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -87,7 +128,11 @@ pub struct Runner<'a> {
     aliases: Aliases,
     run_start: i64,
     out: RunOutput,
+    origin_log: Option<OriginLog>,
 }
+
+const SETTLE_POLLS: u32 = 100;
+const SETTLE_WAIT: std::time::Duration = std::time::Duration::from_millis(100);
 
 const NATIVE_SURFACES: [Surface; 4] = [
     Surface::ApiV2,
@@ -217,6 +262,7 @@ fn static_facts(env: &BTreeMap<String, String>) -> BTreeMap<String, String> {
 impl<'a> Runner<'a> {
     pub fn new(cfg: &'a Config, routes: &'a [Route], run_start: i64) -> Self {
         Runner {
+            origin_log: cfg.origin_log.as_deref().map(OriginLog::new),
             cfg,
             routes,
             client: http::client(),
@@ -326,7 +372,104 @@ impl<'a> Runner<'a> {
                 }
             }
         }
+        let peers: Vec<&Case> = cases.iter().filter(|c| c.phase == Phase::Peers).collect();
+        if self.cfg.sources.is_empty() {
+            for c in peers {
+                self.out
+                    .not_run
+                    .insert(c.id.clone(), "no peer lab: pass --sources".to_string());
+            }
+            return Ok(self.out);
+        }
+        self.reset("before stage: peer addresses")?;
+        self.bootstrap();
+        self.bootstrap_peers();
+        self.event("stage", format!("peer addresses: {} cases", peers.len()));
+        for c in peers {
+            self.run_case(c, true)?;
+        }
         Ok(self.out)
+    }
+
+    /// What the peer cases need beyond the usual facts.
+    fn bootstrap_peers(&mut self) {
+        let ips: Vec<(String, String)> = self
+            .cfg
+            .sources
+            .iter()
+            .map(|(name, s)| (format!("ip_{name}"), s.ip.clone()))
+            .collect();
+        let Some((base_r, base_c)) = self.cfg.urls.get(&Surface::Jellycompat).cloned() else {
+            return;
+        };
+        for (base, side) in [(base_r, Side::Reference), (base_c, Side::Candidate)] {
+            let state = self.state(side);
+            let auth = identity_headers(Surface::Jellycompat, Identity::Admin, state);
+            let path = format!(
+                "/Items/{}/PlaybackInfo",
+                state.fact("jf_movie_id").unwrap_or("")
+            );
+            let source = http::send(
+                &self.client,
+                &Request {
+                    base: &base,
+                    method: "GET",
+                    path_and_query: &path,
+                    headers: &auth,
+                    body: None,
+                    timeout_secs: 20,
+                    host: None,
+                },
+            );
+            let id = serde_json::from_slice::<Value>(&source.body)
+                .ok()
+                .and_then(|v| v["MediaSources"][0]["Id"].as_str().map(str::to_string));
+            let state = match side {
+                Side::Reference => &mut self.reference,
+                Side::Candidate => &mut self.candidate,
+            };
+            state.facts.extend(ips.iter().cloned());
+            match id {
+                Some(id) => {
+                    state.facts.insert("jf_media_source_id".to_string(), id);
+                }
+                None => self.event(
+                    "bootstrap_problem",
+                    "no Jellyfin media source for the peer cases",
+                ),
+            }
+        }
+    }
+
+    /// Waits for a batched write to show on both sides. Giving up is not an error: the case that
+    /// follows compares whatever is there.
+    fn settle(&self, path: &str, base_r: &str, base_c: &str) {
+        for (base, state) in [(base_r, &self.reference), (base_c, &self.candidate)] {
+            let path = fill(path, &state.facts);
+            let headers = identity_headers(Surface::ApiV2, Identity::Admin, state);
+            for _ in 0..SETTLE_POLLS {
+                let e = http::send(
+                    &self.client,
+                    &Request {
+                        base,
+                        method: "GET",
+                        path_and_query: &path,
+                        headers: &headers,
+                        body: None,
+                        timeout_secs: 10,
+                        host: None,
+                    },
+                );
+                let seen = serde_json::from_slice::<Value>(&e.body)
+                    .ok()
+                    .and_then(|v| v["items"].as_array().map(|items| !items.is_empty()))
+                    .unwrap_or(false);
+                if seen {
+                    break;
+                }
+                thread::sleep(SETTLE_WAIT);
+            }
+        }
     }
 
     fn state(&self, side: Side) -> &SideState {
@@ -396,6 +539,7 @@ impl<'a> Runner<'a> {
                         headers: &headers_r,
                         body: body_r.as_deref(),
                         timeout_secs: case.timeout_secs,
+                        host: case.host.as_deref(),
                     },
                 )
             });
@@ -409,6 +553,7 @@ impl<'a> Runner<'a> {
                         headers: &headers_c,
                         body: body_c.as_deref(),
                         timeout_secs: case.timeout_secs,
+                        host: case.host.as_deref(),
                     },
                 )
             });
@@ -424,13 +569,21 @@ impl<'a> Runner<'a> {
                 return Ok(());
             }
         }
-        let Some((base_r, base_c)) = self.cfg.urls.get(&route.surface).cloned() else {
+        let urls = match &case.source {
+            Some(name) => self.cfg.sources.get(name).map(|s| &s.urls),
+            None => Some(&self.cfg.urls),
+        };
+        let Some((base_r, base_c)) = urls.and_then(|u| u.get(&route.surface)).cloned() else {
             self.out.not_run.insert(
                 case.id.clone(),
                 format!("no base URL for surface {}", route.surface.name()),
             );
             return Ok(());
         };
+        if let Some(path) = &case.settle_on {
+            self.settle(path, &base_r, &base_c);
+        }
+        thread::sleep(self.cfg.pace);
         let tag: Vec<(Side, (String, String))> = if self.cfg.tag_cases && record {
             vec![(
                 Side::Candidate,
@@ -439,6 +592,10 @@ impl<'a> Runner<'a> {
         } else {
             Vec::new()
         };
+        // Logins and liveness probes since the last case also wrote lines. They are not this case's.
+        if let Some(log) = &mut self.origin_log {
+            log.drain()?;
+        }
         let (r, c, path, candidate_path) = self.send_pair(case, &base_r, &base_c, &tag);
 
         if let Some(prefix) = &case.capture_as {
@@ -459,7 +616,7 @@ impl<'a> Runner<'a> {
         for (id, n) in std::mem::take(&mut outcome.rule_hits) {
             *self.out.rule_hits.entry(id).or_default() += n;
         }
-        let proxied = c.header(&self.cfg.proxy_header).is_some();
+        let marked_proxied = c.header(&self.cfg.proxy_header).is_some();
         if case.method == "GET" && r.status == 200 && c.status == 200 {
             if let (Some(tag_r), Some(tag_c)) = (r.header("etag"), c.header("etag")) {
                 let mut extra = vec![
@@ -478,6 +635,11 @@ impl<'a> Runner<'a> {
                 }
             }
         }
+        let proxied = marked_proxied
+            || match &mut self.origin_log {
+                Some(log) => origin::proxied(&log.drain()?),
+                None => false,
+            };
         if record {
             self.out.results.push(CaseResult {
                 id: case.id.clone(),
@@ -548,6 +710,7 @@ impl<'a> Runner<'a> {
                     headers: &headers,
                     body: None,
                     timeout_secs: 10,
+                    host: None,
                 },
             )
             .status
@@ -638,6 +801,7 @@ fn bootstrap_side(
                 headers: &headers,
                 body: bytes.as_deref(),
                 timeout_secs: 20,
+                host: None,
             },
         );
         if !(200..300).contains(&e.status) {

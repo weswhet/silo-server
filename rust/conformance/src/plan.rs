@@ -236,6 +236,9 @@ impl Builder<'_> {
                 DEFAULT_TIMEOUT
             },
             sort_key: route.path.clone(),
+            source: None,
+            host: None,
+            settle_on: None,
         }
     }
 
@@ -403,6 +406,7 @@ pub fn build(src: &Sources) -> Plan {
     add_compat_logins(&mut b);
     add_auth_variants(&mut b);
     add_slash_variants(&mut b);
+    add_peer_cases(&mut b);
     let mut plan = Plan {
         cases: std::mem::take(&mut b.cases),
         skipped: std::mem::take(&mut b.skipped),
@@ -827,6 +831,467 @@ fn add_compat_logins(b: &mut Builder) {
         c.may_mutate = true;
         c.sort_key = format!("0/{path}");
         b.push(c);
+    }
+}
+
+/// The peer lab's clients: `scripts/peer-lab.sh` gives each its own address on both sides.
+const UNTRUSTED_A: &str = "untrusted_a";
+const UNTRUSTED_B: &str = "untrusted_b";
+const TRUSTED_A: &str = "trusted_a";
+const TRUSTED_B: &str = "trusted_b";
+
+fn header_list(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
+    pairs
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
+}
+
+struct PeerCase<'a> {
+    surface: Surface,
+    method: &'a str,
+    path: &'a str,
+    name: String,
+    source: &'a str,
+    identity: Identity,
+    headers: Vec<(String, String)>,
+    query: Vec<(String, String)>,
+    body: Option<&'a str>,
+    host: Option<&'a str>,
+    settle_on: Option<&'a str>,
+    path_override: Option<&'a str>,
+}
+
+impl PeerCase<'_> {
+    fn new<'a>(surface: Surface, method: &'a str, path: &'a str) -> PeerCase<'a> {
+        PeerCase {
+            surface,
+            method,
+            path,
+            name: String::new(),
+            source: "",
+            identity: Identity::Anon,
+            headers: Vec::new(),
+            query: Vec::new(),
+            body: None,
+            host: None,
+            settle_on: None,
+            path_override: None,
+        }
+    }
+}
+
+fn push_peer(b: &mut Builder, peer: PeerCase) {
+    let key = (peer.surface, peer.method.to_string(), peer.path.to_string());
+    let Some(&idx) = b.index.get(&key) else {
+        b.skip(
+            format!("{} {} {}", peer.surface.name(), peer.method, peer.path),
+            "peer case's route is not in the sources",
+        );
+        return;
+    };
+    let seq = b.cases.iter().filter(|c| c.phase == Phase::Peers).count();
+    let name = format!("peer:{}:{}", peer.source, peer.name);
+    let mut c = b.blank(idx, &name, Phase::Peers, peer.identity);
+    c.headers.extend(peer.headers);
+    // A value the case names replaces the example a required parameter was filled with.
+    c.query
+        .retain(|(k, _)| !peer.query.iter().any(|(q, _)| q == k));
+    c.query.extend(peer.query);
+    c.path_override = peer.path_override.map(str::to_string);
+    if let Some(body) = peer.body {
+        c.body = Some(body.as_bytes().to_vec());
+        c.content_type = Some("application/json".to_string());
+    }
+    c.source = Some(peer.source.to_string());
+    c.host = peer.host.map(str::to_string);
+    c.settle_on = peer.settle_on.map(str::to_string);
+    c.sort_key = format!("{seq:06}");
+    b.push(c);
+}
+
+/// What only a real source address can show. The rest of the plan goes through one peer, so it cannot
+/// see a relay turning every client into a trusted peer: whether forwarding headers count, who the
+/// client is, and which buckets and grants are kept per client.
+fn add_peer_cases(b: &mut Builder) {
+    add_peer_origin_cases(b);
+    add_peer_client_cases(b);
+    add_peer_activity_cases(b);
+    add_peer_rate_limit_cases(b);
+    add_peer_stream_grant_cases(b);
+    add_peer_base_url_cases(b);
+    add_peer_native_cases(b);
+}
+
+/// `request_origin` takes forwarded scheme and host only from a trusted peer.
+fn add_peer_origin_cases(b: &mut Builder) {
+    let variants: [(&str, &[(&str, &str)]); 7] = [
+        ("plain", &[]),
+        ("host", &[("X-Forwarded-Host", "spoof.conformance.test")]),
+        ("proto", &[("X-Forwarded-Proto", "https")]),
+        (
+            "host_and_proto",
+            &[
+                ("X-Forwarded-Host", "spoof.conformance.test"),
+                ("X-Forwarded-Proto", "https"),
+            ],
+        ),
+        (
+            "host_list",
+            &[("X-Forwarded-Host", "a.conformance.test, b.conformance.test")],
+        ),
+        (
+            "proto_two_lines",
+            &[
+                ("X-Forwarded-Proto", "http"),
+                ("X-Forwarded-Proto", "https"),
+            ],
+        ),
+        ("proto_unknown", &[("X-Forwarded-Proto", "ftp")]),
+    ];
+    for source in [UNTRUSTED_A, TRUSTED_A] {
+        for (name, headers) in variants {
+            let mut c = PeerCase::new(Surface::ApiV2, "GET", "/api/v2/system/info");
+            c.name = format!("origin:{name}");
+            c.source = source;
+            c.headers = header_list(headers);
+            push_peer(b, c);
+        }
+    }
+}
+
+/// A Jellyfin login answers with the client address Go resolved (`SessionInfo.RemoteEndPoint`), so
+/// each branch of `resolver.resolve` is compared directly, from both kinds of peer.
+fn add_peer_client_cases(b: &mut Builder) {
+    let variants: [(&str, &[(&str, &str)]); 14] = [
+        ("plain", &[]),
+        ("xff", &[("X-Forwarded-For", "198.51.100.7")]),
+        (
+            "xff_chain",
+            &[("X-Forwarded-For", "198.51.100.7, 198.51.100.8")],
+        ),
+        (
+            "xff_client_then_private",
+            &[("X-Forwarded-For", "198.51.100.7, 10.1.2.3")],
+        ),
+        (
+            "xff_all_private",
+            &[("X-Forwarded-For", "10.1.2.3, 10.1.2.4")],
+        ),
+        ("xff_junk", &[("X-Forwarded-For", "junk")]),
+        (
+            "xff_junk_then_client",
+            &[("X-Forwarded-For", "junk, 198.51.100.7")],
+        ),
+        (
+            "xff_two_lines",
+            &[
+                ("X-Forwarded-For", "198.51.100.7"),
+                ("X-Forwarded-For", "198.51.100.8"),
+            ],
+        ),
+        ("xff_blank", &[("X-Forwarded-For", " , ")]),
+        ("xff_v6_port", &[("X-Forwarded-For", "[2001:db8::1]:1234")]),
+        ("real_ip", &[("X-Real-IP", "198.51.100.9")]),
+        (
+            "real_ip_two_lines",
+            &[
+                ("X-Real-IP", "198.51.100.9"),
+                ("X-Real-IP", "198.51.100.10"),
+            ],
+        ),
+        ("forwarded", &[("Forwarded", "for=198.51.100.11")]),
+        (
+            "xff_and_real_ip",
+            &[
+                ("X-Forwarded-For", "198.51.100.7"),
+                ("X-Real-IP", "198.51.100.9"),
+            ],
+        ),
+    ];
+    let auth = (
+        "X-Emby-Authorization",
+        "MediaBrowser Client=\"conformance\", Device=\"harness\", DeviceId=\"conformance-peer\", Version=\"1.0\"",
+    );
+    for source in [UNTRUSTED_A, TRUSTED_A] {
+        for (name, headers) in variants {
+            let mut c = PeerCase::new(Surface::Jellycompat, "POST", "/Users/AuthenticateByName");
+            c.name = format!("client:{name}");
+            c.source = source;
+            c.headers = header_list(&[auth]);
+            c.headers.extend(header_list(headers));
+            c.body = Some(
+                "{\"Username\":\"${member_username}#Conf User\",\"Pw\":\"${member_password}\"}",
+            );
+            push_peer(b, c);
+        }
+    }
+}
+
+/// The address the activity log files a request under, read back the way an administrator does.
+fn add_peer_activity_cases(b: &mut Builder) {
+    let spoofs = [(UNTRUSTED_A, "198.51.100.31"), (TRUSTED_A, "198.51.100.32")];
+    for (source, xff) in spoofs {
+        let mut c = PeerCase::new(Surface::ApiV2, "GET", "/api/v2/account/me");
+        c.name = "activity:spoof".to_string();
+        c.source = source;
+        c.identity = Identity::User;
+        c.headers = header_list(&[("X-Forwarded-For", xff)]);
+        push_peer(b, c);
+    }
+    for source in [UNTRUSTED_B, TRUSTED_B] {
+        let mut c = PeerCase::new(Surface::ApiV2, "GET", "/api/v2/account/me");
+        c.name = "activity:plain".to_string();
+        c.source = source;
+        c.identity = Identity::User;
+        push_peer(b, c);
+    }
+    // The last request above was sent last, so once it shows the batch holding the others was written.
+    let settle = "/api/v2/admin/ips?ip=${ip_trusted_b}";
+    for (name, ip) in [
+        ("untrusted_spoof", "198.51.100.31"),
+        ("trusted_spoof", "198.51.100.32"),
+        ("untrusted_b", "${ip_untrusted_b}"),
+        ("trusted_b", "${ip_trusted_b}"),
+    ] {
+        let mut c = PeerCase::new(Surface::ApiV2, "GET", "/api/v2/admin/ips");
+        c.name = format!("activity:read:{name}");
+        c.source = TRUSTED_A;
+        c.identity = Identity::Admin;
+        c.query = vec![("ip".to_string(), ip.to_string())];
+        c.settle_on = Some(settle);
+        push_peer(b, c);
+    }
+}
+
+/// Buckets are per client, and every client behind one trusted peer also shares that peer's looser
+/// budget. Through a relay that gives each client its own peer, one client must not spend another's.
+/// A password reset request has the budget to use here: the seed leaves it at the default, 3 per client
+/// and 30 per peer, and refills a peer's token only every 1.2 seconds, so a run this short does not race
+/// the refill. The seed has no mail configured, so nothing is sent.
+fn add_peer_rate_limit_cases(b: &mut Builder) {
+    let request = |b: &mut Builder, source: &str, name: String, xff: Option<String>| {
+        let mut c = PeerCase::new(Surface::ApiV2, "POST", "/api/v2/password-resets");
+        c.name = format!("auth_limit:{name}");
+        c.source = source;
+        c.body = Some("{\"login\":\"no-such-user\"}");
+        if let Some(xff) = xff {
+            c.headers = vec![("X-Forwarded-For".to_string(), xff)];
+        }
+        push_peer(b, c);
+    };
+    // An untrusted client cannot buy new budgets by naming new clients.
+    for i in 0..6 {
+        request(
+            b,
+            UNTRUSTED_A,
+            format!("rotating:{i:03}"),
+            Some(format!("198.51.101.{}", i + 1)),
+        );
+    }
+    request(b, UNTRUSTED_B, "other_source".to_string(), None);
+    // One client behind a trusted peer spends its own budget, whichever peer it comes through.
+    for i in 0..6 {
+        request(
+            b,
+            TRUSTED_A,
+            format!("one_client:{i:03}"),
+            Some("198.51.102.1".to_string()),
+        );
+    }
+    request(
+        b,
+        TRUSTED_B,
+        "one_client_other_peer".to_string(),
+        Some("198.51.102.1".to_string()),
+    );
+    // Many clients behind one trusted peer run out of that peer's budget, and only that peer's.
+    for i in 0..34 {
+        request(
+            b,
+            TRUSTED_A,
+            format!("peer_budget:{i:03}"),
+            Some(format!("198.51.103.{}", i + 1)),
+        );
+    }
+    for i in 0..3 {
+        request(
+            b,
+            TRUSTED_B,
+            format!("other_peer_budget:{i:03}"),
+            Some(format!("198.51.104.{}", i + 1)),
+        );
+    }
+
+    // The Audiobookshelf limiter keys on the transport peer alone. Each attempt names a new account,
+    // because a second limiter counts failures per name.
+    let abs = |b: &mut Builder, source: &str, name: String, xff: Option<String>| {
+        let mut c = PeerCase::new(Surface::Abs, "POST", "/login");
+        let account = format!("no-such-user-{source}-{name}").replace(':', "-");
+        let body = format!("{{\"username\":\"{account}\",\"password\":\"wrong\"}}");
+        c.name = format!("abs_limit:{name}");
+        c.source = source;
+        if let Some(xff) = xff {
+            c.headers = vec![("X-Forwarded-For".to_string(), xff)];
+        }
+        c.body = Some(&body);
+        push_peer(b, c);
+    };
+    for source in [UNTRUSTED_A, TRUSTED_A] {
+        for i in 0..12 {
+            abs(
+                b,
+                source,
+                format!("rotating:{i:03}"),
+                Some(format!("198.51.105.{}", i + 1)),
+            );
+        }
+    }
+    abs(b, UNTRUSTED_B, "other_source".to_string(), None);
+    abs(b, TRUSTED_B, "other_source".to_string(), None);
+}
+
+/// A Jellyfin negotiation grants credential-less static streams to the address and path it came from.
+fn add_peer_stream_grant_cases(b: &mut Builder) {
+    let auth = |b: &mut Builder, source: &str, name: &str, xff: Option<&str>| {
+        let mut c = PeerCase::new(Surface::Jellycompat, "POST", "/Items/{id}/PlaybackInfo");
+        c.name = format!("grant:{name}");
+        c.source = source;
+        c.identity = Identity::User;
+        c.headers = xff.map_or_else(Vec::new, |x| header_list(&[("X-Forwarded-For", x)]));
+        c.body = Some("{}");
+        push_peer(b, c);
+    };
+    let stream = |b: &mut Builder, source: &str, name: &str, xff: Option<&str>| {
+        let mut c = PeerCase::new(Surface::Jellycompat, "GET", "/Videos/{id}/stream");
+        c.name = format!("grant:{name}");
+        c.source = source;
+        c.query = vec![
+            ("Static".to_string(), "true".to_string()),
+            (
+                "MediaSourceId".to_string(),
+                "${jf_media_source_id}".to_string(),
+            ),
+        ];
+        c.headers = xff.map_or_else(Vec::new, |x| header_list(&[("X-Forwarded-For", x)]));
+        push_peer(b, c);
+    };
+    // Negotiated by a client connecting directly: only that address may stream.
+    auth(b, UNTRUSTED_A, "negotiate_direct", None);
+    stream(b, UNTRUSTED_A, "same_client", None);
+    stream(
+        b,
+        UNTRUSTED_A,
+        "same_client_spoofing",
+        Some("198.51.100.40"),
+    );
+    stream(b, UNTRUSTED_B, "other_client", None);
+    stream(
+        b,
+        UNTRUSTED_B,
+        "other_client_claiming",
+        Some("${ip_untrusted_a}"),
+    );
+    stream(
+        b,
+        TRUSTED_A,
+        "proxy_claiming_direct_client",
+        Some("${ip_untrusted_a}"),
+    );
+    // Negotiated through a proxy: another proxy may carry the same client, nobody else may.
+    auth(b, TRUSTED_A, "negotiate_proxied", Some("198.51.100.41"));
+    stream(
+        b,
+        TRUSTED_A,
+        "same_proxy_same_client",
+        Some("198.51.100.41"),
+    );
+    stream(
+        b,
+        TRUSTED_B,
+        "other_proxy_same_client",
+        Some("198.51.100.41"),
+    );
+    stream(
+        b,
+        TRUSTED_A,
+        "same_proxy_other_client",
+        Some("198.51.100.42"),
+    );
+    stream(b, TRUSTED_A, "the_proxy_itself", None);
+    stream(
+        b,
+        UNTRUSTED_B,
+        "untrusted_claiming_proxied_client",
+        Some("198.51.100.41"),
+    );
+}
+
+/// The speed test URL reads forwarding headers directly and asks whether Host is an address. Every
+/// request through a relay carries a forwarding header, which must not change the answer.
+fn add_peer_base_url_cases(b: &mut Builder) {
+    type Variant<'a> = (&'a str, Option<&'a str>, &'a [(&'a str, &'a str)]);
+    let variants: [Variant; 7] = [
+        ("name", None, &[]),
+        ("ip_host", Some("192.0.2.50:8080"), &[]),
+        ("ip_host_no_port", Some("192.0.2.50"), &[]),
+        ("v6_host", Some("[2001:db8::50]:8080"), &[]),
+        (
+            "ip_host_xff",
+            Some("192.0.2.50:8080"),
+            &[("X-Forwarded-For", "198.51.100.50")],
+        ),
+        (
+            "ip_host_blank_xff",
+            Some("192.0.2.50:8080"),
+            &[("X-Forwarded-For", " , ")],
+        ),
+        (
+            "ip_host_forwarded_host",
+            Some("192.0.2.50:8080"),
+            &[("X-Forwarded-Host", "spoof.conformance.test")],
+        ),
+    ];
+    for source in [UNTRUSTED_A, TRUSTED_A] {
+        for (name, host, headers) in variants {
+            let mut c = PeerCase::new(Surface::ApiV2, "GET", "/api/v2/playback/capabilities");
+            c.name = format!("base_url:{name}");
+            c.source = source;
+            c.identity = Identity::User;
+            c.host = host;
+            c.headers = header_list(headers);
+            push_peer(b, c);
+        }
+        let mut c = PeerCase::new(Surface::ApiV2, "GET", "/api/v2/playback/capabilities");
+        c.name = "base_url:proto".to_string();
+        c.source = source;
+        c.identity = Identity::User;
+        c.headers = header_list(&[("X-Forwarded-Proto", "https")]);
+        push_peer(b, c);
+    }
+}
+
+/// Rows the front answers itself must not care who is asking or what they claim.
+fn add_peer_native_cases(b: &mut Builder) {
+    let headers: &[(&str, &str)] = &[
+        ("X-Forwarded-For", "198.51.100.60"),
+        ("X-Forwarded-Host", "spoof.conformance.test"),
+        ("X-Forwarded-Proto", "https"),
+        ("X-Real-IP", "198.51.100.61"),
+    ];
+    for source in [UNTRUSTED_A, TRUSTED_A] {
+        for (surface, path) in [
+            (Surface::ApiV1, "/api/v1/health"),
+            (Surface::ApiV2, "/api/v2/openapi.json"),
+            (Surface::ApiV2, "/api/v2/docs"),
+            (Surface::Root, "/"),
+        ] {
+            let mut c = PeerCase::new(surface, "GET", path);
+            c.name = "native:spoof".to_string();
+            c.source = source;
+            c.headers = header_list(headers);
+            push_peer(b, c);
+        }
     }
 }
 
