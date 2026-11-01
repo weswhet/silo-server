@@ -1,0 +1,121 @@
+# Reference Go server for API conformance. Driven by ../scripts; values come
+# from fixture.env. Every host port binds to loopback through the edge service.
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    shm_size: 256mb
+    environment:
+      POSTGRES_USER: silo
+      POSTGRES_PASSWORD: silo
+      POSTGRES_DB: silo
+    networks: [backend]
+    volumes:
+      - postgres:/var/lib/postgresql
+    # Throwaway data: durability off keeps resets fast.
+    command:
+      - postgres
+      - -c
+      - listen_addresses=*
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - fsync=off
+      - -c
+      - synchronous_commit=off
+      - -c
+      - full_page_writes=off
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U silo -d silo"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    networks: [backend]
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  silo:
+    image: ${CONF_IMAGE}
+    # A stable name keeps the node identity the server records the same.
+    hostname: silo-conformance
+    networks: [backend]
+    environment:
+      MODE: integrated
+      PORT: "8080"
+      JF_PORT: "8096"
+      ABS_PORT: "13378"
+      SILO_METRICS_LISTEN: ":9090"
+      DATABASE_URL: postgres://silo:silo@postgres:5432/silo?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      SECRET_KEY: ${CONF_SECRET_KEY}
+      SILO_PLUGIN_CACHE_DIR: /var/lib/silo/plugins
+      SILO_SHUTDOWN_DELAY: "0"
+      POSTGRES_TUNE: "off"
+      TZ: Etc/UTC
+    volumes:
+      - silo-data:/var/lib/silo
+      - media:/media:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/v1/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+      start_period: 5s
+
+  # The only container with a route out, and it runs nothing but these forwards.
+  # The rest sit on an internal network, because the server otherwise installs
+  # plugins and imports data from the internet at startup, which would make the
+  # baseline depend on whatever those services publish that day. Each connection
+  # resolves its target afresh, so the forwards survive a server restart.
+  edge:
+    image: alpine/socat:1.8.0.3
+    networks: [backend, edge]
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        socat TCP-LISTEN:5432,fork,reuseaddr TCP:postgres:5432 &
+        socat TCP-LISTEN:6379,fork,reuseaddr TCP:redis:6379 &
+        socat TCP-LISTEN:8080,fork,reuseaddr TCP:silo:8080 &
+        socat TCP-LISTEN:8096,fork,reuseaddr TCP:silo:8096 &
+        socat TCP-LISTEN:13378,fork,reuseaddr TCP:silo:13378 &
+        socat TCP-LISTEN:9090,fork,reuseaddr TCP:silo:9090 &
+        wait
+    ports:
+      - "127.0.0.1:${CONF_PG_PORT}:5432"
+      - "127.0.0.1:${CONF_REDIS_PORT}:6379"
+      - "127.0.0.1:${CONF_API_PORT}:8080"
+      - "127.0.0.1:${CONF_JF_PORT}:8096"
+      - "127.0.0.1:${CONF_ABS_PORT}:13378"
+      - "127.0.0.1:${CONF_METRICS_PORT}:9090"
+
+  # One-shot helper that writes the sample library. Not started by `up`.
+  media-gen:
+    image: ${CONF_IMAGE}
+    profiles: ["tools"]
+    network_mode: none
+    entrypoint: ["/bin/sh", "/seed/generate-media.sh"]
+    volumes:
+      - media:/media
+      - ./seed:/seed:ro
+
+networks:
+  backend:
+    internal: true
+  edge:
+
+volumes:
+  postgres:
+  silo-data:
+  media:

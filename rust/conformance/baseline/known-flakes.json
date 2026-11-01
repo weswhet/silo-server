@@ -1,0 +1,51 @@
+{
+  "flakes": [
+    {
+      "cases": [
+        "api_v1 GET /api/v1/admin/policy/decisions#admin",
+        "api_v1 GET /api/v1/admin/policy/decisions#after_writes",
+        "api_v1 GET /api/v1/admin/policy/decisions#invalid_query"
+      ],
+      "signatures": [
+        "MissingKey $.next_cursor",
+        "ExtraKey $.next_cursor"
+      ],
+      "why": "next_cursor is present only when the listing is full, and the decision count around that limit depends on when each server's log flushed."
+    },
+    {
+      "cases": [
+        "api_v2 GET /api/v2/watch/{id}/trickplay#after_writes"
+      ],
+      "signatures": [
+        "ValueMismatch $.detail"
+      ],
+      "why": "Seen once in three runs: the answer depends on how far a background write has got."
+    },
+    {
+      "cases": [
+        "api_v2 POST /api/v2/catalog/items/{id}/trailers/refresh#fixture:refresh_catalog_item_trailers_unsupported_type"
+      ],
+      "signatures": [
+        "Status status",
+        "ExtraKey $.next_allowed_at",
+        "MissingKey $.next_allowed_at",
+        "ValueMismatch $.status",
+        "ValueMismatch $.detail",
+        "ValueMismatch $.type",
+        "ValueMismatch $.title",
+        "ValueMismatch $.errors",
+        "MissingKey $.instance",
+        "ExtraKey $.instance",
+        "MissingKey $.detail",
+        "ExtraKey $.detail",
+        "MissingKey $.type",
+        "ExtraKey $.type",
+        "MissingKey $.title",
+        "ExtraKey $.title",
+        "MissingKey $.status",
+        "ExtraKey $.status"
+      ],
+      "why": "The refresh cooldown is per item and carried across this run's earlier refresh, so one server can answer before the cooldown clears and the other after."
+    }
+  ]
+}

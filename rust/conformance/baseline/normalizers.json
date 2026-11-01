@@ -1,0 +1,882 @@
+{
+  "rules": [
+    {
+      "id": "problem-instance",
+      "why": "Each Problem document names its own request id.",
+      "route": "[A-Z]+ /.*",
+      "format": {
+        "kind": "regex",
+        "pattern": "^urn:silo:request:([A-Za-z0-9/_-]+)$"
+      },
+      "json_paths": [
+        "$.instance"
+      ]
+    },
+    {
+      "id": "jwt-tokens",
+      "why": "Signed tokens embed issue time and a random id.",
+      "route": ".*",
+      "format": {
+        "kind": "jwt"
+      },
+      "json_paths": [
+        "$.access_token",
+        "$.refresh_token",
+        "$.accessToken",
+        "$.refreshToken",
+        "$.token",
+        "$.room_access_token",
+        "$.user.token",
+        "$.user.accessToken",
+        "$.user.refreshToken"
+      ]
+    },
+    {
+      "id": "run-time-timestamps",
+      "why": "Timestamps written during the run. Only values at or after the run start pass, and only within a minute of each other, so seeded dates and different lifetimes still show up.",
+      "route": ".*",
+      "format": {
+        "kind": "rfc3339_run_time",
+        "max_skew_seconds": 60
+      },
+      "json_paths": [
+        "$..added_at",
+        "$..LastPlaybackCheckIn",
+        "$..rated_at",
+        "$..captured_at",
+        "$..timestamp",
+        "$..created_at",
+        "$..updated_at",
+        "$..expires_at",
+        "$..started_at",
+        "$..last_used_at",
+        "$..last_seen_at",
+        "$..last_active_at",
+        "$..last_seen",
+        "$..first_seen",
+        "$..last_modified",
+        "$..requested_at",
+        "$..next_allowed_at",
+        "$..finished_at",
+        "$..sampled_at",
+        "$..measured_at",
+        "$..last_health_check",
+        "$..heartbeat_at",
+        "$..detected_at",
+        "$..completed_at",
+        "$..checked_at",
+        "$..built_at",
+        "$..window_start",
+        "$..LastLoginDate",
+        "$..LastActivityDate",
+        "$..DateAdded",
+        "$..DateLastActivity"
+      ]
+    },
+    {
+      "id": "stats-window-bounds",
+      "why": "Default windows are computed back from the clock.",
+      "route": "GET /api/v[12]/admin/(stats/.*|request-users/.*|users/.*)",
+      "format": {
+        "kind": "rfc3339_near",
+        "max_skew_seconds": 60
+      },
+      "json_paths": [
+        "$.from",
+        "$.to",
+        "$.window_start",
+        "$.since"
+      ]
+    },
+    {
+      "id": "client-address",
+      "why": "The address each server sees is its own Docker bridge gateway.",
+      "route": ".*",
+      "format": {
+        "kind": "regex",
+        "pattern": "^((?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])(?:\\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])){3})(?:/32)?$",
+        "any_length": true
+      },
+      "json_paths": [
+        "$..client_ip",
+        "$..ip_address",
+        "$..RemoteEndPoint"
+      ]
+    },
+    {
+      "id": "own-activity-feeds",
+      "why": "These logs record the comparison's own requests, written asynchronously. Contents and length depend on timing; only the shape of the entries is compared.",
+      "route": "GET /api/v[12]/admin/logs/app",
+      "format": {
+        "kind": "array_of_objects",
+        "required_keys": [
+          "attrs",
+          "component",
+          "id",
+          "level",
+          "message",
+          "node_id",
+          "timestamp"
+        ]
+      },
+      "json_paths": [
+        "$.items",
+        "$.entries"
+      ]
+    },
+    {
+      "id": "own-audit-feed",
+      "why": "As own-activity-feeds, for the request audit log.",
+      "route": "GET /api/v[12]/admin/logs/audit",
+      "format": {
+        "kind": "array_of_objects",
+        "required_keys": [
+          "client_ip",
+          "duration_ms",
+          "id",
+          "method",
+          "node_id",
+          "path",
+          "path_pattern",
+          "request_id",
+          "status_code",
+          "timestamp"
+        ]
+      },
+      "json_paths": [
+        "$.items",
+        "$.entries"
+      ]
+    },
+    {
+      "id": "own-policy-decision-feed",
+      "why": "As own-activity-feeds, for recorded policy decisions.",
+      "route": "GET /api/v[12]/admin/policy/decisions",
+      "format": {
+        "kind": "array_of_objects",
+        "required_keys": [
+          "allowed",
+          "decision_name",
+          "eval_time_ns",
+          "id",
+          "input_digest",
+          "node_id",
+          "policy_generation",
+          "timestamp"
+        ]
+      },
+      "json_paths": [
+        "$.items",
+        "$.entries"
+      ]
+    },
+    {
+      "id": "feed-cursors",
+      "why": "Opaque cursors over the feeds above encode a position in that server's own log.",
+      "route": "GET /api/v[12]/admin/(logs/(app|audit)|policy/decisions)",
+      "format": {
+        "kind": "regex",
+        "pattern": "^([A-Za-z0-9+/_=.-]+)$",
+        "any_length": true
+      },
+      "json_paths": [
+        "$.next_cursor",
+        "$.page.next_cursor"
+      ]
+    },
+    {
+      "id": "keyset-cursors",
+      "why": "Cursors encode a row's timestamp or a catalog snapshot time. Opaque to clients by contract.",
+      "route": "(GET|POST) /api/v[12]/.*",
+      "format": {
+        "kind": "regex",
+        "pattern": "^(eyJ[A-Za-z0-9_.=-]+)$",
+        "any_length": true
+      },
+      "json_paths": [
+        "$.window_cursor",
+        "$.page.next_cursor",
+        "$.next_cursor",
+        "$.completion_token"
+      ]
+    },
+    {
+      "id": "policy-decision-detail",
+      "why": "One recorded decision names the request that caused it and how long evaluation took.",
+      "route": "GET /api/v[12]/admin/policy/decisions/\\{[^}]+\\}",
+      "format": {
+        "kind": "regex",
+        "pattern": "^([0-9a-f]{24})$"
+      },
+      "json_paths": [
+        "$.request_id"
+      ]
+    },
+    {
+      "id": "policy-decision-input-digest",
+      "why": "The digest covers that request's own input, so it depends on which request the decision came from.",
+      "route": "GET /api/v[12]/admin/policy/decisions/\\{[^}]+\\}",
+      "format": {
+        "kind": "hex",
+        "min_len": 32
+      },
+      "json_paths": [
+        "$.input_digest"
+      ]
+    },
+    {
+      "id": "policy-decision-eval-time",
+      "why": "Evaluation time is a measurement.",
+      "route": "GET /api/v[12]/admin/policy/decisions/\\{[^}]+\\}",
+      "format": {
+        "kind": "any_number"
+      },
+      "json_paths": [
+        "$.eval_time_ns"
+      ]
+    },
+    {
+      "id": "own-export-listing",
+      "why": "Lists export files this run created, which survive a database reset in the data volume. Names hold job ids, and compressed sizes vary with the embedded export time.",
+      "route": "GET /api/v[12]/admin/catalog/import-sources",
+      "format": {
+        "kind": "array_of_objects",
+        "required_keys": [
+          "key",
+          "last_modified",
+          "size_bytes"
+        ]
+      },
+      "json_paths": [
+        "$.sources",
+        "$.items"
+      ]
+    },
+    {
+      "id": "sync-generation",
+      "why": "A profile's progress generation is generated on first use. The pair is remembered.",
+      "route": "(GET|POST) /api/v2/sync/progress/.*",
+      "format": {
+        "kind": "uuid"
+      },
+      "json_paths": [
+        "$.generation"
+      ],
+      "alias": true
+    },
+    {
+      "id": "abs-account-times",
+      "why": "The Audiobookshelf account view reports times in milliseconds, from the login this run made.",
+      "route": "(GET /(abs/)?api/me|POST /(abs/)?login)",
+      "format": {
+        "kind": "epoch_ms_run_time",
+        "max_skew_seconds": 60
+      },
+      "surfaces": [
+        "abs"
+      ],
+      "json_paths": [
+        "$.createdAt",
+        "$.lastSeen",
+        "$.user.createdAt",
+        "$.user.lastSeen"
+      ]
+    },
+    {
+      "id": "invite-claim-url",
+      "why": "Invitation links carry a random token.",
+      "route": "POST /api/v[12]/admin/invitations.*",
+      "format": {
+        "kind": "regex",
+        "pattern": "^https://silo\\.conformance\\.test/invite/([A-Za-z0-9_-]+)$"
+      },
+      "json_paths": [
+        "$.claim_url"
+      ]
+    },
+    {
+      "id": "password-reset-url",
+      "why": "Password reset links carry a random token.",
+      "route": "POST /api/v[12]/admin/users/\\{[^}]+\\}/password-reset",
+      "format": {
+        "kind": "regex",
+        "pattern": "^https://silo\\.conformance\\.test/reset-password/([A-Za-z0-9_-]+)$"
+      },
+      "json_paths": [
+        "$.reset_url"
+      ]
+    },
+    {
+      "id": "discord-test-duration",
+      "why": "How long the test notification took is a measurement.",
+      "route": "POST /api/v[12]/admin/notifications/discord/test",
+      "format": {
+        "kind": "any_number"
+      },
+      "json_paths": [
+        "$.duration_ms"
+      ]
+    },
+    {
+      "id": "policy-simulate-time",
+      "why": "Evaluation time is a measurement.",
+      "route": "POST /api/v[12]/admin/policy/simulate",
+      "format": {
+        "kind": "any_number"
+      },
+      "json_paths": [
+        "$.eval_time_ns"
+      ]
+    },
+    {
+      "id": "chatgpt-login-status",
+      "why": "The login status shows the attempt started earlier in the run.",
+      "route": "GET /api/v2/admin/ai/chatgpt",
+      "format": {
+        "kind": "regex",
+        "pattern": "^([A-Za-z0-9_-]+)$"
+      },
+      "json_paths": [
+        "$.attempt_id"
+      ]
+    },
+    {
+      "id": "own-job-feed",
+      "why": "Jobs this run started in the background. Their state, message and size depend on how far each has got. Timestamps appear as a job starts and finishes.",
+      "route": "GET /api/v2/admin/jobs",
+      "format": {
+        "kind": "array_of_objects",
+        "required_keys": [
+          "id",
+          "kind",
+          "state"
+        ],
+        "keys_vary": true
+      },
+      "json_paths": [
+        "$.items"
+      ]
+    },
+    {
+      "id": "own-job-feed-v1",
+      "why": "As own-job-feed, in the v1 field names.",
+      "route": "GET /api/v1/admin/jobs/",
+      "format": {
+        "kind": "array_of_objects",
+        "required_keys": [
+          "id",
+          "job_type",
+          "status"
+        ],
+        "keys_vary": true
+      },
+      "json_paths": [
+        "$.jobs"
+      ]
+    },
+    {
+      "id": "storage-usage-gauge",
+      "why": "Live filesystem usage of the data volume.",
+      "route": "GET /api/v[12]/admin/downloads/storage",
+      "format": {
+        "kind": "any_number"
+      },
+      "json_paths": [
+        "$.locations[*].usage.*"
+      ]
+    },
+    {
+      "id": "web-operation-process",
+      "why": "The Jellyfin Web operation records a clock-derived process marker.",
+      "route": "GET /api/v[12]/admin/jellyfin-compat/status",
+      "format": {
+        "kind": "regex",
+        "pattern": "^([0-9]+)$",
+        "any_length": true
+      },
+      "json_paths": [
+        "$.operation.process"
+      ]
+    },
+    {
+      "id": "catalog-snapshot-id",
+      "why": "A catalog listing's snapshot marker is the time it was taken.",
+      "route": "GET /api/v1/catalog",
+      "format": {
+        "kind": "rfc3339_run_time",
+        "max_skew_seconds": 60
+      },
+      "json_paths": [
+        "$.snapshot"
+      ]
+    },
+    {
+      "id": "login-session-ids",
+      "why": "Login and playback session ids are generated per server.",
+      "route": ".*/(auth/sessions|login-sessions|admin/sessions|household/sessions)",
+      "format": {
+        "kind": "uuid"
+      },
+      "json_paths": [
+        "$.sessions[*].id",
+        "$.items[*].id",
+        "$.items[*].session_id",
+        "$[*].session_id"
+      ],
+      "alias": true
+    },
+    {
+      "id": "api-key-material",
+      "why": "Generated API keys are random.",
+      "route": "(GET|POST) /api/v[12]/(admin/(api-keys|users/\\{[^}]+\\}/api-keys)|api-keys/?)",
+      "format": {
+        "kind": "regex",
+        "pattern": "^sa_([0-9a-f]{8}(?:[0-9a-f]{56})?)$"
+      },
+      "json_paths": [
+        "$.key",
+        "$.key_prefix",
+        "$[*].key_prefix",
+        "$.items[*].key_prefix"
+      ]
+    },
+    {
+      "id": "generated-uuid-ids",
+      "why": "Objects created during the run get random UUIDs. The pair is remembered, so a later response must use the same id.",
+      "route": "(POST|PUT|PATCH) /api/v[12]/.*",
+      "format": {
+        "kind": "uuid"
+      },
+      "json_paths": [
+        "$.id",
+        "$.room.id",
+        "$.room.room_id"
+      ],
+      "alias": true
+    },
+    {
+      "id": "generated-snowflake-ids",
+      "why": "Time-based job and object ids. The pair is remembered.",
+      "route": "(POST|PUT|PATCH) /api/v[12]/.*",
+      "format": {
+        "kind": "regex",
+        "pattern": "^([0-9]{17,20})$"
+      },
+      "json_paths": [
+        "$.id",
+        "$.sections[*].id"
+      ],
+      "alias": true
+    },
+    {
+      "id": "generated-ulid-ids",
+      "why": "ULID ids for push devices. The pair is remembered.",
+      "route": "POST /api/v[12]/(devices/push/.*|notifications/push/devices)",
+      "format": {
+        "kind": "regex",
+        "pattern": "^([0-9A-HJKMNP-TV-Z]{26})$"
+      },
+      "json_paths": [
+        "$.id",
+        "$.server_device_id"
+      ],
+      "alias": true
+    },
+    {
+      "id": "short-codes",
+      "why": "Invite, room and device codes are random by design.",
+      "route": "[A-Z]+ /api/v[12]/(admin/invite-codes.*|watch-together/.*)",
+      "format": {
+        "kind": "regex",
+        "pattern": "^([A-Z0-9]{8})$"
+      },
+      "json_paths": [
+        "$.code",
+        "$.room.code"
+      ]
+    },
+    {
+      "id": "room-invite-link",
+      "why": "Room invite tokens are random.",
+      "route": "[A-Z]+ /api/v[12]/watch-together/.*",
+      "format": {
+        "kind": "regex",
+        "pattern": "^/rooms/join\\?token=([A-Z0-9]+)$"
+      },
+      "json_paths": [
+        "$.room.invite_path"
+      ]
+    },
+    {
+      "id": "device-pairing-codes",
+      "why": "Device pairing secrets are random.",
+      "route": "POST /api/v[12]/auth/device/start",
+      "format": {
+        "kind": "regex",
+        "pattern": "^([A-Za-z0-9_-]{43})$"
+      },
+      "json_paths": [
+        "$.device_code"
+      ]
+    },
+    {
+      "id": "device-pairing-user-code",
+      "why": "The code a person types is random digits in fixed groups.",
+      "route": "POST /api/v[12]/auth/device/start",
+      "format": {
+        "kind": "regex",
+        "pattern": "^([0-9]{4})-([0-9]{4})$"
+      },
+      "json_paths": [
+        "$.user_code"
+      ]
+    },
+    {
+      "id": "device-pairing-match-code",
+      "why": "The phrase shown to compare devices is two random words.",
+      "route": "POST /api/v[12]/auth/device/start",
+      "format": {
+        "kind": "regex",
+        "pattern": "^([a-z]+) ([a-z]+)$",
+        "any_length": true
+      },
+      "json_paths": [
+        "$.match_code"
+      ]
+    },
+    {
+      "id": "device-pairing-link",
+      "why": "The pairing link carries the pairing secret.",
+      "route": "POST /api/v[12]/auth/device/start",
+      "format": {
+        "kind": "regex",
+        "pattern": "^https?://[^/]+/activate\\?(?:token|code)=([A-Za-z0-9_-]+)$"
+      },
+      "json_paths": [
+        "$.verification_uri_complete"
+      ]
+    },
+    {
+      "id": "ws-ticket",
+      "why": "Single-use websocket tickets are random.",
+      "route": "POST /api/v[12]/events/ws-ticket",
+      "format": {
+        "kind": "regex",
+        "pattern": "^([A-Za-z0-9_-]+)$"
+      },
+      "json_paths": [
+        "$.ticket"
+      ]
+    },
+    {
+      "id": "upload-id",
+      "why": "Chunked upload ids are random hex.",
+      "route": "POST /api/v[12]/admin/plugins/uploads/chunked",
+      "format": {
+        "kind": "hex",
+        "min_len": 32
+      },
+      "json_paths": [
+        "$.upload_id"
+      ],
+      "alias": true
+    },
+    {
+      "id": "web-operation-id-in-status",
+      "why": "The status route reports the same removal operation.",
+      "route": "GET /api/v[12]/admin/jellyfin-compat/status",
+      "format": {
+        "kind": "regex",
+        "pattern": "^remove-([0-9]+)$"
+      },
+      "json_paths": [
+        "$.operation.id"
+      ]
+    },
+    {
+      "id": "marker-history-request-id",
+      "why": "Marker edits record the id of the request that made them.",
+      "route": "GET /api/v[12]/admin/markers/.*history",
+      "format": {
+        "kind": "regex",
+        "pattern": "^([0-9a-f]{24})$"
+      },
+      "json_paths": [
+        "$.history[*].request_id"
+      ]
+    },
+    {
+      "id": "warning-count-gauge",
+      "why": "Counts warnings logged in the last day, including from this run.",
+      "route": "GET /api/v[12]/admin/server/status",
+      "format": {
+        "kind": "any_number"
+      },
+      "json_paths": [
+        "$.health.warnings_24h"
+      ]
+    },
+    {
+      "id": "random-section-order",
+      "why": "Random sections order items randomly on each request; the same items must be there. Every other section's order is compared.",
+      "route": "GET /api/v[12]/(library/\\{[^}]+\\}/sections|home/sections)",
+      "format": {
+        "kind": "unordered_array",
+        "when_sibling": {
+          "key": "section_type",
+          "equals": "random"
+        }
+      },
+      "json_paths": [
+        "$.sections[*].items"
+      ]
+    },
+    {
+      "id": "own-session-feed",
+      "why": "Active playback sessions from this run; which one is listed first depends on timing.",
+      "route": "GET /api/v[12]/admin/sessions",
+      "format": {
+        "kind": "array_of_objects",
+        "required_keys": [
+          "session_id"
+        ]
+      },
+      "json_paths": [
+        "$.items",
+        "$"
+      ]
+    },
+    {
+      "id": "server-gauges",
+      "why": "Live process and host measurements.",
+      "route": "GET /api/v[12]/admin/(system/resources|server/status)",
+      "format": {
+        "kind": "any_number"
+      },
+      "json_paths": [
+        "$.health.postgres.latency_ms",
+        "$.health.redis.latency_ms",
+        "$.system.mem_used_mb",
+        "$.system.cpu_pct",
+        "$.health.errors_24h",
+        "$.attribution.disks[*].*",
+        "$.system.net_rx_bps",
+        "$.system.net_tx_bps",
+        "$.system.cpu_percent",
+        "$.system.disk_read_bps",
+        "$.system.disk_write_bps",
+        "$.attribution.cgroup_cpu.*",
+        "$.attribution.cgroup_memory.*",
+        "$.attribution.process.*",
+        "$.attribution.sample_duration_seconds",
+        "$.system.disks[*].used_gb",
+        "$.system.load1",
+        "$.attribution.cpu.*",
+        "$.attribution.memory.*",
+        "$.attribution.load.*",
+        "$.attribution.network.*",
+        "$.attribution.children.*"
+      ]
+    },
+    {
+      "id": "server-instance-id",
+      "why": "Each process start gets a new instance id.",
+      "route": "GET /api/v[12]/admin/(system/resources|server/status)",
+      "format": {
+        "kind": "uuid"
+      },
+      "json_paths": [
+        "$.attribution.instance_id"
+      ]
+    },
+    {
+      "id": "request-count-gauge",
+      "why": "Counts the comparison's own requests, including liveness probes that depend on timing.",
+      "route": "GET /api/v[12]/admin/users/\\{[^}]+\\}/ips",
+      "format": {
+        "kind": "any_number"
+      },
+      "json_paths": [
+        "$[*].request_count",
+        "$.items[*].request_count"
+      ]
+    },
+    {
+      "id": "sync-revision",
+      "why": "A progress revision is a digest over rows and generated ids.",
+      "route": "GET /api/v2/sync/progress/capabilities",
+      "format": {
+        "kind": "hex",
+        "min_len": 64
+      },
+      "json_paths": [
+        "$.revision"
+      ]
+    },
+    {
+      "id": "telemetry-parity-session-ids",
+      "why": "Telemetry publisher entries name that process's instance and sessions.",
+      "route": "GET /api/v[12]/admin/stream-telemetry/parity",
+      "format": {
+        "kind": "regex",
+        "pattern": "^([0-9a-f-]{36})(?:=[a-z]+)?$"
+      },
+      "json_paths": [
+        "$.view.publishers[*]",
+        "$.sources[*].report.telemetry_only[*]"
+      ]
+    },
+    {
+      "id": "telemetry-build-time",
+      "why": "How long the parity view took to build is a measurement.",
+      "route": "GET /api/v[12]/admin/stream-telemetry/parity",
+      "format": {
+        "kind": "any_number"
+      },
+      "json_paths": [
+        "$.view.build_took_ms"
+      ]
+    },
+    {
+      "id": "chatgpt-login-attempt",
+      "why": "The OAuth start generates a state and PKCE values.",
+      "route": "POST /api/v2/admin/ai/chatgpt/login",
+      "format": {
+        "kind": "regex",
+        "pattern": "^([A-Za-z0-9_-]+)$"
+      },
+      "json_paths": [
+        "$.attempt_id"
+      ]
+    },
+    {
+      "id": "chatgpt-authorize-url",
+      "why": "The authorize URL carries a generated state, nonce, host id and PKCE challenge. Every other parameter is compared.",
+      "route": "POST /api/v2/admin/ai/chatgpt/login",
+      "format": {
+        "kind": "regex",
+        "pattern": "^https://auth\\.openai\\.com/api/accounts/authorize\\?agent_name_hint=Silo&client_id=dynamic_agent_client&code_challenge=([A-Za-z0-9_-]+)&code_challenge_method=S256&ext_agent_host_id=([^&]*)&nonce=([^&]+)&redirect_uri=[^&]+&resource=[^&]+&response_type=code&scope=[^&]+&state=([^&]+)$"
+      },
+      "json_paths": [
+        "$.authorization_url"
+      ]
+    },
+    {
+      "id": "signed-url-signature",
+      "why": "Signed artwork URLs carry an expiry bucket and a signature over it. Everything else in the URL is compared.",
+      "route": ".*",
+      "format": {
+        "kind": "regex",
+        "pattern": "^/api/v2/artwork/[^?]+\\?exp=([0-9]+)&sig=([A-Za-z0-9_-]+)$"
+      },
+      "json_paths": [
+        "$..poster_url",
+        "$..backdrop_url",
+        "$..still_url",
+        "$..logo_url",
+        "$..url",
+        "$..thumb_url"
+      ]
+    },
+    {
+      "id": "jf-play-session-id",
+      "why": "A Jellyfin play session id is generated per PlaybackInfo call.",
+      "route": "(GET|POST) /(Users/\\{[^}]+\\}/)?Items/\\{[^}]+\\}/PlaybackInfo",
+      "format": {
+        "kind": "uuid"
+      },
+      "surfaces": [
+        "jellycompat"
+      ],
+      "json_paths": [
+        "$.PlaySessionId"
+      ],
+      "alias": true
+    },
+    {
+      "id": "jf-playback-urls",
+      "why": "Stream URLs carry the play session id and a per-session api_key; the path, media source and transcode reasons stay compared.",
+      "route": "(GET|POST) /(Users/\\{[^}]+\\}/)?Items/\\{[^}]+\\}/PlaybackInfo",
+      "format": {
+        "kind": "regex",
+        "pattern": "^/Videos/[0-9a-f-]+/(?:stream|master\\.m3u8)\\?[^ ]*?(?:api_key=([0-9a-f-]{36})&)?PlaySessionId=([0-9a-f-]{36})(?:&[^ ]*)?$"
+      },
+      "surfaces": [
+        "jellycompat"
+      ],
+      "json_paths": [
+        "$.MediaSources[*].DirectStreamUrl",
+        "$.MediaSources[*].TranscodingUrl"
+      ]
+    },
+    {
+      "id": "jf-quick-connect",
+      "why": "Quick Connect codes and secrets are random.",
+      "route": "(GET|POST) /QuickConnect/Initiate",
+      "format": {
+        "kind": "regex",
+        "pattern": "^([A-Z0-9]+)$"
+      },
+      "surfaces": [
+        "jellycompat"
+      ],
+      "json_paths": [
+        "$.Code",
+        "$.Secret"
+      ]
+    },
+    {
+      "id": "jf-client-log-name",
+      "why": "The uploaded client log's file name is a random UUID.",
+      "route": "POST /ClientLog/Document",
+      "format": {
+        "kind": "regex",
+        "pattern": "^([0-9a-f-]{36})\\.log$"
+      },
+      "surfaces": [
+        "jellycompat"
+      ],
+      "json_paths": [
+        "$.FileName"
+      ]
+    },
+    {
+      "id": "jf-login-session",
+      "why": "A Jellyfin login returns a new random token and session id.",
+      "route": "POST /Users/AuthenticateByName",
+      "format": {
+        "kind": "regex",
+        "pattern": "^([0-9a-zA-Z_.-]{16,})$"
+      },
+      "surfaces": [
+        "jellycompat"
+      ],
+      "json_paths": [
+        "$.AccessToken",
+        "$.SessionInfo.Id"
+      ]
+    },
+    {
+      "id": "collection-collage-url",
+      "why": "A generated collage URL names the collection and carries a signature.",
+      "route": "GET /api/v[12]/collections/?",
+      "format": {
+        "kind": "regex",
+        "pattern": "^/api/v2/artwork/user-collection-images/([0-9a-f-]{36})/collage/w[0-9]+\\.[0-9a-f]+\\.webp\\?exp=([0-9]+)&sig=([A-Za-z0-9_-]+)$"
+      },
+      "json_paths": [
+        "$.items[*].poster_url",
+        "$.collections[*].poster_url"
+      ]
+    },
+    {
+      "id": "bandwidth-probe-filler",
+      "why": "Bandwidth probes send random bytes, so only the length can match.",
+      "route": "GET (/api/v2/playback/bandwidth-probe|/api/v1/playback/bandwidth-probe|/Playback/BitrateTest)",
+      "format": {
+        "kind": "same_length"
+      },
+      "body": true
+    }
+  ]
+}
