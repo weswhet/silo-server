@@ -28,23 +28,27 @@
 //! `#[serde(flatten)]` serializes through an unsized map, so the serializer keeps those maps in
 //! insertion order. It does not apply Go's rules for conflicting embedded field names.
 //!
-//! Decoding is not covered here, apart from `Deserialize` on [`RawMessage`], [`Number`], and
-//! [`crate::time::GoTime`]. `serde_json::from_slice` differs from `json.Unmarshal` on key case folding,
-//! duplicate keys, lone surrogates, and `null` into non-pointers.
+//! Decoding is [`decode`]'s job: [`unmarshal`], [`Decoder`], and [`Stream`] reproduce
+//! `json.Unmarshal` and `json.Decoder` on top of `#[derive(Deserialize)]`, which
+//! `serde_json::from_slice` does not. That module's docs give the field conventions and the known
+//! differences.
 
+mod decode;
 mod scanner;
 mod ser;
 
+pub use decode::{Decoder, Error as DecodeError, Stream, unmarshal};
 pub use scanner::{SyntaxError, check_valid, compact, html_escape, indent, valid};
 pub use ser::{Encoder, Error, marshal, marshal_indent, marshal_to_string};
 
-use serde::de::Deserializer;
+use serde::de::{Deserializer, SeqAccess, Visitor};
 use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 
 pub(crate) const RAW_MESSAGE_TOKEN: &str = "$silo_gocompat::json::RawMessage";
 pub(crate) const NUMBER_TOKEN: &str = "$silo_gocompat::json::Number";
 pub(crate) const BYTE_STRING_TOKEN: &str = "$silo_gocompat::json::ByteString";
+pub(crate) const TIME_TOKEN: &str = "$silo_gocompat::json::Time";
 pub(crate) const SERDE_JSON_RAW_TOKEN: &str = "$serde_json::private::RawValue";
 
 /// Passes a byte slice through serde so the Go-compatible serializer can pick it up.
@@ -113,11 +117,34 @@ impl Serialize for RawMessage {
 }
 
 impl<'de> Deserialize<'de> for RawMessage {
-    /// Keeps the document's bytes as received, like `RawMessage.UnmarshalJSON`. It needs a
-    /// `serde_json` deserializer.
+    /// Keeps the value's exact document bytes, like `RawMessage.UnmarshalJSON`, through
+    /// [`unmarshal`] or [`Decoder`]. Other deserializers must be `serde_json`'s.
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = Box::<serde_json::value::RawValue>::deserialize(deserializer)?;
-        Ok(Self(Some(raw.get().as_bytes().to_vec())))
+        struct V;
+        impl<'de> Visitor<'de> for V {
+            type Value = RawMessage;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("any JSON value")
+            }
+
+            fn visit_byte_buf<E: serde::de::Error>(self, v: Vec<u8>) -> Result<RawMessage, E> {
+                Ok(RawMessage(Some(v)))
+            }
+
+            fn visit_unit<E: serde::de::Error>(self) -> Result<RawMessage, E> {
+                Ok(RawMessage(None))
+            }
+
+            fn visit_newtype_struct<D: Deserializer<'de>>(
+                self,
+                d: D,
+            ) -> Result<RawMessage, D::Error> {
+                let raw = Box::<serde_json::value::RawValue>::deserialize(d)?;
+                Ok(RawMessage(Some(raw.get().as_bytes().to_vec())))
+            }
+        }
+        deserializer.deserialize_newtype_struct(RAW_MESSAGE_TOKEN, V)
     }
 }
 
@@ -133,29 +160,46 @@ impl Serialize for Number {
 
 impl<'de> Deserialize<'de> for Number {
     /// Keeps a number literal's exact text and accepts a string holding a valid number, like
-    /// `json.Unmarshal` into a `json.Number`. `null` leaves it empty. It needs a `serde_json`
-    /// deserializer.
+    /// `json.Unmarshal` into a `json.Number`. `null` is a no-op. Deserializers other than
+    /// [`unmarshal`] and [`Decoder`] must be `serde_json`'s.
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = Box::<serde_json::value::RawValue>::deserialize(deserializer)?;
-        let text = raw.get();
-        match text.as_bytes().first() {
-            Some(b'n') => Ok(Self::default()),
-            Some(b'"') => {
-                let unquoted: String =
-                    serde_json::from_str(text).map_err(serde::de::Error::custom)?;
-                if !scanner::is_valid_number(unquoted.as_bytes()) {
-                    return Err(serde::de::Error::custom(format!(
-                        "json: invalid number literal, trying to unmarshal {} into Number",
-                        crate::strconv::quote(text)
-                    )));
-                }
-                Ok(Self(unquoted))
+        struct V;
+        impl<'de> Visitor<'de> for V {
+            type Value = Number;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("a JSON number")
             }
-            Some(b'-' | b'0'..=b'9') => Ok(Self(text.to_string())),
-            _ => Err(serde::de::Error::custom(
-                "json: cannot unmarshal value into Go value of type json.Number",
-            )),
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Number, E> {
+                Ok(Number(v.to_string()))
+            }
+
+            fn visit_newtype_struct<D: Deserializer<'de>>(self, d: D) -> Result<Number, D::Error> {
+                let raw = Box::<serde_json::value::RawValue>::deserialize(d)?;
+                let text = raw.get();
+                match text.as_bytes().first() {
+                    Some(b'n') => Ok(Number::default()),
+                    Some(b'"') => {
+                        #[allow(clippy::disallowed_methods)] // Unquoting serde_json's own raw text.
+                        let unquoted: String =
+                            serde_json::from_str(text).map_err(serde::de::Error::custom)?;
+                        if !scanner::is_valid_number(unquoted.as_bytes()) {
+                            return Err(serde::de::Error::custom(format!(
+                                "json: invalid number literal, trying to unmarshal {} into Number",
+                                crate::strconv::quote(text)
+                            )));
+                        }
+                        Ok(Number(unquoted))
+                    }
+                    Some(b'-' | b'0'..=b'9') => Ok(Number(text.to_string())),
+                    _ => Err(serde::de::Error::custom(
+                        "json: cannot unmarshal value into Go value of type json.Number",
+                    )),
+                }
+            }
         }
+        deserializer.deserialize_newtype_struct(NUMBER_TOKEN, V)
     }
 }
 
@@ -183,6 +227,49 @@ impl Serialize for Bytes {
     }
 }
 
+/// Accepts what Go accepts for `[]byte`: standard base64, or an array of numbers.
+struct BytesVisitor;
+
+impl<'de> Visitor<'de> for BytesVisitor {
+    type Value = Vec<u8>;
+
+    fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("a base64 string or an array of bytes")
+    }
+
+    fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Vec<u8>, E> {
+        decode::base64_decode_standard(v.as_bytes()).map_err(E::custom)
+    }
+
+    fn visit_bytes<E: serde::de::Error>(self, v: &[u8]) -> Result<Vec<u8>, E> {
+        decode::base64_decode_standard(v).map_err(E::custom)
+    }
+
+    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Vec<u8>, A::Error> {
+        let mut out = Vec::new();
+        while let Some(b) = seq.next_element()? {
+            out.push(b);
+        }
+        Ok(out)
+    }
+}
+
+struct NonNilBytes(Vec<u8>);
+
+impl<'de> Deserialize<'de> for NonNilBytes {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_byte_buf(BytesVisitor).map(Self)
+    }
+}
+
+impl<'de> Deserialize<'de> for Bytes {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(Self(
+            Option::<NonNilBytes>::deserialize(deserializer)?.map(|b| b.0),
+        ))
+    }
+}
+
 /// `#[serde(with = "silo_gocompat::json::bytes")]` for a non-nil `[]byte` field. Serde's default for
 /// `Vec<u8>` is an array of numbers, which is what Go prints for `[N]byte`, not `[]byte`.
 pub mod bytes {
@@ -194,6 +281,15 @@ pub mod bytes {
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
         serializer.serialize_bytes(value.as_ref())
+    }
+
+    /// Reads standard base64, or an array of numbers, as Go does for `[]byte`.
+    pub fn deserialize<'de, T: From<Vec<u8>>, D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<T, D::Error> {
+        deserializer
+            .deserialize_byte_buf(super::BytesVisitor)
+            .map(T::from)
     }
 }
 

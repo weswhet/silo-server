@@ -1,7 +1,7 @@
 {
  "source": "rust/conformance/vectors/generators/core/formats.py",
- "denominator": 119,
- "verified": 119,
+ "denominator": 120,
+ "verified": 120,
  "real_stack": {
   "enc_v1_rows_decrypted": true,
   "go_server_accepted_rust_token": true,
@@ -891,6 +891,21 @@
    "go_to_rust": true,
    "rust_to_go": true,
    "note": null,
+   "status": "verified"
+  },
+  {
+   "id": "auth.bcrypt_compare_trailing_byte",
+   "format": "CompareHashAndPassword against a hash with bytes appended past its normal 59/60-byte total",
+   "tier": "persisted",
+   "go_source": "golang.org/x/crypto/bcrypt",
+   "rust": "silo_core::passwordhash",
+   "vector_family": "bcrypt_compare_trailing_byte",
+   "selector": null,
+   "cases": 40,
+   "deterministic_byte_equal": true,
+   "go_to_rust": true,
+   "rust_to_go": true,
+   "note": "every combination of minor-version presence and trailing-byte shape this quirk depends on",
    "status": "verified"
   },
   {

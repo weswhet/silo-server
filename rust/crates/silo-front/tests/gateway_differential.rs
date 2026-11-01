@@ -293,6 +293,44 @@ async fn relay_changes_no_byte_but_the_forwarding_line_and_keeps_the_connection(
     );
 }
 
+/// A client that pipelines several requests and then half-closes its write side (it has nothing
+/// more to send, but still wants every response) must still get every response relayed. Go
+/// serves pipelined requests after a half-close; the relay must stay transparent to that too.
+#[tokio::test]
+async fn relay_serves_a_pipelined_request_already_buffered_after_the_client_half_closes() {
+    let upstream = scripted_upstream(move |mut s| async move {
+        let first = read_until(&mut s, b"\r\n\r\n").await;
+        assert!(first.starts_with(b"GET /first"), "{first:?}");
+        s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+            .await
+            .unwrap();
+        let second = read_until(&mut s, b"\r\n\r\n").await;
+        assert!(second.starts_with(b"GET /second"), "{second:?}");
+        s.write_all(b"HTTP/1.1 204 No Content\r\n\r\n")
+            .await
+            .unwrap();
+    })
+    .await;
+    let front = start_front(upstream, "127.0.0.0/8").await;
+
+    let mut c = TcpStream::connect(front.main()).await.unwrap();
+    // Both requests land in one write, so the second is still sitting in the relay's read buffer
+    // when the first exchange finishes. Then the client shuts its write side down.
+    c.write_all(b"GET /first HTTP/1.1\r\nHost: h\r\n\r\nGET /second HTTP/1.1\r\nHost: h\r\n\r\n")
+        .await
+        .unwrap();
+    c.shutdown().await.unwrap();
+
+    assert_eq!(
+        read_until(&mut c, b"\r\n\r\n").await,
+        b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+    );
+    assert_eq!(
+        read_until(&mut c, b"\r\n\r\n").await,
+        b"HTTP/1.1 204 No Content\r\n\r\n"
+    );
+}
+
 #[tokio::test]
 async fn relay_streams_each_direction_without_waiting_for_the_other_end() {
     let (first_seen_tx, first_seen_rx) = oneshot::channel::<()>();

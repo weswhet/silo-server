@@ -1,0 +1,200 @@
+[
+  {
+    "IfMatch": "",
+    "IfNoneMatch": ""
+  },
+  {
+    "IfMatch": "",
+    "IfNoneMatch": "*"
+  },
+  {
+    "IfMatch": "*",
+    "IfNoneMatch": "",
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/precondition_failed",
+      "title": "Precondition failed",
+      "status": 412,
+      "detail": "If-Match names a resource, but none exists at this identifier.",
+      "instance": ""
+    }
+  },
+  {
+    "IfMatch": "*",
+    "IfNoneMatch": "*",
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/precondition_failed",
+      "title": "Precondition failed",
+      "status": 412,
+      "detail": "If-Match names a resource, but none exists at this identifier.",
+      "instance": ""
+    }
+  },
+  {
+    "IfMatch": "\"cur1\"",
+    "IfNoneMatch": "",
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/precondition_failed",
+      "title": "Precondition failed",
+      "status": 412,
+      "detail": "If-Match names a resource, but none exists at this identifier.",
+      "instance": ""
+    }
+  },
+  {
+    "IfMatch": "\"cur1\"",
+    "IfNoneMatch": "*",
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/precondition_failed",
+      "title": "Precondition failed",
+      "status": 412,
+      "detail": "If-Match names a resource, but none exists at this identifier.",
+      "instance": ""
+    }
+  },
+  {
+    "IfMatch": "\"cur2\"",
+    "IfNoneMatch": "",
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/precondition_failed",
+      "title": "Precondition failed",
+      "status": 412,
+      "detail": "If-Match names a resource, but none exists at this identifier.",
+      "instance": ""
+    }
+  },
+  {
+    "IfMatch": "\"cur2\"",
+    "IfNoneMatch": "*",
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/precondition_failed",
+      "title": "Precondition failed",
+      "status": 412,
+      "detail": "If-Match names a resource, but none exists at this identifier.",
+      "instance": ""
+    }
+  },
+  {
+    "IfMatch": "",
+    "IfNoneMatch": "",
+    "existing": {
+      "Opaque": "cur1",
+      "Weak": false
+    }
+  },
+  {
+    "IfMatch": "",
+    "IfNoneMatch": "*",
+    "existing": {
+      "Opaque": "cur1",
+      "Weak": false
+    },
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/precondition_failed",
+      "title": "Precondition failed",
+      "status": 412,
+      "detail": "A resource already exists at this identifier.",
+      "instance": "",
+      "headers": {
+        "Etag": [
+          "\"cur1\""
+        ]
+      }
+    }
+  },
+  {
+    "IfMatch": "*",
+    "IfNoneMatch": "",
+    "existing": {
+      "Opaque": "cur1",
+      "Weak": false
+    }
+  },
+  {
+    "IfMatch": "*",
+    "IfNoneMatch": "*",
+    "existing": {
+      "Opaque": "cur1",
+      "Weak": false
+    },
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/precondition_failed",
+      "title": "Precondition failed",
+      "status": 412,
+      "detail": "A resource already exists at this identifier.",
+      "instance": "",
+      "headers": {
+        "Etag": [
+          "\"cur1\""
+        ]
+      }
+    }
+  },
+  {
+    "IfMatch": "\"cur1\"",
+    "IfNoneMatch": "",
+    "existing": {
+      "Opaque": "cur1",
+      "Weak": false
+    }
+  },
+  {
+    "IfMatch": "\"cur1\"",
+    "IfNoneMatch": "*",
+    "existing": {
+      "Opaque": "cur1",
+      "Weak": false
+    },
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/precondition_failed",
+      "title": "Precondition failed",
+      "status": 412,
+      "detail": "A resource already exists at this identifier.",
+      "instance": "",
+      "headers": {
+        "Etag": [
+          "\"cur1\""
+        ]
+      }
+    }
+  },
+  {
+    "IfMatch": "\"cur2\"",
+    "IfNoneMatch": "",
+    "existing": {
+      "Opaque": "cur1",
+      "Weak": false
+    },
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/precondition_failed",
+      "title": "Precondition failed",
+      "status": 412,
+      "detail": "The resource changed while the request was being applied; fetch it again and retry against the current ETag.",
+      "instance": "",
+      "headers": {
+        "Etag": [
+          "\"cur1\""
+        ]
+      }
+    }
+  },
+  {
+    "IfMatch": "\"cur2\"",
+    "IfNoneMatch": "*",
+    "existing": {
+      "Opaque": "cur1",
+      "Weak": false
+    },
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/precondition_failed",
+      "title": "Precondition failed",
+      "status": 412,
+      "detail": "The resource changed while the request was being applied; fetch it again and retry against the current ETag.",
+      "instance": "",
+      "headers": {
+        "Etag": [
+          "\"cur1\""
+        ]
+      }
+    }
+  }
+]

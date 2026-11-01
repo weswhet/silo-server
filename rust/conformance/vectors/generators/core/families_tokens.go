@@ -756,4 +756,42 @@ func registerBcrypt() {
 			return "unreadable"
 		}
 	})
+
+	// hashed.Hash() re-renders both sides into a fixed 60-byte array and compares arr[:n], where n
+	// only ever grows by encodedHashSize (31) for the hash segment. With no minor version, arr[28:]
+	// has 32 bytes of room, so a stored hash with one byte past the normal 59-byte total gets that
+	// byte written into arr[59] by copy() -- but n still ends at 59, so the comparison never sees
+	// it and "ok" survives. The bcrypt_compare family above never combines a no-minor hash with a
+	// trailing byte (case 3 drops the minor; case 8 appends "extra", but only to the minor-present
+	// base), so that line is untested. This family does, plus the minor-present case (where the
+	// extra byte can't even be written) and multi-byte and nul-byte trailing junk, as a control.
+	det("bcrypt_compare_trailing_byte", "golang.org/x/crypto/bcrypt CompareHashAndPassword, a hash with bytes appended past its normal length", 40, func(r *rand.Rand, i int) cmpIn {
+		h := string(base)
+		noMinor := i%2 == 0
+		if noMinor {
+			h = "$2$" + h[4:]
+		}
+		var extra string
+		switch (i / 2) % 4 {
+		case 0:
+			extra = "x"
+		case 1:
+			extra = "."
+		case 2:
+			extra = "xy"
+		case 3:
+			extra = "\x00"
+		}
+		return cmpIn{S(h + extra), S(pick(r, []string{"secret", "Secret"}))}
+	}, func(in cmpIn) string {
+		err := bcrypt.CompareHashAndPassword([]byte(in.Hash), []byte(in.Password))
+		switch {
+		case err == nil:
+			return "ok"
+		case errors.Is(err, bcrypt.ErrMismatchedHashAndPassword):
+			return "mismatch"
+		default:
+			return "unreadable"
+		}
+	})
 }

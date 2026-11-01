@@ -420,6 +420,10 @@ fn parse_i64(s: &[u8]) -> Option<i64> {
     Some(n)
 }
 
+/// `defaultMaxContentRanges`. Go's `httpservecontentmaxranges` GODEBUG knob can override this at
+/// runtime; Silo does not expose that knob, so this crate only ever applies the default.
+const MAX_CONTENT_RANGES: usize = 200;
+
 /// `parseRange`.
 pub fn parse_range(s: &[u8], size: i64) -> Result<Vec<HttpRange>, RangeError> {
     if s.is_empty() {
@@ -428,6 +432,12 @@ pub fn parse_range(s: &[u8], size: i64) -> Result<Vec<HttpRange>, RangeError> {
     let Some(spec) = s.strip_prefix(b"bytes=") else {
         return Err(RangeError::Invalid);
     };
+    let num_ranges = spec.iter().filter(|&&b| b == b',').count() + 1;
+    if num_ranges > MAX_CONTENT_RANGES {
+        // Go: "ignore header with too many ranges" -- serve the full content instead of
+        // rejecting the request.
+        return Ok(Vec::new());
+    }
     let mut ranges = Vec::new();
     let mut no_overlap = false;
     for ra in spec.split(|&b| b == b',') {

@@ -1,0 +1,38 @@
+[
+  {
+    "Scope": "catalog.item",
+    "ID": "1",
+    "Version": 1,
+    "Tag": "\"eb5ce2acf6a88ccf88c3756f.ndqzisa4tk6h\""
+  },
+  {
+    "Scope": "catalog.item",
+    "ID": "1",
+    "Version": 2,
+    "Tag": "\"eb5ce2acf6a88ccf88c3756f.ndqzisa4tk6i\""
+  },
+  {
+    "Scope": "catalog.item",
+    "ID": "2",
+    "Version": 1,
+    "Tag": "\"5a1295d0a9fc23ba3365292f.1e8obve75urgv\""
+  },
+  {
+    "Scope": "editor.revision",
+    "ID": "42",
+    "Version": 0,
+    "Tag": "\"ac587d34ef752635a9fc243f.3hwv2bsajtz2r\""
+  },
+  {
+    "Scope": "editor.revision",
+    "ID": "42",
+    "Version": 9223372036854775807,
+    "Tag": "\"ac587d34ef752635a9fc243f.2cb7z7syncq3w\""
+  },
+  {
+    "Scope": "",
+    "ID": "",
+    "Version": 0,
+    "Tag": "\"374708fff7719dd5979ec875.38uasbln96prr\""
+  }
+]

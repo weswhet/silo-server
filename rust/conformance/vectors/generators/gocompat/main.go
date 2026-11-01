@@ -4,7 +4,7 @@
 // real Go standard library. Run it from the repository root with the toolchain the server ships
 // with, because the Unicode tables and the outputs follow the toolchain:
 //
-//	GOTOOLCHAIN=go1.26.7 TZ=UTC go run -tags gocompat_vectors ./rust/conformance/vectors/generators/gocompat
+//	GOTOOLCHAIN=go1.26.10 TZ=UTC go run -tags gocompat_vectors ./rust/conformance/vectors/generators/gocompat
 //
 // The output is deterministic: the random corpora use a fixed seed.
 package main
@@ -74,5 +74,7 @@ func main() {
 	writeVector("url", genURL())
 	writeVector("strconv", genStrconv())
 	writeVector("json", genJSON())
+	writeVector("json_decode", genJSONDecode())
+	writeVector("json_decode_adversarial", genJSONDecodeAdversarial())
 	writeRegexpVector(genRegexp())
 }

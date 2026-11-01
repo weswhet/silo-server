@@ -1,0 +1,14 @@
+[
+  {
+    "msg": "expected string to be RFC 3986 uri: parse \"ht tp\": net/url: invalid control character in URL",
+    "out": "expected string to be RFC 3986 uri"
+  },
+  {
+    "msg": "Invalid mime type: got text/plain, expected image/png,image/jpeg",
+    "out": "expected a part of media type image/png, image/jpeg"
+  },
+  {
+    "msg": "expected required property name to be present",
+    "out": "expected required property name to be present"
+  }
+]

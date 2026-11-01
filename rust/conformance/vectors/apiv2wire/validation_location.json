@@ -1,0 +1,32 @@
+[
+  {
+    "Location": "form",
+    "Message": "expected string",
+    "Out": "body"
+  },
+  {
+    "Location": "form.name",
+    "Message": "expected string",
+    "Out": "body.name"
+  },
+  {
+    "Location": "body",
+    "Message": "expected required property name to be present",
+    "Out": "body.name"
+  },
+  {
+    "Location": "query.sort",
+    "Message": "expected value to be one of \"a\"",
+    "Out": "query.sort"
+  },
+  {
+    "Location": "name",
+    "Message": "cannot read multipart form: boom",
+    "Out": "body.name"
+  },
+  {
+    "Location": "body.items[0].name",
+    "Message": "expected string",
+    "Out": "body.items[0].name"
+  }
+]

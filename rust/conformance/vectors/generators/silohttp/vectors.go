@@ -12,7 +12,7 @@ import (
 
 // writeVectors writes the pure-function vectors the Rust side checks without a Go toolchain:
 //
-//	GOTOOLCHAIN=go1.26.7 go run -tags silohttp_diff ./rust/conformance/vectors/generators/silohttp -vectors rust/conformance/vectors/silohttp/pure.json
+//	GOTOOLCHAIN=go1.26.10 go run -tags silohttp_diff ./rust/conformance/vectors/generators/silohttp -vectors rust/conformance/vectors/silohttp/pure.json
 func writeVectors(out string) {
 	type sniff struct {
 		Hex string `json:"hex"`

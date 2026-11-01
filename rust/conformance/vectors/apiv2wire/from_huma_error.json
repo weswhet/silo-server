@@ -1,0 +1,119 @@
+[
+  {
+    "name": "form_size_exceeded",
+    "request_id": "req1",
+    "status": 422,
+    "msg": "",
+    "body_limit": 1024,
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/payload_too_large",
+      "title": "Payload too large",
+      "status": 413,
+      "detail": "The request body exceeds the 1024-byte limit.",
+      "instance": "urn:silo:request:req1"
+    }
+  },
+  {
+    "name": "form_parse_failure",
+    "request_id": "req2",
+    "status": 422,
+    "msg": "",
+    "body_limit": 1048576,
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/malformed_request",
+      "title": "Malformed request",
+      "status": 400,
+      "detail": "The request could not be parsed.",
+      "instance": "urn:silo:request:req2",
+      "errors": [
+        {
+          "location": "body",
+          "code": "malformed_form",
+          "detail": "The request body is not a valid multipart form."
+        }
+      ]
+    }
+  },
+  {
+    "name": "body_parse_failure",
+    "request_id": "req3",
+    "status": 400,
+    "msg": "",
+    "body_limit": 1048576,
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/malformed_request",
+      "title": "Malformed request",
+      "status": 400,
+      "detail": "The request could not be parsed.",
+      "instance": "urn:silo:request:req3",
+      "errors": [
+        {
+          "location": "body",
+          "code": "malformed_json",
+          "detail": "The request body is not valid JSON."
+        }
+      ]
+    }
+  },
+  {
+    "name": "validation_failure",
+    "request_id": "req4",
+    "status": 422,
+    "msg": "",
+    "body_limit": 1048576,
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/validation_failed",
+      "title": "Validation failed",
+      "status": 422,
+      "detail": "The request did not pass validation; see errors.",
+      "instance": "urn:silo:request:req4",
+      "errors": [
+        {
+          "location": "body.name",
+          "code": "required",
+          "detail": "expected required property name to be present"
+        },
+        {
+          "location": "body.kind",
+          "code": "invalid_enum",
+          "detail": "expected value to be one of \"a\", \"b\""
+        }
+      ]
+    }
+  },
+  {
+    "name": "app_error_detail",
+    "request_id": "req5",
+    "status": 422,
+    "msg": "",
+    "body_limit": 1048576,
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/validation_failed",
+      "title": "Validation failed",
+      "status": 422,
+      "detail": "The request did not pass validation; see errors.",
+      "instance": "urn:silo:request:req5",
+      "errors": [
+        {
+          "location": "body",
+          "code": "invalid",
+          "detail": "library not found"
+        }
+      ]
+    }
+  },
+  {
+    "name": "not_acceptable",
+    "request_id": "req6",
+    "status": 406,
+    "msg": "",
+    "body_limit": 1048576,
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/not_acceptable",
+      "title": "Not acceptable",
+      "status": 406,
+      "detail": "No acceptable representation is available for this operation.",
+      "instance": "urn:silo:request:req6"
+    }
+  }
+]

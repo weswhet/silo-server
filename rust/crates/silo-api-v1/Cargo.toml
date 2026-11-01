@@ -1,0 +1,9 @@
+[package]
+name = "silo-api-v1"
+version = "0.1.0"
+description = "The frozen /api/v1 alpha contract. Placeholder: no handler or wire-kit logic has been ported here yet; every v1 row stays GoProxy."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]

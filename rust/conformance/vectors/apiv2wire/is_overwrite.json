@@ -1,0 +1,18 @@
+[
+  {
+    "IfMatch": "",
+    "Is": false
+  },
+  {
+    "IfMatch": "*",
+    "Is": true
+  },
+  {
+    "IfMatch": "\"a\"",
+    "Is": false
+  },
+  {
+    "IfMatch": "bad",
+    "Is": false
+  }
+]

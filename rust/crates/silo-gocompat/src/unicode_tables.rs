@@ -6,7 +6,7 @@
 pub type RangeTable = &'static [(u32, u32, u32)];
 
 /// The Go toolchain the tables were generated from.
-pub const GO_VERSION: &str = "go1.26.7";
+pub const GO_VERSION: &str = "go1.26.10";
 /// `unicode.Version` of that toolchain.
 pub const UNICODE_VERSION: &str = "15.0.0";
 

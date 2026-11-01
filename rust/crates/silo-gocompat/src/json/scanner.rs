@@ -66,7 +66,7 @@ struct Scanner {
     err: Option<SyntaxError>,
 }
 
-fn is_space(c: u8) -> bool {
+pub(crate) fn is_space(c: u8) -> bool {
     matches!(c, b' ' | b'\t' | b'\r' | b'\n')
 }
 
@@ -389,6 +389,43 @@ impl Scanner {
             return SCAN_CONTINUE;
         }
         self.error(c, "in exponent of numeric literal")
+    }
+}
+
+/// `Decoder.readValue`'s scanning loop, resumable across reads.
+pub(crate) struct ValueScan(Scanner);
+
+impl ValueScan {
+    pub(crate) fn new() -> Self {
+        Self(Scanner::new())
+    }
+
+    /// Scans more of the value. `Ok(Some(n))` means it ended after `n` bytes of `data`, and
+    /// `Ok(None)` means it needs more input.
+    pub(crate) fn run(&mut self, data: &[u8]) -> Result<Option<usize>, SyntaxError> {
+        for (i, &c) in data.iter().enumerate() {
+            match self.0.step(c) {
+                SCAN_END => return Ok(Some(i)),
+                // The end of an object or array needs no lookahead, which might block.
+                SCAN_END_OBJECT | SCAN_END_ARRAY if self.0.parse_state.is_empty() => {
+                    return Ok(Some(i + 1));
+                }
+                SCAN_ERROR => {
+                    return Err(self
+                        .0
+                        .err
+                        .take()
+                        .unwrap_or_else(|| SyntaxError(String::new())));
+                }
+                _ => {}
+            }
+        }
+        Ok(None)
+    }
+
+    /// At the end of input: true when what was scanned is a complete value, such as a number.
+    pub(crate) fn eof(&mut self) -> bool {
+        self.0.step(b' ') == SCAN_END
     }
 }
 

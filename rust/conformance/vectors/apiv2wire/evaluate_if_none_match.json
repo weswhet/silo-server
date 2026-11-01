@@ -1,0 +1,64 @@
+[
+  {
+    "if_none_match": "",
+    "current": {
+      "Opaque": "cur1",
+      "Weak": false
+    },
+    "matched": false
+  },
+  {
+    "if_none_match": "*",
+    "current": {
+      "Opaque": "cur1",
+      "Weak": false
+    },
+    "matched": true
+  },
+  {
+    "if_none_match": "\"cur1\"",
+    "current": {
+      "Opaque": "cur1",
+      "Weak": false
+    },
+    "matched": true
+  },
+  {
+    "if_none_match": "W/\"cur1\"",
+    "current": {
+      "Opaque": "cur1",
+      "Weak": false
+    },
+    "matched": true
+  },
+  {
+    "if_none_match": "\"cur2\"",
+    "current": {
+      "Opaque": "cur1",
+      "Weak": false
+    },
+    "matched": false
+  },
+  {
+    "if_none_match": "bad",
+    "current": {
+      "Opaque": "cur1",
+      "Weak": false
+    },
+    "matched": false,
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/malformed_request",
+      "title": "Malformed request",
+      "status": 400,
+      "detail": "The If-None-Match header field is not a valid entity-tag list.",
+      "instance": "",
+      "errors": [
+        {
+          "location": "header.If-None-Match",
+          "code": "invalid_entity_tag",
+          "detail": "expected \"*\" or a comma-separated list of quoted entity-tags"
+        }
+      ]
+    }
+  }
+]

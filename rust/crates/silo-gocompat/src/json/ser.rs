@@ -456,7 +456,10 @@ impl SeqSerializer<'_, '_> {
             self.ser.out.push(b',');
         }
         self.first = false;
-        value.serialize(&mut *self.ser)
+        // A value decoded from a document can nest as deep as Go's 10,000-level limit.
+        stacker::maybe_grow(256 * 1024, 4 * 1024 * 1024, || {
+            value.serialize(&mut *self.ser)
+        })
     }
 
     fn close(self) {
@@ -626,13 +629,17 @@ impl ser::SerializeMap for MapSerializer<'_, '_> {
         match self {
             Self::Sorted { ser, entries, key } => {
                 let mut buf = Vec::new();
-                let encoded = value.serialize(&mut GoSerializer {
-                    out: &mut buf,
-                    escape_html: ser.escape_html,
+                let encoded = stacker::maybe_grow(256 * 1024, 4 * 1024 * 1024, || {
+                    value.serialize(&mut GoSerializer {
+                        out: &mut buf,
+                        escape_html: ser.escape_html,
+                    })
                 });
                 entries.push((key.take().unwrap_or_default(), encoded.map(|()| buf)));
             }
-            Self::Ordered { ser, .. } => value.serialize(&mut **ser)?,
+            Self::Ordered { ser, .. } => {
+                stacker::maybe_grow(256 * 1024, 4 * 1024 * 1024, || value.serialize(&mut **ser))?;
+            }
         }
         Ok(())
     }

@@ -1,0 +1,86 @@
+[
+  {
+    "status": 200,
+    "id": "internal_error"
+  },
+  {
+    "status": 304,
+    "id": "internal_error"
+  },
+  {
+    "status": 400,
+    "id": "malformed_request"
+  },
+  {
+    "status": 401,
+    "id": "authentication_required"
+  },
+  {
+    "status": 403,
+    "id": "permission_denied"
+  },
+  {
+    "status": 404,
+    "id": "not_found"
+  },
+  {
+    "status": 405,
+    "id": "method_not_allowed"
+  },
+  {
+    "status": 406,
+    "id": "not_acceptable"
+  },
+  {
+    "status": 408,
+    "id": "request_timeout"
+  },
+  {
+    "status": 409,
+    "id": "conflict"
+  },
+  {
+    "status": 410,
+    "id": "device_login_expired"
+  },
+  {
+    "status": 412,
+    "id": "precondition_failed"
+  },
+  {
+    "status": 413,
+    "id": "payload_too_large"
+  },
+  {
+    "status": 415,
+    "id": "unsupported_media_type"
+  },
+  {
+    "status": 422,
+    "id": "validation_failed"
+  },
+  {
+    "status": 428,
+    "id": "precondition_required"
+  },
+  {
+    "status": 429,
+    "id": "rate_limited"
+  },
+  {
+    "status": 500,
+    "id": "internal_error"
+  },
+  {
+    "status": 501,
+    "id": "capability_unsupported"
+  },
+  {
+    "status": 503,
+    "id": "dependency_unavailable"
+  },
+  {
+    "status": 999,
+    "id": "internal_error"
+  }
+]

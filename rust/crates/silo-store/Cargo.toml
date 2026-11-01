@@ -1,0 +1,20 @@
+[package]
+name = "silo-store"
+version = "0.1.0"
+description = "Settings store (enc:v1), the canonical userstore setting-values engine, and bounded slices of access and blobstore. See src/lib.rs for exact scope and what is deferred."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+silo-config = { path = "../silo-config" }
+silo-core = { path = "../silo-core" }
+silo-gocompat = { path = "../silo-gocompat" }
+silo-pg = { path = "../silo-pg" }
+thiserror = "2"
+tracing = "0.1"
+
+[dev-dependencies]
+serde_json = "1"
+sha2 = "0.10"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }

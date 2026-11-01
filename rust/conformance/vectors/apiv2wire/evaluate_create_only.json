@@ -1,0 +1,126 @@
+[
+  {
+    "if_none_match": ""
+  },
+  {
+    "if_none_match": "*"
+  },
+  {
+    "if_none_match": "\"cur1\""
+  },
+  {
+    "if_none_match": "W/\"cur1\""
+  },
+  {
+    "if_none_match": "\"cur2\""
+  },
+  {
+    "if_none_match": "bad",
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/malformed_request",
+      "title": "Malformed request",
+      "status": 400,
+      "detail": "The If-None-Match header field is not a valid entity-tag list.",
+      "instance": "",
+      "errors": [
+        {
+          "location": "header.If-None-Match",
+          "code": "invalid_entity_tag",
+          "detail": "expected \"*\" or a comma-separated list of quoted entity-tags"
+        }
+      ]
+    }
+  },
+  {
+    "if_none_match": "",
+    "existing": {
+      "Opaque": "cur1",
+      "Weak": false
+    }
+  },
+  {
+    "if_none_match": "*",
+    "existing": {
+      "Opaque": "cur1",
+      "Weak": false
+    },
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/precondition_failed",
+      "title": "Precondition failed",
+      "status": 412,
+      "detail": "A resource already exists at this identifier.",
+      "instance": "",
+      "headers": {
+        "Etag": [
+          "\"cur1\""
+        ]
+      }
+    }
+  },
+  {
+    "if_none_match": "\"cur1\"",
+    "existing": {
+      "Opaque": "cur1",
+      "Weak": false
+    },
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/precondition_failed",
+      "title": "Precondition failed",
+      "status": 412,
+      "detail": "A resource already exists at this identifier.",
+      "instance": "",
+      "headers": {
+        "Etag": [
+          "\"cur1\""
+        ]
+      }
+    }
+  },
+  {
+    "if_none_match": "W/\"cur1\"",
+    "existing": {
+      "Opaque": "cur1",
+      "Weak": false
+    },
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/precondition_failed",
+      "title": "Precondition failed",
+      "status": 412,
+      "detail": "A resource already exists at this identifier.",
+      "instance": "",
+      "headers": {
+        "Etag": [
+          "\"cur1\""
+        ]
+      }
+    }
+  },
+  {
+    "if_none_match": "\"cur2\"",
+    "existing": {
+      "Opaque": "cur1",
+      "Weak": false
+    }
+  },
+  {
+    "if_none_match": "bad",
+    "existing": {
+      "Opaque": "cur1",
+      "Weak": false
+    },
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/malformed_request",
+      "title": "Malformed request",
+      "status": 400,
+      "detail": "The If-None-Match header field is not a valid entity-tag list.",
+      "instance": "",
+      "errors": [
+        {
+          "location": "header.If-None-Match",
+          "code": "invalid_entity_tag",
+          "detail": "expected \"*\" or a comma-separated list of quoted entity-tags"
+        }
+      ]
+    }
+  }
+]

@@ -1,0 +1,50 @@
+[
+  {
+    "A": {
+      "Opaque": "abc",
+      "Weak": false
+    },
+    "B": {
+      "Opaque": "abc",
+      "Weak": false
+    },
+    "Strong": true,
+    "Weak": true
+  },
+  {
+    "A": {
+      "Opaque": "abc",
+      "Weak": false
+    },
+    "B": {
+      "Opaque": "abc",
+      "Weak": true
+    },
+    "Strong": false,
+    "Weak": true
+  },
+  {
+    "A": {
+      "Opaque": "abc",
+      "Weak": true
+    },
+    "B": {
+      "Opaque": "abc",
+      "Weak": true
+    },
+    "Strong": false,
+    "Weak": true
+  },
+  {
+    "A": {
+      "Opaque": "abc",
+      "Weak": false
+    },
+    "B": {
+      "Opaque": "xyz",
+      "Weak": false
+    },
+    "Strong": false,
+    "Weak": false
+  }
+]

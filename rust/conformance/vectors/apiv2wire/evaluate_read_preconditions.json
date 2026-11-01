@@ -1,0 +1,110 @@
+[
+  {
+    "IfMatch": "",
+    "IfNoneMatch": "",
+    "NotModified": false
+  },
+  {
+    "IfMatch": "",
+    "IfNoneMatch": "*",
+    "NotModified": true
+  },
+  {
+    "IfMatch": "",
+    "IfNoneMatch": "\"cur1\"",
+    "NotModified": true
+  },
+  {
+    "IfMatch": "",
+    "IfNoneMatch": "W/\"cur1\"",
+    "NotModified": true
+  },
+  {
+    "IfMatch": "\"cur1\"",
+    "IfNoneMatch": "",
+    "NotModified": false
+  },
+  {
+    "IfMatch": "\"cur1\"",
+    "IfNoneMatch": "*",
+    "NotModified": true
+  },
+  {
+    "IfMatch": "\"cur1\"",
+    "IfNoneMatch": "\"cur1\"",
+    "NotModified": true
+  },
+  {
+    "IfMatch": "\"cur1\"",
+    "IfNoneMatch": "W/\"cur1\"",
+    "NotModified": true
+  },
+  {
+    "IfMatch": "\"cur2\"",
+    "IfNoneMatch": "",
+    "NotModified": false,
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/precondition_failed",
+      "title": "Precondition failed",
+      "status": 412,
+      "detail": "The resource changed while the request was being applied; fetch it again and retry against the current ETag.",
+      "instance": "",
+      "headers": {
+        "Etag": [
+          "\"cur1\""
+        ]
+      }
+    }
+  },
+  {
+    "IfMatch": "\"cur2\"",
+    "IfNoneMatch": "*",
+    "NotModified": false,
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/precondition_failed",
+      "title": "Precondition failed",
+      "status": 412,
+      "detail": "The resource changed while the request was being applied; fetch it again and retry against the current ETag.",
+      "instance": "",
+      "headers": {
+        "Etag": [
+          "\"cur1\""
+        ]
+      }
+    }
+  },
+  {
+    "IfMatch": "\"cur2\"",
+    "IfNoneMatch": "\"cur1\"",
+    "NotModified": false,
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/precondition_failed",
+      "title": "Precondition failed",
+      "status": 412,
+      "detail": "The resource changed while the request was being applied; fetch it again and retry against the current ETag.",
+      "instance": "",
+      "headers": {
+        "Etag": [
+          "\"cur1\""
+        ]
+      }
+    }
+  },
+  {
+    "IfMatch": "\"cur2\"",
+    "IfNoneMatch": "W/\"cur1\"",
+    "NotModified": false,
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/precondition_failed",
+      "title": "Precondition failed",
+      "status": 412,
+      "detail": "The resource changed while the request was being applied; fetch it again and retry against the current ETag.",
+      "instance": "",
+      "headers": {
+        "Etag": [
+          "\"cur1\""
+        ]
+      }
+    }
+  }
+]

@@ -1,0 +1,33 @@
+[
+  {
+    "current": {
+      "Opaque": "cur1",
+      "Weak": false
+    },
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/precondition_failed",
+      "title": "Precondition failed",
+      "status": 412,
+      "detail": "The resource changed while the request was being applied; fetch it again and retry against the current ETag.",
+      "instance": "",
+      "headers": {
+        "Etag": [
+          "\"cur1\""
+        ]
+      }
+    }
+  },
+  {
+    "current": {
+      "Opaque": "",
+      "Weak": false
+    },
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/precondition_failed",
+      "title": "Precondition failed",
+      "status": 412,
+      "detail": "The resource changed while the request was being applied; fetch it again and retry against the current ETag.",
+      "instance": ""
+    }
+  }
+]

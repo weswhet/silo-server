@@ -1934,6 +1934,7 @@ pub fn families() -> Vec<Family> {
             &["password", "cost"]
         ),
         det!("bcrypt_compare", bcrypt_compare, &["*"]),
+        det!("bcrypt_compare_trailing_byte", bcrypt_compare, &["*"]),
         det!("credential_hashes", credential_hashes, &["fn"]),
         det!("api_key", api_key),
         det!("api_key_valid_text", api_key_valid_text),

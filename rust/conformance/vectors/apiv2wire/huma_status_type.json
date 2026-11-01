@@ -1,0 +1,42 @@
+[
+  {
+    "status": 400,
+    "msg": "",
+    "id": "malformed_request"
+  },
+  {
+    "status": 422,
+    "msg": "",
+    "id": "validation_failed"
+  },
+  {
+    "status": 406,
+    "msg": "",
+    "id": "not_acceptable"
+  },
+  {
+    "status": 408,
+    "msg": "",
+    "id": "request_timeout"
+  },
+  {
+    "status": 413,
+    "msg": "",
+    "id": "payload_too_large"
+  },
+  {
+    "status": 415,
+    "msg": "",
+    "id": "unsupported_media_type"
+  },
+  {
+    "status": 405,
+    "msg": "",
+    "id": "method_not_allowed"
+  },
+  {
+    "status": 409,
+    "msg": "",
+    "id": "conflict"
+  }
+]

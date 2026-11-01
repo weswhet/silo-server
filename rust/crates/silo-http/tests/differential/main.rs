@@ -25,8 +25,14 @@ fn repo_root() -> PathBuf {
     PathBuf::from(silo_gocompat::filepath::join(&[manifest, "../../.."]))
 }
 
-/// The toolchain Silo ships with, which `silo-gocompat` pins as well.
-const GO_TOOLCHAIN: &str = silo_gocompat::unicode::GO_VERSION;
+/// The toolchain Silo ships with (`Dockerfile`'s `golang:1.26` resolves to this patch today).
+///
+/// This used to alias `silo_gocompat::unicode::GO_VERSION` (go1.26.7), which drifted from the
+/// shipped image and hid real behavior changes between those patches: the 200-range Range-header
+/// limit (`net/http/fs.go`) and the CONNECT response-writer changes (`net/http/server.go`), both
+/// ported in this crate. `unicode.Version` is identical across both patches, so repinning here
+/// does not need `silo-gocompat`'s tables regenerated.
+const GO_TOOLCHAIN: &str = "go1.26.10";
 
 struct GoProcess(Child);
 
@@ -95,6 +101,7 @@ fn wire_differential() {
             ("chi-adversarial", cases::chi_cases()),
             ("servemux", cases::servemux_cases()),
             ("range-matrix", cases::range_cases()),
+            ("range-limit", cases::range_limit_cases()),
             ("conditional-matrix", cases::conditional_cases()),
             ("content-config", cases::content_config_cases()),
             ("serve-file", cases::serve_file_cases()),

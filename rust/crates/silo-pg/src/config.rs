@@ -346,8 +346,26 @@ fn build(mut settings: BTreeMap<String, String>) -> Result<PoolConfig, Error> {
         Some("verify-full") => SslMode::VerifyFull,
         Some(_) => return Err(cfg_err("sslmode is invalid")),
     };
+    // pgx loads `sslrootcert`/`sslcert`/`sslkey` into the TLS config it builds for every mode but
+    // `disable` (which never looks at them). This crate does not load certificate files yet (see
+    // `Pool::new`), so refuse to start rather than silently connect without the CA pin or client
+    // certificate the caller configured.
+    if ssl_mode != SslMode::Disable {
+        for key in ["sslrootcert", "sslcert", "sslkey"] {
+            if settings.get(key).is_some_and(|v| !v.is_empty()) {
+                return Err(cfg_err(format!(
+                    "{key} is not implemented yet; configure Postgres TLS without a custom cert \
+                     file, or use sslmode=disable"
+                )));
+            }
+        }
+    }
 
     let mut pg = tokio_postgres::Config::new();
+    // `Pool::new` builds the real per-attempt TLS connector for `ssl_mode` (pgx's semantics need
+    // two attempts for `allow`, which a single `tokio_postgres::config::SslMode` can't express).
+    // This default only matters for a `Pool` built directly from this `Config` without going
+    // through that mapping, so keep it at the conservative end: never negotiate TLS silently.
     pg.ssl_mode(tokio_postgres::config::SslMode::Disable);
     let host = settings
         .get("host")

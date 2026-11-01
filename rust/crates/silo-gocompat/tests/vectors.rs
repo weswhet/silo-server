@@ -9,11 +9,11 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use silo_gocompat::json::{
-    self, ByteString, Bytes, Encoder, Number, RawMessage, omit_empty, omit_nil_or_empty,
+    self, ByteString, Bytes, Decoder, Encoder, Number, RawMessage, omit_empty, omit_nil_or_empty,
 };
 use silo_gocompat::regexp::{GoRegex, quote_meta};
 use silo_gocompat::strings::decode_runes;
@@ -670,6 +670,128 @@ fn url_vectors() {
 }
 
 #[test]
+fn url_parse_vectors() {
+    let v = vector("url");
+    let mut check = Check::new("url.Parse and URL.String");
+    for c in array(&v, "parse") {
+        // `Url`'s fields are Rust `String`s (see the module docs), so a raw URL that is not valid
+        // UTF-8 is out of scope for this port; skip the handful of cases built from invalidUTF8.
+        if !c["in"].is_string() {
+            continue;
+        }
+        let input = str_of(&c["in"]);
+        let got = match url::parse(&input) {
+            Ok(u) => Ok((
+                u.scheme.clone(),
+                u.opaque.clone(),
+                u.user.as_ref().map(|user| {
+                    (
+                        user.username().to_string(),
+                        user.password().map(str::to_string),
+                    )
+                }),
+                u.host.clone(),
+                u.path.clone(),
+                u.raw_path.clone(),
+                u.omit_host,
+                u.force_query,
+                u.raw_query.clone(),
+                u.fragment.clone(),
+                u.raw_fragment.clone(),
+                u.string(),
+            )),
+            Err(e) => Err(e.to_string()),
+        };
+        let want = if let Some(ok) = c.get("ok") {
+            Ok((
+                str_of(&ok["scheme"]),
+                str_of(&ok["opaque"]),
+                (!ok["user"].is_null()).then(|| {
+                    (
+                        str_of(&ok["user"]["username"]),
+                        ok["user"].get("password").map(str_of),
+                    )
+                }),
+                str_of(&ok["host"]),
+                str_of(&ok["path"]),
+                str_of(&ok["raw_path"]),
+                ok["omit_host"].as_bool().unwrap_or(false),
+                ok["force_query"].as_bool().unwrap_or(false),
+                str_of(&ok["raw_query"]),
+                str_of(&ok["fragment"]),
+                str_of(&ok["raw_fragment"]),
+                str_of(&ok["str"]),
+            ))
+        } else {
+            Err(str_of(&c["err"]))
+        };
+        // The exact wording of an invalid IPv6-literal-in-brackets error can differ (see the
+        // module docs): accept any error there instead of matching Go's `net/netip` text.
+        const INVALID_HOST: &str = "invalid host: ";
+        if let (Err(g), Err(w)) = (&got, &want)
+            && g.contains(INVALID_HOST)
+            && w.contains(INVALID_HOST)
+        {
+            check.eq(|| input.clone(), true, true);
+            continue;
+        }
+        check.eq(|| input.clone(), got, want);
+    }
+    check.finish(MIN_CASES);
+}
+
+#[test]
+fn url_query_vectors() {
+    let v = vector("url");
+    let mut check = Check::new("URL.Query");
+    for c in array(&v, "query") {
+        let raw_query = str_of(&c["raw_query"]);
+        let got: Vec<(String, Vec<String>)> = url::Url {
+            raw_query: raw_query.clone(),
+            ..Default::default()
+        }
+        .query()
+        .into_iter()
+        .collect();
+        let want: Vec<(String, Vec<String>)> = c["pairs"]
+            .as_array()
+            .map(|pairs| {
+                pairs
+                    .iter()
+                    .map(|p| {
+                        (
+                            str_of(&p["k"]),
+                            p["v"].as_array().unwrap().iter().map(str_of).collect(),
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        check.eq(|| raw_query.clone(), got, want);
+    }
+    check.finish(MIN_CASES);
+}
+
+#[test]
+fn url_resolve_reference_vectors() {
+    let v = vector("url");
+    let mut check = Check::new("URL.ResolveReference");
+    for c in array(&v, "resolve_reference") {
+        let base = str_of(&c["base"]);
+        let r = str_of(&c["ref"]);
+        let got = url::parse(&base)
+            .and_then(|b| url::parse(&r).map(|ref_url| b.resolve_reference(&ref_url).string()))
+            .map_err(|e| e.to_string());
+        check.eq(
+            || format!("base={base:?} ref={r:?}"),
+            got,
+            Ok(str_of(&c["out"])),
+        );
+    }
+    check.finish(MIN_CASES);
+}
+
+#[test]
 fn strconv_vectors() {
     let v = vector("strconv");
     let mut quote = Check::new("strconv.Quote");
@@ -1248,6 +1370,468 @@ fn json_structs() {
         );
     }
     check.finish(10);
+}
+
+// --- json.Unmarshal: case folding, duplicate-key merging, null handling, unknown fields, and
+// --- type-mismatch error text, against `rust/conformance/vectors/gocompat/json_decode.json`.
+//
+// `Sink` and `Inner` live in their own module so their names match the Go mirror
+// (`jsondecode.go`) exactly: that name is what a struct-field type-mismatch error names.
+mod decode_sink {
+    use super::*;
+
+    #[derive(Deserialize, Default, Debug)]
+    #[serde(rename = "main.SinkInner")]
+    struct SinkInner {
+        x: i32,
+        y: String,
+    }
+
+    #[derive(Deserialize, Default, Debug)]
+    #[serde(rename = "main.Sink")]
+    #[allow(non_snake_case)]
+    struct Sink {
+        str: String,
+        b: bool,
+        i8: i8,
+        i16: i16,
+        i32: i32,
+        i64: i64,
+        u8: u8,
+        u16: u16,
+        u32: u32,
+        u64: u64,
+        f32: f32,
+        f64: f64,
+        r#in: SinkInner,
+        arr: Option<Vec<i32>>,
+        m: Option<HashMap<String, i32>>,
+        im: Option<HashMap<i32, String>>,
+        ptr: Option<i32>,
+        raw: RawMessage,
+        num: Number,
+    }
+
+    /// Rebuilds the comparable shape `jsondecode.go`'s `observe` builds on the Go side.
+    fn decode_observed(s: &Sink) -> Value {
+        let mut m: Vec<(&String, &i32)> = s.m.iter().flatten().collect();
+        m.sort_by_key(|(k, _)| k.as_str());
+        let mut im: Vec<(&i32, &String)> = s.im.iter().flatten().collect();
+        im.sort_by_key(|(k, _)| **k);
+        serde_json::json!({
+            "str": s.str,
+            "b": s.b,
+            "i8": s.i8,
+            "i16": s.i16,
+            "i32": s.i32,
+            "i64": s.i64,
+            "u8": s.u8,
+            "u16": s.u16,
+            "u32": s.u32,
+            "u64": s.u64,
+            "f32": f64::from(s.f32),
+            "f64": s.f64,
+            "in_x": s.r#in.x,
+            "in_y": s.r#in.y,
+            "arr": s.arr,
+            "m": if m.is_empty() { Value::Null } else { serde_json::json!(m.into_iter().map(|(k, v)| serde_json::json!({"k": k, "v": v.to_string()})).collect::<Vec<_>>()) },
+            "im": if im.is_empty() { Value::Null } else { serde_json::json!(im.into_iter().map(|(k, v)| serde_json::json!({"k": k.to_string(), "v": v})).collect::<Vec<_>>()) },
+            "ptr": s.ptr,
+            "raw": s.raw.as_bytes().map(|b| String::from_utf8_lossy(b).into_owned()),
+            "num": s.num.0,
+        })
+    }
+
+    /// Go's text for a value, so an integer and a float holding it compare equal the way `observe`
+    /// printed them, and no other difference is hidden.
+    fn canonical(v: &Value) -> String {
+        json::marshal_to_string(v).expect("vector values marshal")
+    }
+
+    fn run_decode_sink_bucket(name: &'static str, bucket: &str, min: usize) {
+        let v = vector("json_decode");
+        let mut check = Check::new(name);
+        for c in array(&v, bucket) {
+            let doc = bytes_of(&c["doc"]);
+            let disallow = c["disallow"].as_bool().unwrap_or(false);
+            let dec = if disallow {
+                Decoder::new().disallow_unknown_fields()
+            } else {
+                Decoder::new()
+            };
+            let got = dec
+                .decode::<Sink>(&doc)
+                .map(|s| canonical(&decode_observed(&s)))
+                .map_err(|e| e.to_string());
+            let want = match c.get("ok") {
+                Some(ok) => Ok(canonical(ok)),
+                None => Err(str_of(&c["err"])),
+            };
+            check.eq(|| String::from_utf8_lossy(&doc).into_owned(), got, want);
+        }
+        check.finish(min);
+    }
+
+    #[test]
+    fn json_decode_fold() {
+        run_decode_sink_bucket(
+            "json.Unmarshal: struct-field case folding",
+            "fold",
+            MIN_CASES,
+        );
+    }
+
+    #[test]
+    fn json_decode_duplicate_keys() {
+        run_decode_sink_bucket(
+            "json.Unmarshal: duplicate-key merge behavior",
+            "duplicate",
+            MIN_CASES,
+        );
+    }
+
+    #[test]
+    fn json_decode_null_noop() {
+        run_decode_sink_bucket(
+            "json.Unmarshal: null into a non-pointer field",
+            "null_noop",
+            MIN_CASES,
+        );
+    }
+
+    #[test]
+    fn json_decode_unknown_fields() {
+        run_decode_sink_bucket(
+            "json.Unmarshal / Decoder.DisallowUnknownFields",
+            "unknown_fields",
+            MIN_CASES,
+        );
+    }
+
+    #[test]
+    fn json_decode_type_errors() {
+        run_decode_sink_bucket(
+            "json.Unmarshal: UnmarshalTypeError text",
+            "type_errors",
+            MIN_CASES,
+        );
+    }
+
+    #[test]
+    fn json_decode_utf8() {
+        run_decode_sink_bucket(
+            "json.Unmarshal: invalid UTF-8 and lone surrogates",
+            "utf8",
+            MIN_CASES,
+        );
+    }
+} // mod decode_sink
+
+// --- the review's refuted cases, against `json_decode_adversarial.json`.
+mod decode_adversarial {
+    use super::*;
+    use serde::Serialize;
+    use std::collections::BTreeMap;
+
+    #[derive(Deserialize, Serialize)]
+    #[serde(rename = "main.AdvSub")]
+    struct AdvSub {
+        a: i32,
+        b: i32,
+    }
+
+    #[derive(Deserialize, Serialize)]
+    #[serde(rename = "main.AdvInner")]
+    #[allow(non_snake_case)]
+    struct AdvInner {
+        x: i32,
+        y: String,
+        ms: Option<BTreeMap<String, AdvSub>>,
+    }
+
+    #[derive(Deserialize, Serialize)]
+    #[serde(rename = "main.Adv")]
+    struct Adv {
+        n: i32,
+        s: String,
+        nums: Option<Vec<i32>>,
+        ptr: Option<i32>,
+        pp: Option<AdvSub>,
+        inner: AdvInner,
+        list: Option<Vec<AdvSub>>,
+        t: GoTime,
+        tp: Option<GoTime>,
+        raw: RawMessage,
+        jn: Number,
+        any: Value,
+        arr: [i32; 2],
+        bin: Bytes,
+        f32: f32,
+        im: Option<BTreeMap<i32, String>>,
+        um: Option<BTreeMap<u8, String>>,
+        nest: Option<Vec<Option<Vec<i32>>>>,
+    }
+
+    #[derive(Deserialize, Serialize)]
+    #[serde(rename = "main.AdvFold")]
+    #[allow(non_snake_case)]
+    struct AdvFold {
+        foo: String,
+        FOO: String,
+        #[serde(rename = "BAR")]
+        Bar: String,
+        #[serde(rename = "bar")]
+        BAR: String,
+    }
+
+    #[derive(Deserialize)]
+    struct AdvRec {
+        #[allow(dead_code)]
+        n: Option<Box<AdvRec>>,
+    }
+
+    #[derive(Deserialize)]
+    struct AdvKeep {
+        #[allow(dead_code)]
+        keep: i32,
+    }
+
+    #[derive(Deserialize)]
+    struct AdvRawHolder {
+        #[allow(dead_code)]
+        raw: RawMessage,
+    }
+
+    fn hex(b: &[u8]) -> String {
+        b.iter().map(|x| format!("{x:02x}")).collect()
+    }
+
+    fn outcome<T: Serialize>(r: Result<T, json::DecodeError>) -> Result<Vec<u8>, String> {
+        r.map(|v| json::marshal(&v).expect("marshal"))
+            .map_err(|e| e.to_string())
+    }
+
+    fn want(c: &Value) -> Result<Vec<u8>, String> {
+        match c.get("ok") {
+            Some(ok) => Ok(bytes_of(ok)),
+            None => Err(str_of(&c["err"])),
+        }
+    }
+
+    fn decoder(c: &Value) -> Decoder {
+        if c["disallow"].as_bool().unwrap_or(false) {
+            Decoder::new().disallow_unknown_fields()
+        } else {
+            Decoder::new()
+        }
+    }
+
+    #[test]
+    fn json_decode_adversarial_documents() {
+        let v = vector("json_decode_adversarial");
+        let mut check = Check::new("json.Decoder.Decode: destination-kind semantics");
+        for c in array(&v, "decode") {
+            let doc = bytes_of(&c["doc"]);
+            let label = || String::from_utf8_lossy(&doc).into_owned();
+            let decoded = decoder(c).decode::<Adv>(&doc);
+            if let (Ok(d), Some(raw)) = (&decoded, c.get("raw_hex")) {
+                check.eq(
+                    label,
+                    hex(d.raw.as_bytes().unwrap_or_default()),
+                    str_of(raw),
+                );
+            }
+            check.eq(label, outcome(decoded), want(c));
+        }
+        for c in array(&v, "unmarshal") {
+            let doc = bytes_of(&c["doc"]);
+            check.eq(
+                || String::from_utf8_lossy(&doc).into_owned(),
+                outcome(json::unmarshal::<Adv>(&doc)),
+                want(c),
+            );
+        }
+        for c in array(&v, "fold") {
+            let doc = bytes_of(&c["doc"]);
+            check.eq(
+                || String::from_utf8_lossy(&doc).into_owned(),
+                outcome(decoder(c).decode::<AdvFold>(&doc)),
+                want(c),
+            );
+        }
+        check.finish(100);
+    }
+
+    struct OneByte<'a>(&'a [u8]);
+
+    impl std::io::Read for OneByte<'_> {
+        fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+            let Some((first, rest)) = self.0.split_first() else {
+                return Ok(0);
+            };
+            out[0] = *first;
+            self.0 = rest;
+            Ok(1)
+        }
+    }
+
+    fn check_steps<R: std::io::Read>(
+        check: &mut Check,
+        doc: &[u8],
+        steps: &[Value],
+        mut stream: json::Stream<R>,
+        compare_position: bool,
+    ) {
+        for (i, step) in steps.iter().enumerate() {
+            let label = || format!("{} step {i}", String::from_utf8_lossy(doc));
+            let got = stream.decode::<Adv>();
+            let kind = match &got {
+                Err(e) if e.is_eof() => "eof",
+                Err(e) if e.is_unexpected_eof() => "unexpected",
+                _ => "",
+            };
+            check.eq(label, kind, step["eof"].as_str().unwrap_or(""));
+            check.eq(label, outcome(got), want(step));
+            if compare_position {
+                check.eq(
+                    label,
+                    stream.buffered().to_vec(),
+                    bytes_of(&step["buffered"]),
+                );
+                check.eq(
+                    label,
+                    stream.input_offset() as i64,
+                    step["offset"].as_i64().unwrap_or(-1),
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn json_decode_streams() {
+        let v = vector("json_decode_adversarial");
+        let mut check = Check::new("json.Decoder: streams, Buffered, InputOffset, EOF");
+        for c in array(&v, "streams") {
+            let doc = bytes_of(&c["doc"]);
+            let steps = array(c, "steps");
+            check_steps(
+                &mut check,
+                &doc,
+                steps,
+                Decoder::new().stream(&doc[..]),
+                true,
+            );
+            // A value split across reads must decode the same; only what is buffered differs.
+            check_steps(
+                &mut check,
+                &doc,
+                steps,
+                Decoder::new().stream(OneByte(&doc)),
+                false,
+            );
+            // A one-shot decode is the stream's first step.
+            check.eq(
+                || String::from_utf8_lossy(&doc).into_owned(),
+                outcome(Decoder::new().decode::<Adv>(&doc)),
+                want(&steps[0]),
+            );
+        }
+        check.finish(20);
+    }
+
+    fn depth_doc(shape: &str, depth: usize) -> String {
+        match shape {
+            "any_array" => "[".repeat(depth) + &"]".repeat(depth),
+            "unknown_array" => {
+                format!(
+                    r#"{{"zzz":{}{}}}"#,
+                    "[".repeat(depth - 1),
+                    "]".repeat(depth - 1)
+                )
+            }
+            "any_object" | "rec" => r#"{"n":"#.repeat(depth - 1) + "{}" + &"}".repeat(depth - 1),
+            "raw" => format!(
+                r#"{{"raw":{}{}}}"#,
+                "[".repeat(depth - 1),
+                "]".repeat(depth - 1)
+            ),
+            other => panic!("{other}"),
+        }
+    }
+
+    /// Runs on a 2 MiB thread, the default for a Tokio worker. An overflow aborts the test binary.
+    #[test]
+    fn json_decode_depth_on_a_small_stack() {
+        std::thread::Builder::new()
+            .stack_size(2 * 1024 * 1024)
+            .spawn(|| {
+                let v = vector("json_decode_adversarial");
+                let mut check = Check::new("json.Decoder: nesting up to the 10,000 limit");
+                for c in array(&v, "depth") {
+                    let shape = str_of(&c["shape"]);
+                    let depth = c["depth"].as_u64().expect("depth") as usize;
+                    let doc = depth_doc(&shape, depth);
+                    let dec = Decoder::new();
+                    let err = match shape.as_str() {
+                        "any_array" | "any_object" => {
+                            dec.decode::<Value>(doc.as_bytes()).map(drop).err()
+                        }
+                        "unknown_array" => dec.decode::<AdvKeep>(doc.as_bytes()).map(drop).err(),
+                        "rec" => dec.decode::<AdvRec>(doc.as_bytes()).map(drop).err(),
+                        _ => dec.decode::<AdvRawHolder>(doc.as_bytes()).map(drop).err(),
+                    };
+                    let builds_value = matches!(shape.as_str(), "any_array" | "any_object" | "rec");
+                    let want = if cfg!(debug_assertions)
+                        && builds_value
+                        && (1001..=10000).contains(&depth)
+                    {
+                        // A deliberate difference: see MAX_MATERIALIZED_DEPTH in json/decode.rs.
+                        Some(
+                            "json: nesting deeper than 1000 levels is not decoded in a debug build"
+                                .to_string(),
+                        )
+                    } else {
+                        c.get("err").map(str_of)
+                    };
+                    check.eq(
+                        || format!("{shape} {depth}"),
+                        err.map(|e| e.to_string()),
+                        want,
+                    );
+                }
+                if !cfg!(debug_assertions) {
+                    let doc = depth_doc("any_array", 10000);
+                    let v: Value = json::unmarshal(doc.as_bytes()).expect("10,000 levels");
+                    assert_eq!(json::marshal(&v).expect("marshal"), doc.as_bytes());
+                }
+                check.finish(20);
+            })
+            .expect("spawn")
+            .join()
+            .expect("no panic");
+    }
+
+    #[test]
+    fn serde_defaults_survive_absent_and_null() {
+        #[derive(Deserialize)]
+        struct WithDefault {
+            #[serde(default = "seven")]
+            n: i32,
+            #[serde(default = "some_seven")]
+            p: Option<i32>,
+        }
+        fn seven() -> i32 {
+            7
+        }
+        fn some_seven() -> Option<i32> {
+            Some(7)
+        }
+        let absent: WithDefault = json::unmarshal(b"{}").expect("absent");
+        assert_eq!((absent.n, absent.p), (7, Some(7)));
+        // Go leaves a set int alone on null, and sets a pointer to nil.
+        let null: WithDefault = json::unmarshal(br#"{"n":null,"p":null}"#).expect("null");
+        assert_eq!((null.n, null.p), (7, None));
+    }
 }
 
 static COMMON_INPUTS: LazyLock<Vec<String>> = LazyLock::new(|| {

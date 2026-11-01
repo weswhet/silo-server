@@ -1,0 +1,62 @@
+[
+  {
+    "msg": "unknown query parameter",
+    "code": "unknown_parameter"
+  },
+  {
+    "msg": "unexpected property",
+    "code": "unknown_field"
+  },
+  {
+    "msg": "expected required property name to be present",
+    "code": "required"
+  },
+  {
+    "msg": "required query parameter is missing",
+    "code": "required"
+  },
+  {
+    "msg": "required header parameter is missing",
+    "code": "required"
+  },
+  {
+    "msg": "request body is required",
+    "code": "required"
+  },
+  {
+    "msg": "expected value to be one of \"a\", \"b\"",
+    "code": "invalid_enum"
+  },
+  {
+    "msg": "expected number \u003e 5",
+    "code": "out_of_range"
+  },
+  {
+    "msg": "expected number \u003c 5",
+    "code": "out_of_range"
+  },
+  {
+    "msg": "expected length \u003e= 3",
+    "code": "out_of_range"
+  },
+  {
+    "msg": "expected array length \u003e= 1",
+    "code": "out_of_range"
+  },
+  {
+    "msg": "expected string",
+    "code": "invalid_type"
+  },
+  {
+    "msg": "expected integer",
+    "code": "invalid_type"
+  },
+  {
+    "msg": "invalid something",
+    "code": "invalid_type"
+  },
+  {
+    "msg": "something else entirely",
+    "code": "invalid"
+  }
+]

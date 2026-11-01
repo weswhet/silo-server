@@ -245,7 +245,11 @@ pub fn scan_request(buf: &[u8]) -> RequestScan {
     // conn.readRequest's Host checks.
     let hosts: Vec<&[u8]> = head.values("Host").collect();
     let at_least_11 = minor >= 1;
-    if hosts.len() > 1 || (at_least_11 && hosts.is_empty()) {
+    // server.go's readRequest: a missing Host on HTTP/1.1+ is a 400, except for CONNECT. (Go also
+    // excepts an h2 upgrade, which this scanner does not otherwise distinguish.) Duplicate Host
+    // headers are rejected unconditionally, by Go's own request parser rather than this check, so
+    // CONNECT gets no exception from that.
+    if hosts.len() > 1 || (at_least_11 && hosts.is_empty() && head.method != "CONNECT") {
         return RequestScan::Reject;
     }
     if let Some(host) = hosts.first()
@@ -593,6 +597,22 @@ mod tests {
         assert_eq!(h.framing, Framing::Length(7));
         assert_eq!(h.fields[1].value, b"7");
         assert_eq!(h.head_len, 52);
+    }
+
+    #[test]
+    fn connect_is_the_only_exception_to_the_missing_host_400() {
+        // server.go's readRequest: HTTP/1.1 with no Host is a 400 -- except for CONNECT.
+        assert!(rejected(b"GET / HTTP/1.1\r\n\r\n"));
+        let h = complete(b"CONNECT example.test:443 HTTP/1.1\r\n\r\n");
+        assert_eq!(h.method, "CONNECT");
+        // CONNECT still gets no exception from the separate, unconditional check that two Host
+        // headers (regardless of value) are a 400: that one isn't about a missing Host at all.
+        assert!(rejected(
+            b"CONNECT example.test:443 HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n"
+        ));
+        // HTTP/1.0 never required Host in the first place, CONNECT or not.
+        let h = complete(b"GET / HTTP/1.0\r\n\r\n");
+        assert_eq!(h.method, "GET");
     }
 
     #[test]

@@ -35,9 +35,13 @@ header, it also writes `X-Forwarded-Host` with that same host, because Go otherw
 Three things stay different, and the harness's peer cases show them
 (`rust/conformance/README.md`, Peer lab). None can be fixed from here:
 
-- Go reads `X-Forwarded-Proto` and `X-Forwarded-Host` directly in `isSecureRequest`, `requestBaseURL`, and
-  `absBaseURL`, whoever sent them. The front strips them from an untrusted peer because `clientip` believes
-  them from the front, so those readers do not see an untrusted client's spoof.
+- Go reads `X-Forwarded-Proto` and `X-Forwarded-Host` directly in `isSecureRequest`, `requestBaseURL`,
+  `absBaseURL`, and `forwardedHost` (`checkWebSocketOrigin`'s same-origin fallback for a WebSocket
+  upgrade), whoever sent them. The front strips them from an untrusted peer because `clientip` believes
+  them from the front, so those readers do not see an untrusted client's spoof. The harness has no peer
+  case for the `checkWebSocketOrigin` path yet (`base_url:*` covers the other readers); it needs minting
+  a valid events-ws ticket, which the Linux-only peer lab this repo's macOS development hosts cannot run
+  to verify.
 - `sameStreamPath` takes a peer that differs from the client address to mean a proxy. Through the front that
   is always so, and a trusted peer naming a direct client's address gets that client's Jellyfin stream grant.
 - Go's peer is the hashed source, not the client, so anything logged or keyed on the peer differs by value.

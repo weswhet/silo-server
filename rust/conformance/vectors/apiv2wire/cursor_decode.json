@@ -1,0 +1,107 @@
+[
+  {
+    "scope": {
+      "OperationID": "list-items",
+      "Security": "acct:1/profile:2",
+      "Filter": "library=1",
+      "Sort": "name",
+      "Tiebreaker": "item_id"
+    },
+    "cursor": "eyJ2IjoxLCJwIjp7Im5hbWUiOiJUaGUgV2lyZSIsImlkIjo3fX0.jLMgolD3Gp4Vle3SdQ0XIaHeNNl-iqGY0l1ev-a7by4",
+    "ok": true,
+    "position": {
+      "name": "The Wire",
+      "id": 7
+    }
+  },
+  {
+    "scope": {
+      "OperationID": "list-items",
+      "Security": "acct:1/profile:2",
+      "Filter": "library=1",
+      "Sort": "name",
+      "Tiebreaker": "item_id"
+    },
+    "cursor": "eyJ2IjoxLCJwIjp7Im5hbWUiOiJUaGUgV2lyZSIsImlkIjo3fX0.jLMgolD3Gp4Vle3SdQ0XIaHeNNl-iqGY0l1ev-a7byA",
+    "ok": false,
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/invalid_cursor",
+      "title": "Invalid cursor",
+      "status": 400,
+      "detail": "The cursor is malformed, tampered with, or belongs to a different query.",
+      "instance": ""
+    }
+  },
+  {
+    "scope": {
+      "OperationID": "list-items",
+      "Security": "acct:1/profile:2",
+      "Filter": "library=1",
+      "Sort": "name",
+      "Tiebreaker": "item_id"
+    },
+    "cursor": "not-a-cursor",
+    "ok": false,
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/invalid_cursor",
+      "title": "Invalid cursor",
+      "status": 400,
+      "detail": "The cursor is malformed, tampered with, or belongs to a different query.",
+      "instance": ""
+    }
+  },
+  {
+    "scope": {
+      "OperationID": "list-items",
+      "Security": "acct:1/profile:2",
+      "Filter": "library=1",
+      "Sort": "name",
+      "Tiebreaker": "item_id"
+    },
+    "cursor": "not-a-cursor.either",
+    "ok": false,
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/invalid_cursor",
+      "title": "Invalid cursor",
+      "status": 400,
+      "detail": "The cursor is malformed, tampered with, or belongs to a different query.",
+      "instance": ""
+    }
+  },
+  {
+    "scope": {
+      "OperationID": "list-items",
+      "Security": "acct:1/profile:2",
+      "Filter": "library=1",
+      "Sort": "-name",
+      "Tiebreaker": "item_id"
+    },
+    "cursor": "eyJ2IjoxLCJwIjp7Im5hbWUiOiJUaGUgV2lyZSIsImlkIjo3fX0.jLMgolD3Gp4Vle3SdQ0XIaHeNNl-iqGY0l1ev-a7by4",
+    "ok": false,
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/invalid_cursor",
+      "title": "Invalid cursor",
+      "status": 400,
+      "detail": "The cursor is malformed, tampered with, or belongs to a different query.",
+      "instance": ""
+    }
+  },
+  {
+    "scope": {
+      "OperationID": "list-items",
+      "Security": "acct:1/profile:2",
+      "Filter": "library=1",
+      "Sort": "name",
+      "Tiebreaker": "item_id"
+    },
+    "cursor": "",
+    "ok": false,
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/invalid_cursor",
+      "title": "Invalid cursor",
+      "status": 400,
+      "detail": "The cursor is malformed, tampered with, or belongs to a different query.",
+      "instance": ""
+    }
+  }
+]

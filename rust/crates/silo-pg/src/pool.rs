@@ -11,6 +11,7 @@ use crate::config::{PoolConfig, SslMode};
 use crate::error::Error;
 use crate::session::{ExecMode, Session};
 use crate::setup::{VectorTypes, prepare_connection};
+use crate::tls::insecure_connector;
 
 /// One server connection and the state pgx keeps per connection.
 pub(crate) struct Conn {
@@ -38,12 +39,7 @@ impl managed::Manager for Manager {
     type Error = tokio_postgres::Error;
 
     async fn create(&self) -> Result<Conn, Self::Error> {
-        let (client, connection) = self.config.pg.connect(NoTls).await?;
-        tokio::spawn(async move {
-            if let Err(err) = connection.await {
-                tracing::debug!(error = %err, "postgres connection ended");
-            }
-        });
+        let client = connect(&self.config).await?;
         let vector_types = prepare_connection(&client).await?;
         Ok(Conn {
             client,
@@ -92,6 +88,72 @@ fn capacity(n: usize) -> std::num::NonZeroUsize {
     std::num::NonZeroUsize::new(n.max(1)).expect("at least one")
 }
 
+/// Connects per `config.ssl_mode`, matching pgx's `configTLS` fallback order
+/// (`pgconn/config.go`): `disable` never negotiates TLS; `prefer` and `require` negotiate TLS in
+/// one attempt (declining to fall back to plaintext after the server has agreed to TLS, which is
+/// at least as strict as pgx); `allow` tries plaintext first and only opens a second, TLS
+/// connection if that attempt fails outright. `verify-ca` and `verify-full` are rejected in
+/// [`Pool::new`] before this is ever called.
+async fn connect(config: &PoolConfig) -> Result<Client, tokio_postgres::Error> {
+    use tokio_postgres::config::SslMode as GoSslMode;
+
+    match config.ssl_mode {
+        SslMode::Disable => {
+            let mut cfg = config.pg.clone();
+            cfg.ssl_mode(GoSslMode::Disable);
+            let (client, connection) = cfg.connect(NoTls).await?;
+            spawn_connection(connection);
+            Ok(client)
+        }
+        SslMode::Prefer => {
+            let mut cfg = config.pg.clone();
+            cfg.ssl_mode(GoSslMode::Prefer);
+            let (client, connection) = cfg.connect(insecure_connector()).await?;
+            spawn_connection(connection);
+            Ok(client)
+        }
+        SslMode::Require => {
+            let mut cfg = config.pg.clone();
+            cfg.ssl_mode(GoSslMode::Require);
+            let (client, connection) = cfg.connect(insecure_connector()).await?;
+            spawn_connection(connection);
+            Ok(client)
+        }
+        SslMode::Allow => {
+            let mut plain = config.pg.clone();
+            plain.ssl_mode(GoSslMode::Disable);
+            match plain.connect(NoTls).await {
+                Ok((client, connection)) => {
+                    spawn_connection(connection);
+                    Ok(client)
+                }
+                Err(_) => {
+                    let mut secure = config.pg.clone();
+                    secure.ssl_mode(GoSslMode::Require);
+                    let (client, connection) = secure.connect(insecure_connector()).await?;
+                    spawn_connection(connection);
+                    Ok(client)
+                }
+            }
+        }
+        SslMode::VerifyCa | SslMode::VerifyFull => {
+            unreachable!("Pool::new rejects verify-ca and verify-full before connecting")
+        }
+    }
+}
+
+fn spawn_connection<S, T>(connection: tokio_postgres::Connection<S, T>)
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+    T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+{
+    tokio::spawn(async move {
+        if let Err(err) = connection.await {
+            tracing::debug!(error = %err, "postgres connection ended");
+        }
+    });
+}
+
 /// A connection pool.
 #[derive(Clone)]
 pub struct Pool {
@@ -119,10 +181,11 @@ impl Pool {
     /// Builds a pool without connecting.
     pub fn new(config: PoolConfig) -> Result<Self, Error> {
         match config.ssl_mode {
-            SslMode::Disable | SslMode::Allow | SslMode::Prefer => {}
-            SslMode::Require | SslMode::VerifyCa | SslMode::VerifyFull => {
+            SslMode::Disable | SslMode::Allow | SslMode::Prefer | SslMode::Require => {}
+            SslMode::VerifyCa | SslMode::VerifyFull => {
                 return Err(Error::Config(
-                    "TLS to Postgres is not implemented yet; sslmode must be disable, allow, or prefer"
+                    "verify-ca and verify-full are not implemented yet; sslmode must be disable, \
+                     allow, prefer, or require"
                         .to_string(),
                 ));
             }

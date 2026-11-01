@@ -656,22 +656,44 @@ impl Serialize for GoTime {
     }
 }
 
+/// `Time.UnmarshalJSON` on a non-`null` literal, which reads it raw, without unescaping.
+pub(crate) fn unmarshal_json_literal(raw: &[u8]) -> Result<GoTime, String> {
+    let inner = raw
+        .strip_prefix(b"\"")
+        .and_then(|t| t.strip_suffix(b"\""))
+        .ok_or_else(|| "Time.UnmarshalJSON: input is not a JSON string".to_string())?;
+    parse_bytes(RFC3339, inner).map_err(|e| e.to_string())
+}
+
 impl<'de> Deserialize<'de> for GoTime {
-    /// `Time.UnmarshalJSON`, which reads the raw literal without unescaping it and accepts whatever
-    /// `time.Parse(time.RFC3339, ..)` accepts. `null` leaves the zero value. It needs a `serde_json`
-    /// deserializer.
+    /// `Time.UnmarshalJSON`. `null` leaves the zero value, and an earlier value under a repeated
+    /// key. Deserializers other than `json::unmarshal` and `json::Decoder` must be `serde_json`'s.
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = Box::<serde_json::value::RawValue>::deserialize(deserializer)?;
-        let text = raw.get();
-        if text == "null" {
-            return Ok(Self::ZERO);
+        struct V;
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = GoTime;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("a JSON string holding an RFC 3339 time")
+            }
+
+            fn visit_unit<E: serde::de::Error>(self) -> Result<GoTime, E> {
+                Ok(GoTime::ZERO)
+            }
+
+            fn visit_byte_buf<E: serde::de::Error>(self, raw: Vec<u8>) -> Result<GoTime, E> {
+                unmarshal_json_literal(&raw).map_err(E::custom)
+            }
+
+            fn visit_newtype_struct<D: Deserializer<'de>>(self, d: D) -> Result<GoTime, D::Error> {
+                let raw = Box::<serde_json::value::RawValue>::deserialize(d)?;
+                if raw.get() == "null" {
+                    return Ok(GoTime::ZERO);
+                }
+                unmarshal_json_literal(raw.get().as_bytes()).map_err(serde::de::Error::custom)
+            }
         }
-        let Some(inner) = text.strip_prefix('"').and_then(|t| t.strip_suffix('"')) else {
-            return Err(serde::de::Error::custom(
-                "Time.UnmarshalJSON: input is not a JSON string",
-            ));
-        };
-        parse(RFC3339, inner).map_err(serde::de::Error::custom)
+        deserializer.deserialize_newtype_struct(crate::json::TIME_TOKEN, V)
     }
 }
 

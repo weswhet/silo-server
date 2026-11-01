@@ -6,3 +6,6 @@ members = ["conformance", "crates/*"]
 edition = "2024"
 license = "AGPL-3.0-only"
 publish = false
+
+[profile.dev]
+debug = "line-tables-only"

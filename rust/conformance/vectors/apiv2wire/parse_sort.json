@@ -1,0 +1,115 @@
+[
+  {
+    "raw": "",
+    "allowed": [
+      "name",
+      "added_at"
+    ]
+  },
+  {
+    "raw": "name",
+    "allowed": [
+      "name",
+      "added_at"
+    ],
+    "fields": [
+      {
+        "Field": "name",
+        "Desc": false
+      }
+    ]
+  },
+  {
+    "raw": "-name",
+    "allowed": [
+      "name",
+      "added_at"
+    ],
+    "fields": [
+      {
+        "Field": "name",
+        "Desc": true
+      }
+    ]
+  },
+  {
+    "raw": "name,-added_at",
+    "allowed": [
+      "name",
+      "added_at"
+    ],
+    "fields": [
+      {
+        "Field": "name",
+        "Desc": false
+      },
+      {
+        "Field": "added_at",
+        "Desc": true
+      }
+    ]
+  },
+  {
+    "raw": "unknown",
+    "allowed": [
+      "name",
+      "added_at"
+    ],
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/validation_failed",
+      "title": "Validation failed",
+      "status": 422,
+      "detail": "The request did not pass validation; see errors.",
+      "instance": "",
+      "errors": [
+        {
+          "location": "query.sort",
+          "code": "invalid_sort_field",
+          "detail": "sort names a field this operation does not sort by, or names one twice"
+        }
+      ]
+    }
+  },
+  {
+    "raw": "name,name",
+    "allowed": [
+      "name",
+      "added_at"
+    ],
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/validation_failed",
+      "title": "Validation failed",
+      "status": 422,
+      "detail": "The request did not pass validation; see errors.",
+      "instance": "",
+      "errors": [
+        {
+          "location": "query.sort",
+          "code": "invalid_sort_field",
+          "detail": "sort names a field this operation does not sort by, or names one twice"
+        }
+      ]
+    }
+  },
+  {
+    "raw": "-",
+    "allowed": [
+      "name",
+      "added_at"
+    ],
+    "problem": {
+      "type": "https://siloserver.org/docs/api/v2/problems/validation_failed",
+      "title": "Validation failed",
+      "status": 422,
+      "detail": "The request did not pass validation; see errors.",
+      "instance": "",
+      "errors": [
+        {
+          "location": "query.sort",
+          "code": "invalid_sort_field",
+          "detail": "sort names a field this operation does not sort by, or names one twice"
+        }
+      ]
+    }
+  }
+]

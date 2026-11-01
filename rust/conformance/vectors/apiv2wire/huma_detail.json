@@ -1,0 +1,56 @@
+[
+  {
+    "type_id": "validation_failed",
+    "msg": "framework message",
+    "body_limit": 1048576,
+    "out": "The request did not pass validation; see errors."
+  },
+  {
+    "type_id": "malformed_request",
+    "msg": "framework message",
+    "body_limit": 1048576,
+    "out": "The request could not be parsed."
+  },
+  {
+    "type_id": "not_acceptable",
+    "msg": "framework message",
+    "body_limit": 1048576,
+    "out": "No acceptable representation is available for this operation."
+  },
+  {
+    "type_id": "request_timeout",
+    "msg": "framework message",
+    "body_limit": 1048576,
+    "out": "The request body was not received before the read deadline."
+  },
+  {
+    "type_id": "payload_too_large",
+    "msg": "framework message",
+    "body_limit": 4096,
+    "out": "The request body exceeds the 4096-byte limit."
+  },
+  {
+    "type_id": "unsupported_media_type",
+    "msg": "framework message",
+    "body_limit": 1048576,
+    "out": "The request media type is not supported; send application/json."
+  },
+  {
+    "type_id": "internal_error",
+    "msg": "framework message",
+    "body_limit": 1048576,
+    "out": "An unexpected error occurred."
+  },
+  {
+    "type_id": "conflict",
+    "msg": "some other message",
+    "body_limit": 1048576,
+    "out": "some other message"
+  },
+  {
+    "type_id": "conflict",
+    "msg": "",
+    "body_limit": 1048576,
+    "out": "Conflict"
+  }
+]

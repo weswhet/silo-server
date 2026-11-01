@@ -1,0 +1,17 @@
+[
+  {
+    "input": "null",
+    "ok": true,
+    "out": "null"
+  },
+  {
+    "input": "\"2024-01-02T03:04:05.123Z\"",
+    "ok": true,
+    "out": "\"2024-01-02T03:04:05.123Z\""
+  },
+  {
+    "input": "\"0001-01-01T00:00:00Z\"",
+    "ok": false,
+    "err": "expected an RFC 3339 instant"
+  }
+]

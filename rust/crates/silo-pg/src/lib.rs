@@ -16,6 +16,7 @@ pub mod goose;
 mod pool;
 mod session;
 mod setup;
+mod tls;
 mod types;
 
 pub use config::{PoolConfig, SslMode};

@@ -12,13 +12,18 @@ deadpool = { version = "0.12", default-features = false, features = ["managed", 
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 half = "2"
 lru = "0.16"
+rustls = { version = "0.23", default-features = false, features = ["ring", "tls12", "std"] }
+rustls-pki-types = "1"
 silo-gocompat = { path = "../silo-gocompat" }
 thiserror = "2"
-tokio = { version = "1", features = ["rt", "time", "sync", "macros"] }
+tokio = { version = "1", features = ["rt", "time", "sync", "macros", "net"] }
 tokio-postgres = { version = "0.7", default-features = false, features = ["runtime"] }
+tokio-postgres-rustls = { version = "0.14", default-features = false, features = ["ring"] }
 tracing = "0.1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
 serde_json = "1"
 sha2 = "0.10"
+rcgen = { version = "0.13", default-features = false, features = ["crypto", "pem", "ring"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }

@@ -153,6 +153,9 @@ These peer cases differ through the front, on purpose or because Go has to chang
 - `base_url:ip_host_forwarded_host`, `base_url:proto`, and in a run from an untrusted client
   `plugin_launch.secure_flag`: Go's raw `X-Forwarded-Host` and `X-Forwarded-Proto` readers believe an
   untrusted client, and the front strips those headers because `clientip` would otherwise believe them too.
+  The same is true of `forwardedHost`'s other raw reader, `checkWebSocketOrigin`'s same-origin fallback
+  for a WebSocket upgrade (`internal/api/handlers/ws_shared.go`), but no case here exercises it yet: it
+  needs a valid events-ws ticket, and this lab needs Linux to run at all.
 
 ## What is compared
 

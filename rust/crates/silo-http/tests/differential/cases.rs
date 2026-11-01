@@ -724,6 +724,33 @@ pub fn range_cases() -> Vec<Case> {
     out
 }
 
+/// `net/http/fs.go`'s `defaultMaxContentRanges` (200): a `Range` header with more ranges than
+/// that is ignored outright (full 200 response) rather than parsed. Needs a fixture bigger than
+/// the range count so every range is individually valid and the limit itself is what's tested,
+/// not the fallback for ranges past EOF.
+pub fn range_limit_cases() -> Vec<Case> {
+    let counts = [199usize, 200, 201, 300];
+    let mut out = Vec::new();
+    for file in ["text-1000.txt", "bin-1000.bin"] {
+        for &n in &counts {
+            let range = format!(
+                "bytes={}",
+                (0..n)
+                    .map(|i| format!("{i}-{i}"))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            );
+            for method in ["GET", "HEAD"] {
+                out.push(Case::new(
+                    "content",
+                    range_request(method, &content_target(file, ""), &range, ""),
+                ));
+            }
+        }
+    }
+    out
+}
+
 const STRONG: &str = "\"v1\"";
 const LAST_MODIFIED: &str = "Tue, 14 Nov 2023 22:13:20 GMT";
 

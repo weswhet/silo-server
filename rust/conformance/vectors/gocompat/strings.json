@@ -1,5 +1,5 @@
 {
- "go_version": "go1.26.7",
+ "go_version": "go1.26.10",
  "unicode_version": "15.0.0",
  "to_lower": [
   {

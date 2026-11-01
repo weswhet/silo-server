@@ -587,6 +587,7 @@ async fn conn_read_request(
     let w = Response {
         conn: c.clone(),
         is_head: req.method == "HEAD",
+        is_connect: req.method == "CONNECT",
         proto_major: req.proto_major,
         proto_minor: req.proto_minor,
         req_content_length: req.content_length,
@@ -677,6 +678,10 @@ fn body_allowed_for_status(status: u16) -> bool {
 struct Response {
     conn: Arc<ConnShared>,
     is_head: bool,
+    /// `isCONNECT := w.conn.lastMethod == "CONNECT"` (go1.26.10). Nothing in this crate mutates
+    /// the request method after parsing, so reading it once at creation, like `is_head`, matches
+    /// consulting the connection's last method.
+    is_connect: bool,
     proto_major: u8,
     proto_minor: u8,
     req_content_length: i64,
@@ -882,6 +887,11 @@ impl Response {
             self.close_after_reply = true;
         }
 
+        if self.is_connect {
+            // Don't reuse a connection after a CONNECT, even if we reject it.
+            self.close_after_reply = true;
+        }
+
         if self.req_content_length != 0 && !self.close_after_reply && !self.full_duplex {
             let mut discard = false;
             let mut too_big = false;
@@ -962,7 +972,13 @@ impl Response {
             has_cl = false;
         }
 
-        if self.is_head || !body_allowed_for_status(code) || code == 204 || has_cl {
+        let is_successful_connect = self.is_connect && (200..300).contains(&code);
+        if is_successful_connect {
+            // Tunnel established, connection is no longer HTTP.
+            header.del("Transfer-Encoding");
+            header.del("Content-Length");
+            set.content_length = None;
+        } else if self.is_head || !body_allowed_for_status(code) || code == 204 || has_cl {
             // No body, or a length that makes chunking unnecessary.
             header.del("Transfer-Encoding");
         } else if self.proto_at_least(1, 1) {
@@ -995,8 +1011,16 @@ impl Response {
             && !is_protocol_switch_response(self.status, &header);
         if del_connection {
             header.del("Connection");
-            if self.proto_at_least(1, 1) {
+            // Don't set Connection: close on a 2xx CONNECT response, even though the connection
+            // closes anyway if the handler doesn't hijack it: hijacking makes Connection: close
+            // confusing. The `else` here is load-bearing on HTTP/1.0 (go1.26.10, fixed from
+            // go1.26.7): it must clear a `keep-alive` staged above by the wants10KeepAlive branch
+            // when a later conflict (e.g. Transfer-Encoding plus Content-Length) forces the
+            // connection closed after all.
+            if self.proto_at_least(1, 1) && !is_successful_connect {
                 set.connection = Some("close");
+            } else {
+                set.connection = None;
             }
         }
 

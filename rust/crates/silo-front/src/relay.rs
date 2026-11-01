@@ -185,14 +185,19 @@ async fn pump_request(
     }
     sig.body_done.cancel();
 
-    // Go's background read: a hangup cancels the handler, so the backend must see it too.
+    // Go's background read: a hangup cancels the handler, so the backend must see it too. But a
+    // client that pipelines several requests and then half-closes (it has nothing more to send,
+    // not "walk away from everything") is not a hangup: `cbuf` already holds the next request,
+    // and this same backend connection is about to carry it, so its write half must stay open.
     while cbuf.len() < PIPELINE_LIMIT && !end.client_eof {
         cbuf.reserve(READ_CHUNK);
         tokio::select! {
             r = crd.read_buf(cbuf) => {
                 if matches!(r, Ok(0) | Err(_)) {
                     end.client_eof = true;
-                    let _ = wr.shutdown().await;
+                    if cbuf.is_empty() {
+                        let _ = wr.shutdown().await;
+                    }
                 }
             }
             () = sig.response_done.cancelled() => return end,
@@ -585,11 +590,16 @@ impl Conn {
             return false;
         }
         self.client_eof |= req_end.client_eof;
-        let reusable = !resp_end.close
-            && !resp_end.upstream_eof
-            && !resp_end.client_gone
-            && !req_end.broken
-            && !self.client_eof;
+        // `client_eof` alone must not disqualify reuse: a client that pipelines several requests
+        // and then half-closes its write side (shutdown(SHUT_WR) after the last one) still
+        // expects every response. `req_end.broken` is what actually marks the stream unusable
+        // (bad framing, a dead upstream mid-body, or a hangup before the request body finished);
+        // a clean EOF strictly after the body is just "no more requests after whatever's already
+        // in `cbuf`", which `read_head` on the next loop iteration already handles correctly
+        // (serving a complete pipelined head, rejecting a truncated one, or ending the connection
+        // if `cbuf` is empty).
+        let reusable =
+            !resp_end.close && !resp_end.upstream_eof && !resp_end.client_gone && !req_end.broken;
         if !reusable {
             match which {
                 Which::Go => self.go = None,

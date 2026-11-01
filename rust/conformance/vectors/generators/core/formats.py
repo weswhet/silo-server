@@ -79,6 +79,7 @@ ROWS = [
     ("auth.api_key_valid_text", "ValidTextKey", "api_key_valid_text", None, "internal/auth", "silo_core::apikey", "persisted"),
     ("auth.bcrypt_hash", "bcrypt $2a$ generation, byte-equal under the same salt", "bcrypt_generate", None, "internal/auth/passwordhash", "silo_core::passwordhash", "persisted"),
     ("auth.bcrypt_compare", "CompareHashAndPassword and its parsing quirks", "bcrypt_compare", None, "golang.org/x/crypto/bcrypt", "silo_core::passwordhash", "persisted"),
+    ("auth.bcrypt_compare_trailing_byte", "CompareHashAndPassword against a hash with bytes appended past its normal 59/60-byte total", "bcrypt_compare_trailing_byte", None, "golang.org/x/crypto/bcrypt", "silo_core::passwordhash", "persisted"),
     ("auth.link_token_hash", "HashLinkToken", "credential_hashes", "hash_link_token", "internal/auth", "silo_core::apikey", "persisted"),
     ("auth.device_login_hash", "hashDeviceLoginSecret", "credential_hashes", "hash_device_login_secret", "internal/auth", "silo_core::apikey", "persisted"),
     ("auth.user_code_normalize", "normalizeUserCode", "credential_hashes", "normalize_user_code", "internal/auth", "silo_core::apikey", "persisted"),
@@ -149,6 +150,7 @@ FIXED_INPUT = {
     "redis_contract": "every script hash and key prefix",
     "settings_contract_etag": "the real contract files",
     "secret_backfill_targets": "the one fixed list",
+    "bcrypt_compare_trailing_byte": "every combination of minor-version presence and trailing-byte shape this quirk depends on",
 }
 
 # Formats in the maps that this table deliberately does not hold, and why.

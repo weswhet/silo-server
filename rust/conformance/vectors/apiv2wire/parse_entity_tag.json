@@ -1,0 +1,54 @@
+[
+  {
+    "input": "\"abc\"",
+    "ok": true,
+    "tag": {
+      "Opaque": "abc",
+      "Weak": false
+    }
+  },
+  {
+    "input": "W/\"abc\"",
+    "ok": true,
+    "tag": {
+      "Opaque": "abc",
+      "Weak": true
+    }
+  },
+  {
+    "input": "\"\"",
+    "ok": true,
+    "tag": {
+      "Opaque": "",
+      "Weak": false
+    }
+  },
+  {
+    "input": "W/\"\"",
+    "ok": true,
+    "tag": {
+      "Opaque": "",
+      "Weak": true
+    }
+  },
+  {
+    "input": "\"a\\\"b\"",
+    "ok": false
+  },
+  {
+    "input": "abc",
+    "ok": false
+  },
+  {
+    "input": "\"abc",
+    "ok": false
+  },
+  {
+    "input": "W/abc\"",
+    "ok": false
+  },
+  {
+    "input": "\"unterminated",
+    "ok": false
+  }
+]

@@ -1,0 +1,24 @@
+[
+  {
+    "input": "{}",
+    "present": false,
+    "null": false,
+    "is_zero": true,
+    "out": "{}"
+  },
+  {
+    "input": "{\"field\":null}",
+    "present": true,
+    "null": true,
+    "is_zero": false,
+    "out": "{\"field\":null}"
+  },
+  {
+    "input": "{\"field\":\"hi\"}",
+    "present": true,
+    "null": false,
+    "value": "hi",
+    "is_zero": false,
+    "out": "{\"field\":\"hi\"}"
+  }
+]

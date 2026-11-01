@@ -1,0 +1,320 @@
+[
+  {
+    "id": "range_not_satisfiable",
+    "status": 416,
+    "title": "Range not satisfiable",
+    "uri": "https://siloserver.org/docs/api/v2/problems/range_not_satisfiable"
+  },
+  {
+    "id": "device_login_expired",
+    "status": 410,
+    "title": "Device login expired",
+    "uri": "https://siloserver.org/docs/api/v2/problems/device_login_expired"
+  },
+  {
+    "id": "unsupported_source",
+    "status": 410,
+    "title": "Unsupported source",
+    "uri": "https://siloserver.org/docs/api/v2/problems/unsupported_source"
+  },
+  {
+    "id": "malformed_request",
+    "status": 400,
+    "title": "Malformed request",
+    "uri": "https://siloserver.org/docs/api/v2/problems/malformed_request"
+  },
+  {
+    "id": "invalid_cursor",
+    "status": 400,
+    "title": "Invalid cursor",
+    "uri": "https://siloserver.org/docs/api/v2/problems/invalid_cursor"
+  },
+  {
+    "id": "authentication_required",
+    "status": 401,
+    "title": "Authentication required",
+    "uri": "https://siloserver.org/docs/api/v2/problems/authentication_required"
+  },
+  {
+    "id": "invalid_token",
+    "status": 401,
+    "title": "Invalid token",
+    "uri": "https://siloserver.org/docs/api/v2/problems/invalid_token"
+  },
+  {
+    "id": "session_expired",
+    "status": 401,
+    "title": "Session expired",
+    "uri": "https://siloserver.org/docs/api/v2/problems/session_expired"
+  },
+  {
+    "id": "permission_denied",
+    "status": 403,
+    "title": "Permission denied",
+    "uri": "https://siloserver.org/docs/api/v2/problems/permission_denied"
+  },
+  {
+    "id": "profile_verification_required",
+    "status": 403,
+    "title": "Profile verification required",
+    "uri": "https://siloserver.org/docs/api/v2/problems/profile_verification_required"
+  },
+  {
+    "id": "not_found",
+    "status": 404,
+    "title": "Not found",
+    "uri": "https://siloserver.org/docs/api/v2/problems/not_found"
+  },
+  {
+    "id": "method_not_allowed",
+    "status": 405,
+    "title": "Method not allowed",
+    "uri": "https://siloserver.org/docs/api/v2/problems/method_not_allowed"
+  },
+  {
+    "id": "not_acceptable",
+    "status": 406,
+    "title": "Not acceptable",
+    "uri": "https://siloserver.org/docs/api/v2/problems/not_acceptable"
+  },
+  {
+    "id": "request_timeout",
+    "status": 408,
+    "title": "Request timeout",
+    "uri": "https://siloserver.org/docs/api/v2/problems/request_timeout"
+  },
+  {
+    "id": "conflict",
+    "status": 409,
+    "title": "Conflict",
+    "uri": "https://siloserver.org/docs/api/v2/problems/conflict"
+  },
+  {
+    "id": "idempotency_conflict",
+    "status": 409,
+    "title": "Idempotency conflict",
+    "uri": "https://siloserver.org/docs/api/v2/problems/idempotency_conflict"
+  },
+  {
+    "id": "job_not_cancelable",
+    "status": 409,
+    "title": "Job not cancelable",
+    "uri": "https://siloserver.org/docs/api/v2/problems/job_not_cancelable"
+  },
+  {
+    "id": "capability_disabled",
+    "status": 409,
+    "title": "Capability disabled",
+    "uri": "https://siloserver.org/docs/api/v2/problems/capability_disabled"
+  },
+  {
+    "id": "capability_not_configured",
+    "status": 409,
+    "title": "Capability not configured",
+    "uri": "https://siloserver.org/docs/api/v2/problems/capability_not_configured"
+  },
+  {
+    "id": "precondition_failed",
+    "status": 412,
+    "title": "Precondition failed",
+    "uri": "https://siloserver.org/docs/api/v2/problems/precondition_failed"
+  },
+  {
+    "id": "payload_too_large",
+    "status": 413,
+    "title": "Payload too large",
+    "uri": "https://siloserver.org/docs/api/v2/problems/payload_too_large"
+  },
+  {
+    "id": "unsupported_media_type",
+    "status": 415,
+    "title": "Unsupported media type",
+    "uri": "https://siloserver.org/docs/api/v2/problems/unsupported_media_type"
+  },
+  {
+    "id": "validation_failed",
+    "status": 422,
+    "title": "Validation failed",
+    "uri": "https://siloserver.org/docs/api/v2/problems/validation_failed"
+  },
+  {
+    "id": "precondition_required",
+    "status": 428,
+    "title": "Precondition required",
+    "uri": "https://siloserver.org/docs/api/v2/problems/precondition_required"
+  },
+  {
+    "id": "rate_limited",
+    "status": 429,
+    "title": "Rate limited",
+    "uri": "https://siloserver.org/docs/api/v2/problems/rate_limited"
+  },
+  {
+    "id": "internal_error",
+    "status": 500,
+    "title": "Internal error",
+    "uri": "https://siloserver.org/docs/api/v2/problems/internal_error"
+  },
+  {
+    "id": "capability_unsupported",
+    "status": 501,
+    "title": "Capability unsupported",
+    "uri": "https://siloserver.org/docs/api/v2/problems/capability_unsupported"
+  },
+  {
+    "id": "dependency_unavailable",
+    "status": 503,
+    "title": "Dependency unavailable",
+    "uri": "https://siloserver.org/docs/api/v2/problems/dependency_unavailable"
+  },
+  {
+    "id": "client_upgrade_required",
+    "status": 410,
+    "title": "Client upgrade required",
+    "uri": "https://siloserver.org/docs/api/v2/problems/client_upgrade_required"
+  },
+  {
+    "id": "sync_reset_required",
+    "status": 409,
+    "title": "Progress reset required",
+    "uri": "https://siloserver.org/docs/api/v2/problems/sync_reset_required"
+  },
+  {
+    "id": "snapshot_request_conflict",
+    "status": 409,
+    "title": "Snapshot request conflict",
+    "uri": "https://siloserver.org/docs/api/v2/problems/snapshot_request_conflict"
+  },
+  {
+    "id": "progress_snapshot_too_large",
+    "status": 413,
+    "title": "Progress snapshot too large",
+    "uri": "https://siloserver.org/docs/api/v2/problems/progress_snapshot_too_large"
+  },
+  {
+    "id": "installation_changed",
+    "status": 409,
+    "title": "Playback installation changed",
+    "uri": "https://siloserver.org/docs/api/v2/problems/installation_changed"
+  },
+  {
+    "id": "playback_session_ended",
+    "status": 410,
+    "title": "Playback session ended",
+    "uri": "https://siloserver.org/docs/api/v2/problems/playback_session_ended"
+  },
+  {
+    "id": "progress_conflict",
+    "status": 409,
+    "title": "Playback progress conflict",
+    "uri": "https://siloserver.org/docs/api/v2/problems/progress_conflict"
+  },
+  {
+    "id": "password_change_required",
+    "status": 403,
+    "title": "Password change required",
+    "uri": "https://siloserver.org/docs/api/v2/problems/password_change_required"
+  },
+  {
+    "id": "not_permitted",
+    "status": 403,
+    "title": "Not permitted",
+    "uri": "https://siloserver.org/docs/api/v2/problems/not_permitted"
+  },
+  {
+    "id": "account_required",
+    "status": 403,
+    "title": "Account required",
+    "uri": "https://siloserver.org/docs/api/v2/problems/account_required"
+  },
+  {
+    "id": "local_login_disabled",
+    "status": 403,
+    "title": "Local password sign-in disabled",
+    "uri": "https://siloserver.org/docs/api/v2/problems/local_login_disabled"
+  },
+  {
+    "id": "password_expired",
+    "status": 403,
+    "title": "Password expired",
+    "uri": "https://siloserver.org/docs/api/v2/problems/password_expired"
+  },
+  {
+    "id": "email_in_use",
+    "status": 409,
+    "title": "Email in use",
+    "uri": "https://siloserver.org/docs/api/v2/problems/email_in_use"
+  },
+  {
+    "id": "identity_linked_elsewhere",
+    "status": 409,
+    "title": "Identity linked elsewhere",
+    "uri": "https://siloserver.org/docs/api/v2/problems/identity_linked_elsewhere"
+  },
+  {
+    "id": "provider_already_enabled",
+    "status": 409,
+    "title": "Provider already enabled",
+    "uri": "https://siloserver.org/docs/api/v2/problems/provider_already_enabled"
+  },
+  {
+    "id": "break_glass_required",
+    "status": 409,
+    "title": "Break-glass account required",
+    "uri": "https://siloserver.org/docs/api/v2/problems/break_glass_required"
+  },
+  {
+    "id": "last_sign_in_method",
+    "status": 409,
+    "title": "Last sign-in method",
+    "uri": "https://siloserver.org/docs/api/v2/problems/last_sign_in_method"
+  },
+  {
+    "id": "provider_unavailable",
+    "status": 503,
+    "title": "Provider unavailable",
+    "uri": "https://siloserver.org/docs/api/v2/problems/provider_unavailable"
+  },
+  {
+    "id": "invalid_grant",
+    "status": 400,
+    "title": "Invalid grant",
+    "uri": "https://siloserver.org/docs/api/v2/problems/invalid_grant"
+  },
+  {
+    "id": "account_disabled",
+    "status": 403,
+    "title": "Account disabled",
+    "uri": "https://siloserver.org/docs/api/v2/problems/account_disabled"
+  },
+  {
+    "id": "local_password_required",
+    "status": 409,
+    "title": "Local password required",
+    "uri": "https://siloserver.org/docs/api/v2/problems/local_password_required"
+  },
+  {
+    "id": "already_linked",
+    "status": 409,
+    "title": "Already linked",
+    "uri": "https://siloserver.org/docs/api/v2/problems/already_linked"
+  },
+  {
+    "id": "token_refresh_required",
+    "status": 401,
+    "title": "Token refresh required",
+    "uri": "https://siloserver.org/docs/api/v2/problems/token_refresh_required"
+  },
+  {
+    "id": "network_identity_required",
+    "status": 403,
+    "title": "Network identity required",
+    "uri": "https://siloserver.org/docs/api/v2/problems/network_identity_required"
+  },
+  {
+    "id": "prepared_file_expired",
+    "status": 409,
+    "title": "Prepared file expired",
+    "uri": "https://siloserver.org/docs/api/v2/problems/prepared_file_expired"
+  }
+]

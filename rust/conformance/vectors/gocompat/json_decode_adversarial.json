@@ -1,0 +1,1149 @@
+{
+ "go_version": "go1.26.10",
+ "unicode_version": "15.0.0",
+ "decode": [
+  {
+   "doc": "{\"inner\":{\"x\":1,\"y\":\"a\"},\"inner\":{\"x\":null,\"y\":null}}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":1,\"y\":\"a\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"pp\":{\"a\":1},\"pp\":null,\"pp\":{\"b\":2}}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":{\"a\":0,\"b\":2},\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"pp\":{\"a\":1},\"pp\":{\"b\":2}}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":{\"a\":1,\"b\":2},\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"inner\":{\"ms\":{\"k\":{\"a\":1}}},\"inner\":{\"ms\":{\"k\":{\"b\":2}}}}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":{\"k\":{\"a\":0,\"b\":2}}},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"list\":[{\"a\":1,\"b\":2}],\"list\":[{\"a\":9}]}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":[{\"a\":9,\"b\":2}],\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"list\":[{\"a\":1,\"b\":2},{\"a\":3,\"b\":4}],\"list\":[{\"a\":9}],\"list\":[{},{}]}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":[{\"a\":9,\"b\":2},{\"a\":3,\"b\":4}],\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"list\":[{\"a\":1,\"b\":2}],\"list\":[],\"list\":[{\"a\":9}]}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":[{\"a\":9,\"b\":0}],\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"list\":[{\"a\":1,\"b\":2}],\"list\":null,\"list\":[{\"a\":9}]}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":[{\"a\":9,\"b\":0}],\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"nums\":[1,2],\"nums\":[null]}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":[1],\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"nums\":[1,2],\"nums\":[]}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":[],\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"nums\":[1,2],\"nums\":null}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"nest\":[[1,2]],\"nest\":[[null]]}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":[[1]]}"
+  },
+  {
+   "doc": "{\"nums\":[\"bad\"],\"nums\":[1]}",
+   "err": "json: cannot unmarshal string into Go struct field Adv.nums of type int32"
+  },
+  {
+   "doc": "{\"nums\":\"bad\",\"nums\":[1]}",
+   "err": "json: cannot unmarshal string into Go struct field Adv.nums of type []int32"
+  },
+  {
+   "doc": "{\"nums\":[1,\"bad\"],\"nums\":[1]}",
+   "err": "json: cannot unmarshal string into Go struct field Adv.nums of type int32"
+  },
+  {
+   "doc": "{\"ptr\":\"bad\",\"ptr\":1}",
+   "err": "json: cannot unmarshal string into Go struct field Adv.ptr of type int32"
+  },
+  {
+   "doc": "{\"ptr\":\"bad\",\"ptr\":null}",
+   "err": "json: cannot unmarshal string into Go struct field Adv.ptr of type int32"
+  },
+  {
+   "doc": "{\"pp\":{\"a\":\"bad\"},\"pp\":null}",
+   "err": "json: cannot unmarshal string into Go struct field AdvSub.pp.a of type int32"
+  },
+  {
+   "doc": "{\"inner\":{\"x\":\"bad\"},\"inner\":{\"x\":1}}",
+   "err": "json: cannot unmarshal string into Go struct field AdvInner.inner.x of type int32"
+  },
+  {
+   "doc": "{\"n\":true,\"n\":1}",
+   "err": "json: cannot unmarshal bool into Go struct field Adv.n of type int32"
+  },
+  {
+   "doc": "{\"im\":{\"1\":\"a\",\"x\":\"b\"},\"im\":null}",
+   "err": "json: cannot unmarshal number x into Go struct field Adv.im of type int32"
+  },
+  {
+   "doc": "{\"list\":[{},{\"a\":\"bad\"}],\"list\":[{}]}",
+   "err": "json: cannot unmarshal string into Go struct field AdvSub.list.a of type int32"
+  },
+  {
+   "doc": "{\"arr\":[1,\"bad\"],\"arr\":[1]}",
+   "err": "json: cannot unmarshal string into Go struct field Adv.arr of type int32"
+  },
+  {
+   "doc": "{\"raw\": {\"a\" : 1 } }",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":{\"a\":1},\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}",
+   "raw_hex": "7b226122203a2031207d"
+  },
+  {
+   "doc": "{\"raw\":\"café\\/x\"}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":\"café\\/x\",\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}",
+   "raw_hex": "22636166c3a95c2f7822"
+  },
+  {
+   "doc": {
+    "hex": "7b22726177223a2261ff62227d"
+   },
+   "ok": {
+    "hex": "7b226e223a302c2273223a22222c226e756d73223a6e756c6c2c22707472223a6e756c6c2c227070223a6e756c6c2c22696e6e6572223a7b2278223a302c2279223a22222c226d73223a6e756c6c7d2c226c697374223a6e756c6c2c2274223a22303030312d30312d30315430303a30303a30305a222c227470223a6e756c6c2c22726177223a2261ff62222c226a6e223a302c22616e79223a6e756c6c2c22617272223a5b302c305d2c2262696e223a6e756c6c2c22663332223a302c22696d223a6e756c6c2c22756d223a6e756c6c2c226e657374223a6e756c6c7d"
+   },
+   "raw_hex": "2261ff6222"
+  },
+  {
+   "doc": "{\"raw\":\"\\ud83d\"}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":\"\\ud83d\",\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}",
+   "raw_hex": "225c756438336422"
+  },
+  {
+   "doc": "{\"raw\":{\"a\":1},\"raw\":null}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}",
+   "raw_hex": "6e756c6c"
+  },
+  {
+   "doc": "{\"raw\":null}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}",
+   "raw_hex": "6e756c6c"
+  },
+  {
+   "doc": "{\"raw\":{\"a\":1,\"a\":2}}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":{\"a\":1,\"a\":2},\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}",
+   "raw_hex": "7b2261223a312c2261223a327d"
+  },
+  {
+   "doc": "{\"raw\":[ 1 ],\"raw\":[ 2 ]}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":[2],\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}",
+   "raw_hex": "5b2032205d"
+  },
+  {
+   "doc": "{\"t\":\"2020-01-02T03:04:05Z\"}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"2020-01-02T03:04:05Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"t\":\"2020-01-02T03:04:05Z\",\"t\":null}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"2020-01-02T03:04:05Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"t\":\"nope\",\"t\":\"2020-01-02T03:04:05Z\"}",
+   "err": "parsing time \"nope\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"nope\" as \"2006\""
+  },
+  {
+   "doc": "{\"t\":\"2020-01-02T03:04:05Z\",\"t\":\"nope\"}",
+   "err": "parsing time \"nope\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"nope\" as \"2006\""
+  },
+  {
+   "doc": "{\"t\":\"2020-01-02T03:04:05Z\"}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"2020-01-02T03:04:05Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"t\":5}",
+   "err": "Time.UnmarshalJSON: input is not a JSON string"
+  },
+  {
+   "doc": "{\"t\":null}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"tp\":\"2020-01-02T03:04:05Z\",\"tp\":null}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"tp\":null,\"tp\":\"2020-01-02T03:04:05Z\"}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":\"2020-01-02T03:04:05Z\",\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"tp\":\"nope\",\"tp\":null}",
+   "err": "parsing time \"nope\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"nope\" as \"2006\""
+  },
+  {
+   "doc": "{\"n\":\"bad\",\"t\":\"nope\"}",
+   "err": "parsing time \"nope\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"nope\" as \"2006\""
+  },
+  {
+   "doc": "{\"t\":\"nope\",\"n\":\"bad\"}",
+   "err": "parsing time \"nope\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"nope\" as \"2006\""
+  },
+  {
+   "doc": "{\"jn\":1,\"jn\":null}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":1,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"jn\":\"12\"}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":12,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"jn\":\"abc\"}",
+   "err": "json: invalid number literal, trying to unmarshal \"\\\"abc\\\"\" into Number"
+  },
+  {
+   "doc": "{\"jn\":true}",
+   "err": "json: cannot unmarshal bool into Go struct field Adv.jn of type json.Number"
+  },
+  {
+   "doc": "{\"jn\":[1]}",
+   "err": "json: cannot unmarshal array into Go struct field Adv.jn of type json.Number"
+  },
+  {
+   "doc": "{\"jn\":1.50}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":1.50,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "null",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"arr\":[1]}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[1,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"arr\":[1,2,3]}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[1,2],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"arr\":[1,2],\"arr\":[9]}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[9,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"arr\":[1,2],\"arr\":[]}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"arr\":[1,2],\"arr\":null}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[1,2],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"arr\":\"x\"}",
+   "err": "json: cannot unmarshal string into Go struct field Adv.arr of type [2]int32"
+  },
+  {
+   "doc": "{\"bin\":\"aGVsbG8=\"}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":\"aGVsbG8=\",\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"bin\":\"\"}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":\"\",\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"bin\":null}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"bin\":[1,2]}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":\"AQI=\",\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"bin\":\"!!!\"}",
+   "err": "illegal base64 data at input byte 0"
+  },
+  {
+   "doc": "{\"bin\":\"aGVsbG8\"}",
+   "err": "illegal base64 data at input byte 4"
+  },
+  {
+   "doc": "{\"bin\":\"aGVs\\nbG8=\"}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":\"aGVsbG8=\",\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"bin\":\"aGVsbG8=x\"}",
+   "err": "illegal base64 data at input byte 8"
+  },
+  {
+   "doc": "{\"bin\":5}",
+   "err": "json: cannot unmarshal number into Go struct field Adv.bin of type []uint8"
+  },
+  {
+   "doc": "{\"bin\":[1,2],\"bin\":\"aA==\"}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":\"aA==\",\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"bin\":\"aA==\",\"bin\":[7,8]}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":\"Bwg=\",\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"nums\":\"aGk=\"}",
+   "err": "json: cannot unmarshal string into Go struct field Adv.nums of type []int32"
+  },
+  {
+   "doc": "{\"nums\":\"\"}",
+   "err": "json: cannot unmarshal string into Go struct field Adv.nums of type []int32"
+  },
+  {
+   "doc": "{\"any\":{\"a\":1},\"any\":{\"b\":2}}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":{\"b\":2},\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"any\":1,\"any\":null}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"any\":9007199254740993}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":9007199254740992,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"any\":-9007199254740993}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":-9007199254740992,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"any\":9007199254740992}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":9007199254740992,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"any\":1e400}",
+   "err": "json: cannot unmarshal number 1e400 into Go struct field Adv.any of type float64"
+  },
+  {
+   "doc": "{\"any\":[1e400],\"any\":1}",
+   "err": "json: cannot unmarshal number 1e400 into Go struct field Adv.any of type float64"
+  },
+  {
+   "doc": "{\"any\":{\"a\":1,\"a\":2}}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":{\"a\":2},\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"any\":{\"a\":1e400,\"a\":2}}",
+   "err": "json: cannot unmarshal number 1e400 into Go struct field Adv.any of type float64"
+  },
+  {
+   "doc": "{\"any\":-0}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":-0,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"any\":1.5e3}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":1500,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"any\":[1,\"x\",null,true,{\"k\":[]}]}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":[1,\"x\",null,true,{\"k\":[]}],\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"n\":1,\"s\":5,\"n\":\"bad\"}",
+   "err": "json: cannot unmarshal number into Go struct field Adv.s of type string"
+  },
+  {
+   "doc": "{\"im\":{\"abc\":\"x\"}}",
+   "err": "json: cannot unmarshal number abc into Go struct field Adv.im of type int32"
+  },
+  {
+   "doc": "{\"um\":{\"+5\":\"x\"}}",
+   "err": "json: cannot unmarshal number +5 into Go struct field Adv.um of type uint8"
+  },
+  {
+   "doc": "{\"um\":{\"300\":\"x\"}}",
+   "err": "json: cannot unmarshal number 300 into Go struct field Adv.um of type uint8"
+  },
+  {
+   "doc": "{\"im\":{\"+5\":\"x\"}}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":{\"5\":\"x\"},\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"nums\":\"x\"}",
+   "err": "json: cannot unmarshal string into Go struct field Adv.nums of type []int32"
+  },
+  {
+   "doc": "{\"list\":\"x\"}",
+   "err": "json: cannot unmarshal string into Go struct field Adv.list of type []main.AdvSub"
+  },
+  {
+   "doc": "{\"list\":[5]}",
+   "err": "json: cannot unmarshal number into Go struct field Adv.list of type main.AdvSub"
+  },
+  {
+   "doc": "{\"pp\":5}",
+   "err": "json: cannot unmarshal number into Go struct field Adv.pp of type main.AdvSub"
+  },
+  {
+   "doc": "{\"inner\":5}",
+   "err": "json: cannot unmarshal number into Go struct field Adv.inner of type main.AdvInner"
+  },
+  {
+   "doc": "{\"nest\":5}",
+   "err": "json: cannot unmarshal number into Go struct field Adv.nest of type [][]int32"
+  },
+  {
+   "doc": "{\"nest\":[5]}",
+   "err": "json: cannot unmarshal number into Go struct field Adv.nest of type []int32"
+  },
+  {
+   "doc": "{\"inner\":{\"ms\":5}}",
+   "err": "json: cannot unmarshal number into Go struct field AdvInner.inner.ms of type map[string]main.AdvSub"
+  },
+  {
+   "doc": "{\"im\":5}",
+   "err": "json: cannot unmarshal number into Go struct field Adv.im of type map[int32]string"
+  },
+  {
+   "doc": "{\"um\":[]}",
+   "err": "json: cannot unmarshal array into Go struct field Adv.um of type map[uint8]string"
+  },
+  {
+   "doc": "[1]",
+   "err": "json: cannot unmarshal array into Go value of type main.Adv"
+  },
+  {
+   "doc": "5",
+   "err": "json: cannot unmarshal number into Go value of type main.Adv"
+  },
+  {
+   "doc": "{\"f32\":1.00000017881393432617187499}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":1.0000001,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"f32\":3.4028235677973365e38}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":3.4028235e+38,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"f32\":3.5e38}",
+   "err": "json: cannot unmarshal number 3.5e38 into Go struct field Adv.f32 of type float32"
+  },
+  {
+   "doc": "{\"f32\":1e-60}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"inner\":{\"ms\":{\"a\":{\"a\":1}}},\"inner\":{\"ms\":{\"a\":{\"b\":2},\"b\":{\"a\":3}}},\"inner\":{\"ms\":null}}",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"n\":\"bad\",\"zzz\":1}",
+   "disallow": true,
+   "err": "json: cannot unmarshal string into Go struct field Adv.n of type int32"
+  },
+  {
+   "doc": "{\"zzz\":1,\"n\":\"bad\"}",
+   "disallow": true,
+   "err": "json: unknown field \"zzz\""
+  },
+  {
+   "doc": "{\"zzz\":1,\"yyy\":2}",
+   "disallow": true,
+   "err": "json: unknown field \"zzz\""
+  },
+  {
+   "doc": "{\"inner\":{\"qqq\":1}}",
+   "disallow": true,
+   "err": "json: unknown field \"qqq\""
+  },
+  {
+   "doc": "{\"any\":{\"qqq\":1}}",
+   "disallow": true,
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":{\"qqq\":1},\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"pp\":{\"qqq\":1},\"pp\":null}",
+   "disallow": true,
+   "err": "json: unknown field \"qqq\""
+  }
+ ],
+ "unmarshal": [
+  {
+   "doc": "",
+   "err": "unexpected end of JSON input"
+  },
+  {
+   "doc": " ",
+   "err": "unexpected end of JSON input"
+  },
+  {
+   "doc": "{\"n\":1} {\"n\":2}",
+   "err": "invalid character '{' after top-level value"
+  },
+  {
+   "doc": "{\"n\":1} xyz",
+   "err": "invalid character 'x' after top-level value"
+  },
+  {
+   "doc": "{\"n\":",
+   "err": "unexpected end of JSON input"
+  },
+  {
+   "doc": "null",
+   "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": "{\"n\":1}",
+   "ok": "{\"n\":1,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  },
+  {
+   "doc": " {\"n\":1} ",
+   "ok": "{\"n\":1,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}"
+  }
+ ],
+ "fold": [
+  {
+   "doc": "{\"Foo\":\"x\"}",
+   "ok": "{\"foo\":\"x\",\"FOO\":\"\",\"BAR\":\"\",\"bar\":\"\"}"
+  },
+  {
+   "doc": "{\"Foo\":\"x\"}",
+   "disallow": true,
+   "ok": "{\"foo\":\"x\",\"FOO\":\"\",\"BAR\":\"\",\"bar\":\"\"}"
+  },
+  {
+   "doc": "{\"foo\":\"x\"}",
+   "ok": "{\"foo\":\"x\",\"FOO\":\"\",\"BAR\":\"\",\"bar\":\"\"}"
+  },
+  {
+   "doc": "{\"foo\":\"x\"}",
+   "disallow": true,
+   "ok": "{\"foo\":\"x\",\"FOO\":\"\",\"BAR\":\"\",\"bar\":\"\"}"
+  },
+  {
+   "doc": "{\"FOO\":\"x\"}",
+   "ok": "{\"foo\":\"\",\"FOO\":\"x\",\"BAR\":\"\",\"bar\":\"\"}"
+  },
+  {
+   "doc": "{\"FOO\":\"x\"}",
+   "disallow": true,
+   "ok": "{\"foo\":\"\",\"FOO\":\"x\",\"BAR\":\"\",\"bar\":\"\"}"
+  },
+  {
+   "doc": "{\"fOO\":\"x\"}",
+   "ok": "{\"foo\":\"x\",\"FOO\":\"\",\"BAR\":\"\",\"bar\":\"\"}"
+  },
+  {
+   "doc": "{\"fOO\":\"x\"}",
+   "disallow": true,
+   "ok": "{\"foo\":\"x\",\"FOO\":\"\",\"BAR\":\"\",\"bar\":\"\"}"
+  },
+  {
+   "doc": "{\"Bar\":\"x\"}",
+   "ok": "{\"foo\":\"\",\"FOO\":\"\",\"BAR\":\"x\",\"bar\":\"\"}"
+  },
+  {
+   "doc": "{\"Bar\":\"x\"}",
+   "disallow": true,
+   "ok": "{\"foo\":\"\",\"FOO\":\"\",\"BAR\":\"x\",\"bar\":\"\"}"
+  },
+  {
+   "doc": "{\"BAR\":\"x\"}",
+   "ok": "{\"foo\":\"\",\"FOO\":\"\",\"BAR\":\"x\",\"bar\":\"\"}"
+  },
+  {
+   "doc": "{\"BAR\":\"x\"}",
+   "disallow": true,
+   "ok": "{\"foo\":\"\",\"FOO\":\"\",\"BAR\":\"x\",\"bar\":\"\"}"
+  },
+  {
+   "doc": "{\"bar\":\"x\"}",
+   "ok": "{\"foo\":\"\",\"FOO\":\"\",\"BAR\":\"\",\"bar\":\"x\"}"
+  },
+  {
+   "doc": "{\"bar\":\"x\"}",
+   "disallow": true,
+   "ok": "{\"foo\":\"\",\"FOO\":\"\",\"BAR\":\"\",\"bar\":\"x\"}"
+  },
+  {
+   "doc": "{\"Foo\":\"x\",\"FOO\":\"y\",\"foo\":\"z\"}",
+   "ok": "{\"foo\":\"z\",\"FOO\":\"y\",\"BAR\":\"\",\"bar\":\"\"}"
+  },
+  {
+   "doc": "{\"Foo\":\"x\",\"FOO\":\"y\",\"foo\":\"z\"}",
+   "disallow": true,
+   "ok": "{\"foo\":\"z\",\"FOO\":\"y\",\"BAR\":\"\",\"bar\":\"\"}"
+  }
+ ],
+ "streams": [
+  {
+   "doc": "{\"n\":1} {\"n\":2}",
+   "steps": [
+    {
+     "ok": "{\"n\":1,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}",
+     "buffered": " {\"n\":2}",
+     "offset": 7,
+     "more": false
+    },
+    {
+     "ok": "{\"n\":2,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}",
+     "buffered": "",
+     "offset": 15,
+     "more": false
+    },
+    {
+     "err": "EOF",
+     "eof": "eof",
+     "buffered": "",
+     "offset": 15,
+     "more": false
+    }
+   ]
+  },
+  {
+   "doc": "{\"n\":1}{\"n\":2}",
+   "steps": [
+    {
+     "ok": "{\"n\":1,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}",
+     "buffered": "{\"n\":2}",
+     "offset": 7,
+     "more": false
+    },
+    {
+     "ok": "{\"n\":2,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}",
+     "buffered": "",
+     "offset": 14,
+     "more": false
+    },
+    {
+     "err": "EOF",
+     "eof": "eof",
+     "buffered": "",
+     "offset": 14,
+     "more": false
+    }
+   ]
+  },
+  {
+   "doc": "{\"n\":1} xyz",
+   "steps": [
+    {
+     "ok": "{\"n\":1,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}",
+     "buffered": " xyz",
+     "offset": 7,
+     "more": false
+    },
+    {
+     "err": "invalid character 'x' looking for beginning of value",
+     "buffered": " xyz",
+     "offset": 7,
+     "more": false
+    },
+    {
+     "err": "invalid character 'x' looking for beginning of value",
+     "buffered": " xyz",
+     "offset": 7,
+     "more": false
+    },
+    {
+     "err": "invalid character 'x' looking for beginning of value",
+     "buffered": " xyz",
+     "offset": 7,
+     "more": false
+    },
+    {
+     "err": "invalid character 'x' looking for beginning of value",
+     "buffered": " xyz",
+     "offset": 7,
+     "more": false
+    }
+   ]
+  },
+  {
+   "doc": "{\"n\":1}xyz",
+   "steps": [
+    {
+     "ok": "{\"n\":1,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}",
+     "buffered": "xyz",
+     "offset": 7,
+     "more": false
+    },
+    {
+     "err": "invalid character 'x' looking for beginning of value",
+     "buffered": "xyz",
+     "offset": 7,
+     "more": false
+    },
+    {
+     "err": "invalid character 'x' looking for beginning of value",
+     "buffered": "xyz",
+     "offset": 7,
+     "more": false
+    },
+    {
+     "err": "invalid character 'x' looking for beginning of value",
+     "buffered": "xyz",
+     "offset": 7,
+     "more": false
+    },
+    {
+     "err": "invalid character 'x' looking for beginning of value",
+     "buffered": "xyz",
+     "offset": 7,
+     "more": false
+    }
+   ]
+  },
+  {
+   "doc": "",
+   "steps": [
+    {
+     "err": "EOF",
+     "eof": "eof",
+     "buffered": "",
+     "offset": 0,
+     "more": false
+    }
+   ]
+  },
+  {
+   "doc": "   ",
+   "steps": [
+    {
+     "err": "EOF",
+     "eof": "eof",
+     "buffered": "   ",
+     "offset": 0,
+     "more": false
+    }
+   ]
+  },
+  {
+   "doc": "\n\t ",
+   "steps": [
+    {
+     "err": "EOF",
+     "eof": "eof",
+     "buffered": "\n\t ",
+     "offset": 0,
+     "more": false
+    }
+   ]
+  },
+  {
+   "doc": "{\"n\":",
+   "steps": [
+    {
+     "err": "unexpected EOF",
+     "eof": "unexpected",
+     "buffered": "{\"n\":",
+     "offset": 0,
+     "more": false
+    }
+   ]
+  },
+  {
+   "doc": "{\"n\":1} {\"n\":",
+   "steps": [
+    {
+     "ok": "{\"n\":1,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}",
+     "buffered": " {\"n\":",
+     "offset": 7,
+     "more": false
+    },
+    {
+     "err": "unexpected EOF",
+     "eof": "unexpected",
+     "buffered": " {\"n\":",
+     "offset": 7,
+     "more": false
+    }
+   ]
+  },
+  {
+   "doc": "{\"n\":1}   ",
+   "steps": [
+    {
+     "ok": "{\"n\":1,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}",
+     "buffered": "   ",
+     "offset": 7,
+     "more": false
+    },
+    {
+     "err": "EOF",
+     "eof": "eof",
+     "buffered": "   ",
+     "offset": 7,
+     "more": false
+    }
+   ]
+  },
+  {
+   "doc": "{\"n\":\"bad\"} {\"n\":2}",
+   "steps": [
+    {
+     "err": "json: cannot unmarshal string into Go struct field Adv.n of type int32",
+     "buffered": " {\"n\":2}",
+     "offset": 11,
+     "more": false
+    },
+    {
+     "ok": "{\"n\":2,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}",
+     "buffered": "",
+     "offset": 19,
+     "more": false
+    },
+    {
+     "err": "EOF",
+     "eof": "eof",
+     "buffered": "",
+     "offset": 19,
+     "more": false
+    }
+   ]
+  },
+  {
+   "doc": "{\"n\":1} ]",
+   "steps": [
+    {
+     "ok": "{\"n\":1,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}",
+     "buffered": " ]",
+     "offset": 7,
+     "more": false
+    },
+    {
+     "err": "invalid character ']' looking for beginning of value",
+     "buffered": " ]",
+     "offset": 7,
+     "more": false
+    },
+    {
+     "err": "invalid character ']' looking for beginning of value",
+     "buffered": " ]",
+     "offset": 7,
+     "more": false
+    },
+    {
+     "err": "invalid character ']' looking for beginning of value",
+     "buffered": " ]",
+     "offset": 7,
+     "more": false
+    },
+    {
+     "err": "invalid character ']' looking for beginning of value",
+     "buffered": " ]",
+     "offset": 7,
+     "more": false
+    }
+   ]
+  },
+  {
+   "doc": "1 2 3",
+   "steps": [
+    {
+     "err": "json: cannot unmarshal number into Go value of type main.Adv",
+     "buffered": " 2 3",
+     "offset": 1,
+     "more": false
+    },
+    {
+     "err": "json: cannot unmarshal number into Go value of type main.Adv",
+     "buffered": " 3",
+     "offset": 3,
+     "more": false
+    },
+    {
+     "err": "json: cannot unmarshal number into Go value of type main.Adv",
+     "buffered": "",
+     "offset": 5,
+     "more": false
+    },
+    {
+     "err": "EOF",
+     "eof": "eof",
+     "buffered": "",
+     "offset": 5,
+     "more": false
+    }
+   ]
+  },
+  {
+   "doc": "null null",
+   "steps": [
+    {
+     "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}",
+     "buffered": " null",
+     "offset": 4,
+     "more": false
+    },
+    {
+     "ok": "{\"n\":0,\"s\":\"\",\"nums\":null,\"ptr\":null,\"pp\":null,\"inner\":{\"x\":0,\"y\":\"\",\"ms\":null},\"list\":null,\"t\":\"0001-01-01T00:00:00Z\",\"tp\":null,\"raw\":null,\"jn\":0,\"any\":null,\"arr\":[0,0],\"bin\":null,\"f32\":0,\"im\":null,\"um\":null,\"nest\":null}",
+     "buffered": "",
+     "offset": 9,
+     "more": false
+    },
+    {
+     "err": "EOF",
+     "eof": "eof",
+     "buffered": "",
+     "offset": 9,
+     "more": false
+    }
+   ]
+  },
+  {
+   "doc": "12",
+   "steps": [
+    {
+     "err": "json: cannot unmarshal number into Go value of type main.Adv",
+     "buffered": "",
+     "offset": 2,
+     "more": false
+    },
+    {
+     "err": "EOF",
+     "eof": "eof",
+     "buffered": "",
+     "offset": 2,
+     "more": false
+    }
+   ]
+  },
+  {
+   "doc": "tru",
+   "steps": [
+    {
+     "err": "unexpected EOF",
+     "eof": "unexpected",
+     "buffered": "tru",
+     "offset": 0,
+     "more": false
+    }
+   ]
+  },
+  {
+   "doc": "[1,2]x",
+   "steps": [
+    {
+     "err": "json: cannot unmarshal array into Go value of type main.Adv",
+     "buffered": "x",
+     "offset": 5,
+     "more": false
+    },
+    {
+     "err": "invalid character 'x' looking for beginning of value",
+     "buffered": "x",
+     "offset": 5,
+     "more": false
+    },
+    {
+     "err": "invalid character 'x' looking for beginning of value",
+     "buffered": "x",
+     "offset": 5,
+     "more": false
+    },
+    {
+     "err": "invalid character 'x' looking for beginning of value",
+     "buffered": "x",
+     "offset": 5,
+     "more": false
+    },
+    {
+     "err": "invalid character 'x' looking for beginning of value",
+     "buffered": "x",
+     "offset": 5,
+     "more": false
+    }
+   ]
+  },
+  {
+   "doc": "5x",
+   "steps": [
+    {
+     "err": "json: cannot unmarshal number into Go value of type main.Adv",
+     "buffered": "x",
+     "offset": 1,
+     "more": false
+    },
+    {
+     "err": "invalid character 'x' looking for beginning of value",
+     "buffered": "x",
+     "offset": 1,
+     "more": false
+    },
+    {
+     "err": "invalid character 'x' looking for beginning of value",
+     "buffered": "x",
+     "offset": 1,
+     "more": false
+    },
+    {
+     "err": "invalid character 'x' looking for beginning of value",
+     "buffered": "x",
+     "offset": 1,
+     "more": false
+    },
+    {
+     "err": "invalid character 'x' looking for beginning of value",
+     "buffered": "x",
+     "offset": 1,
+     "more": false
+    }
+   ]
+  },
+  {
+   "doc": "\"a\" \"b",
+   "steps": [
+    {
+     "err": "json: cannot unmarshal string into Go value of type main.Adv",
+     "buffered": " \"b",
+     "offset": 3,
+     "more": false
+    },
+    {
+     "err": "unexpected EOF",
+     "eof": "unexpected",
+     "buffered": " \"b",
+     "offset": 3,
+     "more": false
+    }
+   ]
+  },
+  {
+   "doc": "{\"n\":1,}",
+   "steps": [
+    {
+     "err": "invalid character '}' looking for beginning of object key string",
+     "buffered": "{\"n\":1,}",
+     "offset": 0,
+     "more": false
+    },
+    {
+     "err": "invalid character '}' looking for beginning of object key string",
+     "buffered": "{\"n\":1,}",
+     "offset": 0,
+     "more": false
+    },
+    {
+     "err": "invalid character '}' looking for beginning of object key string",
+     "buffered": "{\"n\":1,}",
+     "offset": 0,
+     "more": false
+    },
+    {
+     "err": "invalid character '}' looking for beginning of object key string",
+     "buffered": "{\"n\":1,}",
+     "offset": 0,
+     "more": false
+    },
+    {
+     "err": "invalid character '}' looking for beginning of object key string",
+     "buffered": "{\"n\":1,}",
+     "offset": 0,
+     "more": false
+    }
+   ]
+  }
+ ],
+ "depth": [
+  {
+   "shape": "any_array",
+   "depth": 1000,
+   "ok": true
+  },
+  {
+   "shape": "any_array",
+   "depth": 9999,
+   "ok": true
+  },
+  {
+   "shape": "any_array",
+   "depth": 10000,
+   "ok": true
+  },
+  {
+   "shape": "any_array",
+   "depth": 10001,
+   "ok": false,
+   "err": "invalid character '[' exceeded max depth"
+  },
+  {
+   "shape": "any_object",
+   "depth": 1000,
+   "ok": true
+  },
+  {
+   "shape": "any_object",
+   "depth": 9999,
+   "ok": true
+  },
+  {
+   "shape": "any_object",
+   "depth": 10000,
+   "ok": true
+  },
+  {
+   "shape": "any_object",
+   "depth": 10001,
+   "ok": false,
+   "err": "invalid character '{' exceeded max depth"
+  },
+  {
+   "shape": "unknown_array",
+   "depth": 1000,
+   "ok": true
+  },
+  {
+   "shape": "unknown_array",
+   "depth": 9999,
+   "ok": true
+  },
+  {
+   "shape": "unknown_array",
+   "depth": 10000,
+   "ok": true
+  },
+  {
+   "shape": "unknown_array",
+   "depth": 10001,
+   "ok": false,
+   "err": "invalid character '[' exceeded max depth"
+  },
+  {
+   "shape": "rec",
+   "depth": 1000,
+   "ok": true
+  },
+  {
+   "shape": "rec",
+   "depth": 9999,
+   "ok": true
+  },
+  {
+   "shape": "rec",
+   "depth": 10000,
+   "ok": true
+  },
+  {
+   "shape": "rec",
+   "depth": 10001,
+   "ok": false,
+   "err": "invalid character '{' exceeded max depth"
+  },
+  {
+   "shape": "raw",
+   "depth": 1000,
+   "ok": true
+  },
+  {
+   "shape": "raw",
+   "depth": 9999,
+   "ok": true
+  },
+  {
+   "shape": "raw",
+   "depth": 10000,
+   "ok": true
+  },
+  {
+   "shape": "raw",
+   "depth": 10001,
+   "ok": false,
+   "err": "invalid character '[' exceeded max depth"
+  }
+ ]
+}

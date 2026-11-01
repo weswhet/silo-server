@@ -131,10 +131,12 @@ pub fn compare(hashed: &[u8], password: &[u8]) -> Result<bool, Error> {
         return Err(Error::VersionTooNew(hashed[1]));
     }
     let major = hashed[1];
-    let (minor, rest) = if hashed[2] == b'$' {
-        (None, &hashed[3..])
+    // Go's `decodeVersion` never checks the minor byte's value past "is it present"; only that
+    // presence (which picks `rest`'s offset here) feeds the rest of the comparison.
+    let rest = if hashed[2] == b'$' {
+        &hashed[3..]
     } else {
-        (Some(hashed[2]), &hashed[4..])
+        &hashed[4..]
     };
     let cost = parse_cost(&rest[..2]).ok_or(Error::InvalidCost)?;
     if !(MIN_COST..=MAX_COST).contains(&cost) {
@@ -145,9 +147,16 @@ pub fn compare(hashed: &[u8], password: &[u8]) -> Result<bool, Error> {
     let stored = &rest[ENCODED_SALT_SIZE..];
     let salt = decode_salt(salt_text)?;
     let computed = raw_hash(password, cost as u32, &salt);
-    // Go compares the two hashes re-rendered into 60-byte buffers, so stored bytes past the buffer are
-    // ignored, and a hash without a minor version has room for one more byte than the computed one.
-    let room = 60 - if minor.is_some() { 29 } else { 28 };
+    // `hashed.Hash()` re-renders both sides into a fixed 60-byte array and compares `arr[:n]`,
+    // where `n` only ever grows by `encodedHashSize` (31) for the hash segment, not by however
+    // much `copy` actually wrote. With no minor version, `arr[28:]` has 32 bytes of room, so
+    // `copy` can write a 32nd byte of a too-long stored hash into `arr[59]` -- but `n` still ends
+    // at 59 (28+31), so that slice never includes index 59 and that byte never enters the
+    // comparison. With a minor version, `arr[29:]` only has 31 bytes of room in the first place,
+    // so `copy` cannot even write a 32nd byte. Either way the stored hash segment that actually
+    // gets compared is always exactly `encodedHashSize` (31) bytes, matching `computed`'s length;
+    // only a crafted hash with a trailing byte past the normal 59/60-byte total makes this visible.
+    let room = computed.len();
     let stored = &stored[..stored.len().min(room)];
     let _ = major;
     Ok(crate::hexgo::ct_eq(stored, computed.as_bytes()))

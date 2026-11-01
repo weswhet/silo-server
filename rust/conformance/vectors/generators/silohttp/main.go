@@ -5,7 +5,7 @@
 // rust/crates/silo-http/tests/differential.rs builds the same routers from the same inputs and
 // compares bytes on the wire. The test builds and starts this program itself:
 //
-//	GOTOOLCHAIN=go1.26.7 go build -tags silohttp_diff -o <bin> ./rust/conformance/vectors/generators/silohttp
+//	GOTOOLCHAIN=go1.26.10 go build -tags silohttp_diff -o <bin> ./rust/conformance/vectors/generators/silohttp
 //
 // It prints one JSON object mapping listener names to ports, then serves until killed.
 package main

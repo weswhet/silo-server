@@ -1,5 +1,5 @@
 {
- "go_version": "go1.26.7",
+ "go_version": "go1.26.10",
  "unicode_version": "15.0.0",
  "rune_maps_sha256": "e4ce85c80755fe82d3812640aefd07e3dfa7cbf1fe95ed0dd17d537da324deaa",
  "predicates_sha256": "a18c909ded6f2e1a19758d68ca24b55878b4bdbdc194199f19605a35644c03d8",

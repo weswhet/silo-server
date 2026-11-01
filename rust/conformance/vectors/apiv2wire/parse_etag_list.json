@@ -1,0 +1,98 @@
+[
+  {
+    "input": "",
+    "ok": true,
+    "star": false
+  },
+  {
+    "input": "*",
+    "ok": true,
+    "star": true
+  },
+  {
+    "input": " * ",
+    "ok": true,
+    "star": true
+  },
+  {
+    "input": "\"a\"",
+    "ok": true,
+    "star": false,
+    "tags": [
+      {
+        "Opaque": "a",
+        "Weak": false
+      }
+    ]
+  },
+  {
+    "input": "\"a\", \"b\"",
+    "ok": true,
+    "star": false,
+    "tags": [
+      {
+        "Opaque": "a",
+        "Weak": false
+      },
+      {
+        "Opaque": "b",
+        "Weak": false
+      }
+    ]
+  },
+  {
+    "input": "\"a\" , W/\"b\"",
+    "ok": true,
+    "star": false,
+    "tags": [
+      {
+        "Opaque": "a",
+        "Weak": false
+      },
+      {
+        "Opaque": "b",
+        "Weak": true
+      }
+    ]
+  },
+  {
+    "input": ",",
+    "ok": true,
+    "star": false
+  },
+  {
+    "input": "\"a\",,\"b\"",
+    "ok": true,
+    "star": false,
+    "tags": [
+      {
+        "Opaque": "a",
+        "Weak": false
+      },
+      {
+        "Opaque": "b",
+        "Weak": false
+      }
+    ]
+  },
+  {
+    "input": "\"a\" \"b\"",
+    "ok": false,
+    "star": false
+  },
+  {
+    "input": "*, \"a\"",
+    "ok": false,
+    "star": false
+  },
+  {
+    "input": "\"a",
+    "ok": false,
+    "star": false
+  },
+  {
+    "input": "W/\"a\", *",
+    "ok": false,
+    "star": false
+  }
+]

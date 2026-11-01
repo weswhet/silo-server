@@ -65,6 +65,41 @@
         "ValueMismatch $.room.anchor_updated_at"
       ],
       "why": "A clock value with one-second resolution: the two servers can land on either side of a second. Seen Go vs Go."
+    },
+    {
+      "cases": [
+        "abs GET /abs/api/collections#user",
+        "abs GET /api/collections#user",
+        "abs GET /abs/api/libraries/{libraryId}/collections#user",
+        "abs GET /abs/api/libraries/{libraryId}/collections#invalid_path",
+        "abs GET /api/libraries/{libraryId}/collections#user",
+        "abs GET /api/libraries/{libraryId}/collections#invalid_path"
+      ],
+      "signatures": [
+        "ValueMismatch $.collections[0].id",
+        "ValueMismatch $.collections[1].id",
+        "ValueMismatch $.collections[0].createdAt",
+        "ValueMismatch $.collections[1].createdAt",
+        "ValueMismatch $.collections[0].lastUpdate",
+        "ValueMismatch $.collections[1].lastUpdate",
+        "ValueMismatch $.results[0].id",
+        "ValueMismatch $.results[1].id",
+        "ValueMismatch $.results[0].createdAt",
+        "ValueMismatch $.results[1].createdAt",
+        "ValueMismatch $.results[0].lastUpdate",
+        "ValueMismatch $.results[1].lastUpdate"
+      ],
+      "why": "The seed stage creates two collections moments apart, stored at one-second resolution, and ListUserCollections orders by created_at DESC with no tiebreak. A server whose two writes straddle a second lists the newer first; one whose writes share a second lists them in table order, so the two lists swap. Seen Go vs Go: the same two writes straddling a second on one Go server and not on the other invert the list with no front involved."
+    },
+    {
+      "cases": [
+        "api_v2 GET /api/v2/playback/capabilities#user",
+        "api_v2 GET /api/v2/playback/capabilities#peer:untrusted_a:base_url:name"
+      ],
+      "signatures": [
+        "EtagBehaviour revalidation status"
+      ],
+      "why": "These are the viewer's first capability read after a stage's restart. sourceBitratePercentile answers one with no bandwidth_probe_target_kbps and starts the read in the background, so the ETag changes once that read lands, and the replay gets 304 or 200 depending on which came first. Seen Go vs Go in both directions: the peer case in a lab run, and #user as 200 against 304 in 1 of 10 resets of both Go stacks."
     }
   ]
 }

@@ -37,3 +37,13 @@ disallowed-methods = [
     { path = "chrono::DateTime::to_rfc3339", reason = "use silo_gocompat::time::GoTime::rfc3339_nano", allow-invalid = true },
     { path = "chrono::DateTime::to_rfc3339_opts", reason = "use silo_gocompat::time::GoTime::rfc3339_nano", allow-invalid = true },
 ]
+
+# Not yet enforced: these fail -D warnings at existing call sites in other crates, so they stay off
+# until each site moves to silo_gocompat::json::unmarshal or Decoder, or carries an #[allow] saying
+# why, and are then uncommented in the list above. Find the sites with:
+#   grep -rnE 'serde_json::from_(slice|str|reader)' crates
+# encoding/json folds key case, merges a duplicate key by the destination's kind, and replaces
+# invalid UTF-8 and unpaired surrogates with U+FFFD; serde_json does none of that.
+#   { path = "serde_json::from_slice", reason = "use silo_gocompat::json::unmarshal or Decoder", allow-invalid = true },
+#   { path = "serde_json::from_str", reason = "use silo_gocompat::json::unmarshal or Decoder", allow-invalid = true },
+#   { path = "serde_json::from_reader", reason = "use silo_gocompat::json::Decoder", allow-invalid = true },

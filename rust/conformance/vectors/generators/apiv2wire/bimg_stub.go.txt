@@ -1,0 +1,41 @@
+// Package bimg is a stand-in for github.com/h2non/bimg so the format generator builds without libvips.
+// Nothing the generator runs decodes an image.
+package bimg
+
+import "errors"
+
+type ImageType int
+
+const (
+	UNKNOWN ImageType = iota
+	JPEG
+	WEBP
+	PNG
+	TIFF
+	GIF
+	PDF
+	SVG
+	MAGICK
+	HEIF
+	AVIF
+)
+
+type ImageSize struct{ Width, Height int }
+
+type Options struct {
+	Height, Width, Quality, Compression, Speed int
+	Type                                       ImageType
+	StripMetadata, NoAutoRotate, Force, Enlarge, Embed, Lossless bool
+	Crop, Trim, Palette, NoProfile, Interlace                    bool
+}
+
+type Image struct{}
+
+var errStub = errors.New("bimg stub")
+
+func NewImage(_ []byte) *Image                       { return &Image{} }
+func (*Image) Process(Options) ([]byte, error)       { return nil, errStub }
+func (*Image) Size() (ImageSize, error)              { return ImageSize{}, errStub }
+func (*Image) Type() string                          { return "" }
+func DetermineImageType(_ []byte) ImageType          { return UNKNOWN }
+func IsTypeSupported(_ ImageType) bool               { return false }

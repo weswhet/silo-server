@@ -1,0 +1,36 @@
+// overlay-package: internal/apiv2
+//
+// Export shims for the silo-api-v2 wire-kit vector generator. These expose unexported
+// package-private functions under new, exported names so the generator (an ordinary
+// `package main` that imports internal/apiv2 from outside) can call them and record their
+// real output. The file is never written into the internal/apiv2 package directory: it is
+// substituted in only through `go build -overlay`, so internal/apiv2 on disk is unchanged.
+
+package apiv2
+
+import "github.com/danielgtaylor/huma/v2"
+
+// VectorValidationCode calls the unexported validationCode mapping.
+func VectorValidationCode(msg string) string { return validationCode(msg) }
+
+// VectorValidationDetail calls the unexported validationDetail mapping.
+func VectorValidationDetail(msg string) string { return validationDetail(msg) }
+
+// VectorValidationLocation calls the unexported validationLocation mapping.
+func VectorValidationLocation(location, message string) string {
+	return validationLocation(&huma.ErrorDetail{Location: location, Message: message})
+}
+
+// VectorHumaStatusType calls the unexported humaStatusType mapping.
+func VectorHumaStatusType(status int, msg string) ProblemType { return humaStatusType(status, msg) }
+
+// VectorHumaDetail calls the unexported humaDetail mapping.
+func VectorHumaDetail(t ProblemType, msg string, bodyLimit int64) string {
+	return humaDetail(t, msg, bodyLimit)
+}
+
+// VectorFromHumaError calls the unexported fromHumaError adapter, the function
+// installErrorAdapter wires huma.NewError / huma.NewErrorWithContext to at runtime.
+func VectorFromHumaError(requestID string, status int, msg string, errs []error, bodyLimit int64) *Problem {
+	return fromHumaError(requestID, status, msg, errs, bodyLimit)
+}
