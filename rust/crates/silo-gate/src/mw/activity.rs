@@ -2,11 +2,19 @@
 //! off the request path, 100 rows or 2 seconds at a time.
 
 use std::collections::BTreeMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
+use serde::Serialize;
 use silo_pg::{Pool, ToSql};
+use silo_runtime::logstream::{
+    Hub, INSERT_TIMEOUT, RETRY_MAX_BACKOFF, RETRY_MIN_BACKOFF, Stream, retryable,
+    safe_text as safe, value_rejected,
+};
 use tokio::sync::mpsc;
+use tokio::time::timeout;
 
 /// `activitylog.LogEntry`.
 #[derive(Clone, Debug)]
@@ -24,6 +32,9 @@ pub struct LogEntry {
     pub status_code: i32,
     pub user_agent: String,
     pub duration_ms: i32,
+    /// `Persisted`: the request's audited mutation already stored its row. It still counts as the
+    /// account's activity.
+    pub persisted: bool,
 }
 
 const EXCLUDED: &[&str] = &[
@@ -47,9 +58,32 @@ pub fn recorded(path: &str) -> bool {
         && !(chunk && STREAMS.iter().any(|p| path.starts_with(p)))
 }
 
-/// `logstream.SafeText`: Postgres text cannot hold NUL or invalid UTF-8; a Rust string only the first.
-fn safe(text: &str) -> String {
-    text.replace('\0', "")
+/// `activitylog.AuditEntry`, the fields a request row has, in its JSON order.
+#[derive(Serialize)]
+struct AuditEntry {
+    id: i64,
+    timestamp: String,
+    client_ip: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    user_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    impersonator_user_id: Option<i64>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    session_id: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    playback_session_id: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    request_id: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    node_id: String,
+    method: String,
+    path: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    path_pattern: String,
+    status_code: i32,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    user_agent: String,
+    duration_ms: i32,
 }
 
 /// `activitylog.Writer`. A full queue drops the entry rather than block the request, as Go's does.
@@ -59,9 +93,9 @@ pub struct ActivityWriter {
 }
 
 impl ActivityWriter {
-    pub fn start(pool: Arc<Pool>) -> Self {
+    pub fn start(pool: Arc<Pool>, hub: Arc<Hub>) -> Self {
         let (tx, rx) = mpsc::channel(4096);
-        tokio::spawn(run(pool, rx));
+        tokio::spawn(run(pool, hub, rx));
         Self { tx }
     }
 
@@ -70,7 +104,7 @@ impl ActivityWriter {
     }
 }
 
-async fn run(pool: Arc<Pool>, mut rx: mpsc::Receiver<LogEntry>) {
+async fn run(pool: Arc<Pool>, hub: Arc<Hub>, mut rx: mpsc::Receiver<LogEntry>) {
     let mut batch = Vec::with_capacity(100);
     let mut tick = tokio::time::interval(Duration::from_secs(2));
     loop {
@@ -79,31 +113,92 @@ async fn run(pool: Arc<Pool>, mut rx: mpsc::Receiver<LogEntry>) {
                 let Some(entry) = entry else { break };
                 batch.push(entry);
                 if batch.len() >= 100 {
-                    flush(&pool, &mut batch).await;
+                    persist(&pool, &hub, &batch, false).await;
+                    batch.clear();
                 }
             }
-            _ = tick.tick() => flush(&pool, &mut batch).await,
+            _ = tick.tick() => {
+                persist(&pool, &hub, &batch, false).await;
+                batch.clear();
+            }
         }
     }
-    flush(&pool, &mut batch).await;
+    persist(&pool, &hub, &batch, true).await;
 }
 
-async fn flush(pool: &Pool, batch: &mut Vec<LogEntry>) {
-    if batch.is_empty() {
-        return;
-    }
-    if let Err(e) = insert_rows(pool, batch).await {
-        tracing::error!(component = "activitylog", entries = batch.len(), error = %e, "activity log batch insert failed; entries dropped");
-        batch.clear();
-        return;
-    }
+/// `Drain.persist`: retries transient failures with backoff, while new entries wait in the channel, and
+/// inserts the rows one at a time when the server rejects a value. Anything else drops the batch.
+fn persist<'a>(
+    pool: &'a Pool,
+    hub: &'a Hub,
+    batch: &'a [LogEntry],
+    stopping: bool,
+) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+    Box::pin(async move {
+        if batch.is_empty() {
+            return;
+        }
+        let mut backoff = RETRY_MIN_BACKOFF;
+        let mut attempt = 1;
+        loop {
+            let err = match timeout(INSERT_TIMEOUT, insert_batch(pool, hub, batch)).await {
+                Ok(Ok(())) => return,
+                Ok(Err(e)) => {
+                    if batch.len() > 1 && value_rejected(&e) {
+                        for row in batch.chunks(1) {
+                            persist(pool, hub, row, stopping).await;
+                        }
+                        return;
+                    }
+                    if stopping || !retryable(&e) {
+                        tracing::error!(component = "activitylog", entries = batch.len(), attempt, error = %e, "activity log batch insert failed; entries dropped");
+                        return;
+                    }
+                    e.to_string()
+                }
+                Err(_) => {
+                    if stopping {
+                        tracing::error!(
+                            component = "activitylog",
+                            entries = batch.len(),
+                            attempt,
+                            error = "context deadline exceeded",
+                            "activity log batch insert failed; entries dropped"
+                        );
+                        return;
+                    }
+                    "context deadline exceeded".to_owned()
+                }
+            };
+            tracing::warn!(component = "activitylog", entries = batch.len(), attempt, retry_in = ?backoff, error = %err, "activity log batch insert failed; retrying");
+            tokio::time::sleep(backoff).await;
+            backoff = (backoff * 2).min(RETRY_MAX_BACKOFF);
+            attempt += 1;
+        }
+    })
+}
+
+/// `insertBatch`. The rows are stored once the first step succeeds, so a failure in the second only leaves
+/// last activity stale until the account's next batch, and must not retry the insert.
+async fn insert_batch(pool: &Pool, hub: &Hub, batch: &[LogEntry]) -> Result<(), silo_pg::Error> {
+    insert_stored(pool, hub, batch).await?;
     if let Err(e) = record_last_activity(pool, batch).await {
         tracing::warn!(component = "activitylog", error = %e, "failed to record last activity");
     }
-    batch.clear();
+    Ok(())
 }
 
-async fn insert_rows(pool: &Pool, entries: &[LogEntry]) -> Result<(), silo_pg::Error> {
+/// The part of `insertBatch` that leaves out the rows a domain mutation already stored.
+async fn insert_stored(pool: &Pool, hub: &Hub, batch: &[LogEntry]) -> Result<(), silo_pg::Error> {
+    let stored: Vec<&LogEntry> = batch.iter().filter(|e| !e.persisted).collect();
+    if stored.is_empty() {
+        return Ok(());
+    }
+    insert_rows(pool, hub, &stored).await
+}
+
+/// `insertRows`: stores a batch and publishes the stored rows to the live tail.
+async fn insert_rows(pool: &Pool, hub: &Hub, entries: &[&LogEntry]) -> Result<(), silo_pg::Error> {
     let mut sql = String::from(
         "INSERT INTO activity_log (timestamp, client_ip, user_id, impersonator_user_id, session_id, playback_session_id, request_id, node_id, method, path, path_pattern, status_code, user_agent, duration_ms) VALUES ",
     );
@@ -150,7 +245,47 @@ async fn insert_rows(pool: &Pool, entries: &[LogEntry]) -> Result<(), silo_pg::E
             &e.duration_ms,
         ]);
     }
-    pool.execute(&sql, &params).await.map(|_| ())
+    sql.push_str(" RETURNING id, timestamp, client_ip::text, user_id::bigint, impersonator_user_id::bigint, COALESCE(session_id, ''), COALESCE(playback_session_id, ''), COALESCE(request_id, ''), COALESCE(node_id, ''), method, path, COALESCE(path_pattern, ''), COALESCE(status_code, 0), COALESCE(user_agent, ''), COALESCE(duration_ms, 0)");
+    let rows = pool.query(&sql, &params).await?;
+    let mut failed = 0;
+    let mut last_error = String::new();
+    for row in &rows {
+        let stored = || -> Result<AuditEntry, silo_pg::DriverError> {
+            let timestamp: SystemTime = row.try_get(1)?;
+            Ok(AuditEntry {
+                id: row.try_get(0)?,
+                timestamp: silo_gocompat::time::GoTime::from_system_time(timestamp)
+                    .format(silo_gocompat::time::RFC3339_NANO),
+                client_ip: row.try_get(2)?,
+                user_id: row.try_get(3)?,
+                impersonator_user_id: row.try_get(4)?,
+                session_id: row.try_get(5)?,
+                playback_session_id: row.try_get(6)?,
+                request_id: row.try_get(7)?,
+                node_id: row.try_get(8)?,
+                method: row.try_get(9)?,
+                path: row.try_get(10)?,
+                path_pattern: row.try_get(11)?,
+                status_code: row.try_get(12)?,
+                user_agent: row.try_get(13)?,
+                duration_ms: row.try_get(14)?,
+            })
+        };
+        let published = stored()
+            .map_err(|e| e.to_string())
+            .and_then(|entry| {
+                silo_gocompat::json::marshal_to_string(&entry).map_err(|e| e.to_string())
+            })
+            .and_then(|json| hub.publish_append(Stream::Audit, json));
+        if let Err(e) = published {
+            failed += 1;
+            last_error = e;
+        }
+    }
+    if failed > 0 {
+        tracing::warn!(component = "activitylog", failed, entries = rows.len(), error = %last_error, "activitylog: failed to publish log stream appends");
+    }
+    Ok(())
 }
 
 async fn record_last_activity(pool: &Pool, entries: &[LogEntry]) -> Result<(), silo_pg::Error> {

@@ -2817,10 +2817,13 @@ dependencies = [
 name = "silo-auth"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
+ "bcrypt",
  "bytes",
  "getrandom 0.3.4",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "silo-core",
  "silo-gocompat",
  "silo-jwt",
@@ -2900,6 +2903,9 @@ name = "silo-front"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "futures-util",
+ "hmac 0.12.1",
+ "libc",
  "rand 0.9.5",
  "serde",
  "serde_json",
@@ -2915,9 +2921,11 @@ dependencies = [
  "silo-pg",
  "silo-runtime",
  "silo-store",
+ "time",
  "tokio",
  "tokio-util",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -2930,6 +2938,7 @@ dependencies = [
  "regorus",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "silo-auth",
  "silo-config",
  "silo-contracts",
@@ -2938,6 +2947,7 @@ dependencies = [
  "silo-http",
  "silo-jwt",
  "silo-pg",
+ "silo-runtime",
  "silo-store",
  "thiserror",
  "tokio",
@@ -3032,6 +3042,7 @@ dependencies = [
  "rustls",
  "rustls-native-certs",
  "rustls-pki-types",
+ "serde",
  "serde_json",
  "sha1",
  "sha2 0.10.9",
@@ -3063,6 +3074,7 @@ dependencies = [
 name = "silo-store"
 version = "0.1.0"
 dependencies = [
+ "serde",
  "serde_json",
  "sha2 0.10.9",
  "silo-config",

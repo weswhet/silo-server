@@ -3,10 +3,7 @@
 //! The hashing/format primitives (`api_keys.key_hash`/`key_prefix`, the `sa_`-prefixed minted
 //! format, `ValidTextKey`) already live in `silo_core::apikey` and are not re-ported here — see
 //! that module for `api_key_hash`/`api_key_prefix`/`format_api_key`/`valid_text_key`.
-//!
-//! Not ported: `api_key_lookup.go`, `api_key_repository.go`, `api_key_metadata.go`,
-//! `api_key_last_used.go` (the Postgres-backed CRUD and the request-time lookup path) — each is
-//! its own bounded `SessionRepository`-shaped port and none was attempted this session.
+//! The store is [`crate::api_key_store`].
 
 /// `auth.Scope*` constants.
 pub const SCOPE_ADMIN_USERS: &str = "admin:users";

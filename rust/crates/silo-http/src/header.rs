@@ -53,6 +53,11 @@ impl Header {
         std::str::from_utf8(self.get(key)).unwrap_or("")
     }
 
+    /// `h[key]`: the values under this exact spelling.
+    pub fn get_raw_values(&self, key: &str) -> &[Vec<u8>] {
+        self.0.get(key).map_or(&[], Vec::as_slice)
+    }
+
     /// `h.Values`.
     pub fn values(&self, key: &str) -> &[Vec<u8>] {
         self.0

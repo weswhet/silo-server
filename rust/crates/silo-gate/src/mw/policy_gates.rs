@@ -10,7 +10,8 @@ use silo_pg::Pool;
 use super::auth::{declared_profile_id, get_claims, get_profile_id};
 use super::denial::{Denial, reason};
 use super::viewer::{GroupStore, ViewerResolver, household_requires_profile};
-use crate::policy::{Domain, Engine, PermissionDecision, PermissionInput};
+use crate::pdp::Pdp;
+use crate::policy::{PermissionDecision, PermissionInput};
 
 const ACTIVE_PROFILE_FAILED: &str = "Failed to verify active profile";
 const METADATA_REQUIRED: &str = "Metadata curation permission required";
@@ -30,7 +31,7 @@ pub struct PolicyGates {
     pub users: UserRepository,
     pub groups: GroupStore,
     pub pool: Arc<Pool>,
-    pub engine: Arc<std::sync::Mutex<Engine>>,
+    pub pdp: Arc<Pdp>,
 }
 
 impl PolicyGates {
@@ -69,24 +70,26 @@ impl PolicyGates {
         })
     }
 
-    async fn decide(&self, input: PermissionInput) -> Result<PermissionDecision, String> {
-        let engine = self.engine.clone();
-        let value = serde_json::to_value(&input).map_err(|e| e.to_string())?;
-        tokio::task::spawn_blocking(move || {
-            engine
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .evaluate::<PermissionDecision>(Domain::Permission, &value)
-        })
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())
+    async fn decide(
+        &self,
+        r: &Request,
+        input: PermissionInput,
+    ) -> Result<PermissionDecision, String> {
+        let request_id = r
+            .extensions
+            .get::<super::RequestId>()
+            .map(|id| id.0.clone())
+            .unwrap_or_default();
+        self.pdp
+            .check_permission(&input, &request_id)
+            .await
+            .map_err(|e| e.to_string())
     }
 
     fn request_input(r: &Request, mut input: PermissionInput, client_ip: &str) -> PermissionInput {
         input.schema_version = 1;
         input.request_time = super::viewer::now_rfc3339();
-        input.device_id = r.header.get_str("X-Silo-Device-Id").to_owned();
+        input.device_id = String::from_utf8_lossy(r.header.get("X-Silo-Device-Id")).into_owned();
         input.client_ip = client_ip.to_owned();
         input
     }
@@ -111,7 +114,7 @@ impl PolicyGates {
             ..PermissionInput::default()
         };
         Ok(self
-            .decide(Self::request_input(r, input, client_ip))
+            .decide(r, Self::request_input(r, input, client_ip))
             .await?
             .allowed)
     }
@@ -140,7 +143,7 @@ impl PolicyGates {
     pub async fn acting_admin(&self, r: &Request, client_ip: &str) -> Result<bool, String> {
         let mut profile_id = get_profile_id(r);
         if profile_id.is_empty() {
-            profile_id = r.header.get_str("X-Profile-Id").to_owned();
+            profile_id = String::from_utf8_lossy(r.header.get("X-Profile-Id")).into_owned();
         }
         if !profile_id.is_empty() {
             let verified = r
@@ -175,14 +178,16 @@ impl PolicyGates {
             .ok()
             .filter(|u| u.enabled)
             .ok_or_else(denied)?;
-        if self.groups.effective_policy(&user).await.is_err() {
-            return Err(denied());
-        }
+        let effective = self
+            .groups
+            .effective_policy(&user)
+            .await
+            .map_err(|_| denied())?;
         let input = PermissionInput {
             user_id: user.id,
             role: user.role.clone(),
             user_enabled: user.enabled,
-            assigned_permissions: effective_permissions_assigned(&user, &self.groups).await,
+            assigned_permissions: effective.permissions.clone(),
             permission: "marker_edit".to_owned(),
             declared_profile_id: facts.declared_profile_id,
             acting_as_primary: facts.acting_as_primary,
@@ -190,7 +195,7 @@ impl PolicyGates {
             ..PermissionInput::default()
         };
         let decision = self
-            .decide(Self::request_input(r, input, client_ip))
+            .decide(r, Self::request_input(r, input, client_ip))
             .await
             .map_err(|_| Denial::internal("Failed to verify marker edit permission"))?;
         if !decision.allowed {
@@ -226,7 +231,7 @@ impl PolicyGates {
         if claims.role == "admin" {
             let input = base("acting_admin", claims.user_id, claims.role.clone(), true);
             let decision = self
-                .decide(Self::request_input(r, input, client_ip))
+                .decide(r, Self::request_input(r, input, client_ip))
                 .await
                 .map_err(|_| Denial::internal(ACTIVE_PROFILE_FAILED))?;
             if decision.allowed {
@@ -252,7 +257,7 @@ impl PolicyGates {
             .effective_policy(&user)
             .await
             .map_err(|_| denied())?;
-        let assigned = effective_permissions_assigned(&user, &self.groups).await;
+        let assigned = effective.permissions.clone();
         let failed = || Denial::internal("Failed to verify metadata curation permission");
         let mut input = base(
             "metadata_curation",
@@ -263,7 +268,7 @@ impl PolicyGates {
         input.assigned_permissions = assigned;
         input.target_library_ids = vec![0];
         let only = self
-            .decide(Self::request_input(r, input.clone(), client_ip))
+            .decide(r, Self::request_input(r, input.clone(), client_ip))
             .await
             .map_err(|_| failed())?;
         if !only.allowed {
@@ -286,7 +291,7 @@ impl PolicyGates {
             .collect();
         input.user_libraries_restricted = effective.library_ids.is_some();
         let decision = self
-            .decide(Self::request_input(r, input, client_ip))
+            .decide(r, Self::request_input(r, input, client_ip))
             .await
             .map_err(|_| failed())?;
         if !decision.allowed {
@@ -320,26 +325,4 @@ impl PolicyGates {
             .map(|row| row.try_get(0).map_err(|e| e.to_string()))
             .collect()
     }
-}
-
-/// `effective.Permissions`: the user's list, masked by the group's allowed list when it has one.
-async fn effective_permissions_assigned(
-    user: &silo_auth::user::User,
-    groups: &GroupStore,
-) -> Vec<String> {
-    if user.role != "admin"
-        && user.access_group_id.is_some()
-        && let Ok(Some(mask)) = groups.allowed_permissions(user.id).await
-    {
-        let mut out: Vec<String> = user
-            .permissions
-            .iter()
-            .map(|p| silo_gocompat::strings::trim_space(p).to_owned())
-            .filter(|p| !p.is_empty() && mask.iter().any(|m| m.trim() == p))
-            .collect();
-        out.sort();
-        out.dedup();
-        return out;
-    }
-    user.permissions.clone()
 }

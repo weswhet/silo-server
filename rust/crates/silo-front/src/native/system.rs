@@ -132,21 +132,24 @@ pub fn mount(api: &Mux, v2: &Mux, inputs: &NativeInputs) {
     etag.push('"');
     v2.get(
         "/api/v2/openapi.json",
-        handler_fn(move |w, _r| {
-            let etag = etag.clone();
-            Box::pin(async move {
-                w.header()
-                    .set_raw("X-Request-ID", vec![new_request_id().into_bytes()]);
-                let h = w.header();
-                h.set("Cache-Control", "public, max-age=300, no-transform");
-                h.set("Content-Encoding", "identity");
-                h.set("Content-Type", "application/json");
-                h.set("ETag", etag);
-                h.set("Content-Length", openapi.len().to_string());
-                w.write_header(200).await;
-                let _ = w.write(openapi).await;
-            })
-        }),
+        super::chain::v2_public(
+            "/api/v2/openapi.json",
+            handler_fn(move |w, _r| {
+                let etag = etag.clone();
+                Box::pin(async move {
+                    w.header()
+                        .set_raw("X-Request-ID", vec![new_request_id().into_bytes()]);
+                    let h = w.header();
+                    h.set("Cache-Control", "public, max-age=300, no-transform");
+                    h.set("Content-Encoding", "identity");
+                    h.set("Content-Type", "application/json");
+                    h.set("ETag", etag);
+                    h.set("Content-Length", openapi.len().to_string());
+                    w.write_header(200).await;
+                    let _ = w.write(openapi).await;
+                })
+            }),
+        ),
     );
 
     let mut licenses = Vec::new();

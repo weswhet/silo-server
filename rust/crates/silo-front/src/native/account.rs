@@ -33,45 +33,45 @@ const MAXIMUM_PASSWORD_BYTES: i32 = 72;
 
 /// `handlers.ImpersonationView`.
 #[derive(Serialize)]
-struct V1Impersonation {
-    active: bool,
-    impersonator_user_id: i64,
-    impersonator_username: String,
+pub(super) struct V1Impersonation {
+    pub active: bool,
+    pub impersonator_user_id: i64,
+    pub impersonator_username: String,
 }
 
 /// `handlers.UserView`.
 #[derive(Serialize)]
-struct V1User {
-    id: i64,
-    username: String,
-    email: String,
-    role: String,
-    permissions: Vec<String>,
-    download_allowed: bool,
+pub(super) struct V1User {
+    pub id: i64,
+    pub username: String,
+    pub email: String,
+    pub role: String,
+    pub permissions: Vec<String>,
+    pub download_allowed: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    impersonation: Option<V1Impersonation>,
+    pub impersonation: Option<V1Impersonation>,
 }
 
 /// `apiv2.Impersonation`.
 #[derive(Serialize)]
-struct V2Impersonation {
-    active: bool,
-    impersonator_user_id: String,
-    impersonator_username: String,
+pub(super) struct V2Impersonation {
+    pub active: bool,
+    pub impersonator_user_id: String,
+    pub impersonator_username: String,
 }
 
 /// `apiv2.Account`.
 #[derive(Serialize)]
-struct V2Account {
-    id: String,
-    username: String,
-    email: String,
-    role: String,
-    permissions: Vec<String>,
-    download_allowed: bool,
-    password_change_required: bool,
+pub(super) struct V2Account {
+    pub id: String,
+    pub username: String,
+    pub email: String,
+    pub role: String,
+    pub permissions: Vec<String>,
+    pub download_allowed: bool,
+    pub password_change_required: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    impersonation: Option<V2Impersonation>,
+    pub impersonation: Option<V2Impersonation>,
 }
 
 /// What `AuthHandler.CurrentUser` reads.
@@ -109,6 +109,76 @@ async fn current_user(stack: &Stack, claims: &Claims) -> Result<CurrentUser, ()>
         download_allowed,
         impersonator,
     })
+}
+
+/// `effectiveDownloadAllowed`.
+pub(super) async fn download_allowed(stack: &Stack, user: &User) -> bool {
+    match stack.groups.effective_policy(user).await {
+        Ok(effective) => effective.download_allowed,
+        Err(e) => {
+            tracing::warn!(component = "api", user_id = user.id, error = %e, "failed to resolve effective download policy");
+            false
+        }
+    }
+}
+
+/// `buildUserResponse` with no impersonator, in the v1 shape.
+pub(super) async fn v1_user(stack: &Stack, user: &User) -> V1User {
+    V1User {
+        id: user.id,
+        username: user.username.clone(),
+        email: user.email.clone(),
+        role: user.role.clone(),
+        permissions: effective_permissions(user),
+        download_allowed: download_allowed(stack, user).await,
+        impersonation: None,
+    }
+}
+
+/// `buildUserResponse` with no impersonator, then `accountFromView`.
+pub(super) async fn v2_account(stack: &Stack, user: &User) -> V2Account {
+    V2Account {
+        id: user.id.to_string(),
+        username: user.username.clone(),
+        email: user.email.clone(),
+        role: if user.role == "admin" {
+            "admin"
+        } else {
+            "user"
+        }
+        .to_owned(),
+        permissions: effective_permissions(user),
+        download_allowed: download_allowed(stack, user).await,
+        password_change_required: user.password_change_required,
+        impersonation: None,
+    }
+}
+
+/// `passwordChangeAllowed`.
+pub(super) async fn password_change_allowed(
+    stack: &Stack,
+    claims: &Claims,
+    profile_id: &str,
+) -> Result<bool, ()> {
+    if claims.token_type != token_type::ACCESS
+        || claims.session_id.is_empty()
+        || claims.impersonator_user_id.is_some()
+    {
+        return Ok(false);
+    }
+    if claims.password_change_required {
+        return Ok(true);
+    }
+    let profile_id = silo_gocompat::strings::trim_space(profile_id);
+    if profile_id.is_empty() {
+        return Ok(claims.role == "admin");
+    }
+    let profile = stack
+        .viewer
+        .get_profile(claims.user_id, profile_id)
+        .await
+        .map_err(|_| ())?;
+    Ok(profile.is_some_and(|p| p.is_primary))
 }
 
 /// `passwordChangeAllowed`, then `PasswordChangeAvailable`. An error is a 500 on both surfaces.

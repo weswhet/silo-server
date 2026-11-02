@@ -8,6 +8,24 @@ use silo_auth::provider::looks_like_email;
 struct Record {
     identifier: String,
     email: bool,
+    valid: bool,
+}
+
+/// `auth.ValidateEmail`, recorded beside it.
+#[test]
+fn matches_validate_email() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../conformance/vectors/auth/looks_like_email.json"
+    );
+    let records: Vec<Record> =
+        silo_gocompat::json::unmarshal(&std::fs::read(path).unwrap()).unwrap();
+    let differences: Vec<(&str, bool)> = records
+        .iter()
+        .filter(|r| silo_auth::provider::validate_email(&r.identifier).is_ok() != r.valid)
+        .map(|r| (r.identifier.as_str(), r.valid))
+        .collect();
+    assert!(differences.is_empty(), "{differences:#?}");
 }
 
 #[test]

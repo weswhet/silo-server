@@ -6,19 +6,10 @@
 //! `DeleteSettingValue`, `DeleteSettingValuesFor{Profile,Device,Library,Series}`,
 //! `GetSettingMutation`, `PutSettingMutation`, `DeleteExpiredSettingMutations`.
 //!
-//! Deferred (not in this session's scope — see the port report's `stubbed_or_skipped`):
-//! - `ListAdminSettingValuesPage` (admin keyset pagination over every user).
-//! - `WithSettingMutationTransaction` / the `SettingMutationWriter` surface
-//!   (`internal/userstore/pgstore/setting_mutation_tx.go`): the transaction-scoped mutation that
-//!   also writes the legacy `UpdateProfile` columns and the idempotency receipt as one unit. Every
-//!   operation here that touches exactly one row (`upsert`, `compare_and_set`, `delete`,
-//!   `put_setting_mutation`) is already atomic as a single statement, so this only matters for the
-//!   *multi-row* canonical mutation endpoint, which is not ported.
-//! - Every other `internal/userstore/pgstore/*.go` file (collections, progress, favorites,
-//!   displayprefs, device settings, onboarding, home dismissals, …): per-feature wrappers over
-//!   their own tables, not the generic settings engine this module covers.
-//! - The SQLite `internal/userdb` backend (`userdb.backend=sqlite`) is not ported at all. Nothing
-//!   here is backend-selected; this is the Postgres path only, which Go also treats as primary.
+//! The transaction-scoped writers are in [`super::prefs`].
+//!
+//! The SQLite `internal/userdb` backend (`userdb.backend=sqlite`) is not ported. Nothing here is
+//! backend-selected; this is the Postgres path only, which Go also treats as primary.
 
 use std::sync::Arc;
 
@@ -32,7 +23,7 @@ use super::{Error as UserstoreError, SettingMutationRecord, normalized, validate
 /// `pgstore.settingValueColumns`. `value` reads as `::text`: `jsonb`'s own canonical text form,
 /// identical from Go or Rust since Postgres (not either client) produced it, and scannable without
 /// a JSON library in the loop.
-const SETTING_VALUE_COLUMNS: &str = "key, scope, profile_id, client_family, device_id, library_id, series_id, \
+pub(super) const SETTING_VALUE_COLUMNS: &str = "key, scope, profile_id, client_family, device_id, library_id, series_id, \
      value::text, revision, created_at, updated_at";
 
 /// An error from a Postgres userstore operation.
@@ -79,7 +70,10 @@ impl PostgresUserStore {
             identity_clause(1, id)
         );
         let boxed = identity_params_boxed(self.user_id, id)?;
-        let params: Vec<&(dyn silo_pg::ToSql + Sync)> = boxed.iter().map(|b| b.as_ref()).collect();
+        let params: Vec<&(dyn silo_pg::ToSql + Sync)> = boxed
+            .iter()
+            .map(|b| b.as_ref() as &(dyn silo_pg::ToSql + Sync))
+            .collect();
         let rows = self
             .pool
             .query(&sql, &params)
@@ -309,7 +303,7 @@ impl PostgresUserStore {
             let boxed = identity_params_boxed(self.user_id, id)?;
             let mut params: Vec<&(dyn silo_pg::ToSql + Sync)> =
                 vec![&value_text, &expected_revision];
-            params.extend(boxed.iter().map(|b| b.as_ref()));
+            params.extend(boxed.iter().map(|b| b.as_ref() as &(dyn silo_pg::ToSql + Sync)));
             self.pool.query(&sql, &params).await
         }
         .map_err(|source| Error::Pg {
@@ -329,7 +323,10 @@ impl PostgresUserStore {
             identity_clause(1, id)
         );
         let boxed = identity_params_boxed(self.user_id, id)?;
-        let params: Vec<&(dyn silo_pg::ToSql + Sync)> = boxed.iter().map(|b| b.as_ref()).collect();
+        let params: Vec<&(dyn silo_pg::ToSql + Sync)> = boxed
+            .iter()
+            .map(|b| b.as_ref() as &(dyn silo_pg::ToSql + Sync))
+            .collect();
         let affected = self
             .pool
             .execute(&sql, &params)
@@ -496,11 +493,11 @@ impl resolve::Store for PostgresUserStore {
     }
 }
 
-fn nullable(value: &str) -> Option<&str> {
+pub(super) fn nullable(value: &str) -> Option<&str> {
     if value.is_empty() { None } else { Some(value) }
 }
 
-fn nullable_library_id(value: i64) -> Result<Option<i32>> {
+pub(super) fn nullable_library_id(value: i64) -> Result<Option<i32>> {
     if value == 0 {
         Ok(None)
     } else {
@@ -510,7 +507,7 @@ fn nullable_library_id(value: i64) -> Result<Option<i32>> {
 
 /// `settingConflictTargets`: the partial unique index matching one scope, so a repeated write
 /// updates its own row rather than inserting a duplicate.
-fn conflict_target(scope: &Scope) -> Result<&'static str> {
+pub(super) fn conflict_target(scope: &Scope) -> Result<&'static str> {
     Ok(match scope.as_str() {
         "account" => "(user_id, key) WHERE scope = 'account'",
         "profile" => "(user_id, profile_id, key) WHERE scope = 'profile'",
@@ -528,7 +525,7 @@ fn conflict_target(scope: &Scope) -> Result<&'static str> {
 
 /// `settingIdentityPredicate`: the WHERE fragment addressing exactly one row, with placeholders
 /// starting at `$start`.
-fn identity_clause(start: usize, id: &SettingIdentity) -> String {
+pub(super) fn identity_clause(start: usize, id: &SettingIdentity) -> String {
     match id.scope.as_str() {
         "account" => format!(
             "user_id = ${} AND key = ${} AND scope = ${}",
@@ -589,13 +586,13 @@ fn identity_clause(start: usize, id: &SettingIdentity) -> String {
 /// borrow lifetimes across a `match`. `library_id` binds as `i32`; the `profile_library` CHECK
 /// constraint guarantees it is positive whenever this scope is reached, and `validate_identity`
 /// has already run by the time any caller builds these.
-fn identity_params_boxed(
+pub(super) fn identity_params_boxed(
     user_id: i32,
     id: &SettingIdentity,
-) -> Result<Vec<Box<dyn silo_pg::ToSql + Sync>>> {
+) -> Result<Vec<Box<dyn silo_pg::ToSql + Sync + Send>>> {
     let key = id.key.clone();
     let scope = id.scope.as_str().to_owned();
-    let mut params: Vec<Box<dyn silo_pg::ToSql + Sync>> =
+    let mut params: Vec<Box<dyn silo_pg::ToSql + Sync + Send>> =
         vec![Box::new(user_id), Box::new(key), Box::new(scope)];
     match id.scope.as_str() {
         "profile" => params.push(Box::new(id.profile_id.clone())),
@@ -621,7 +618,7 @@ fn identity_params_boxed(
 }
 
 /// `scanSettingValue`.
-fn scan_setting_value(row: &Row) -> SettingValue {
+pub(super) fn scan_setting_value(row: &Row) -> SettingValue {
     let key: String = row.get(0);
     let scope: String = row.get(1);
     let profile_id: Option<String> = row.get(2);
@@ -651,7 +648,7 @@ fn scan_setting_value(row: &Row) -> SettingValue {
 }
 
 /// `scanSettingMutation`.
-fn scan_setting_mutation(row: &Row) -> SettingMutationRecord {
+pub(super) fn scan_setting_mutation(row: &Row) -> SettingMutationRecord {
     let mutation_id: String = row.get(0);
     let request_hash: String = row.get(1);
     let result: String = row.get(2);
@@ -668,7 +665,7 @@ fn scan_setting_mutation(row: &Row) -> SettingMutationRecord {
 
 /// `timeToString`: `t.UTC().Format(time.RFC3339)` — whole seconds, any sub-second part truncated,
 /// matching Go's layout exactly (see `silo_gocompat::time::GoTime::rfc3339`).
-fn pg_time_to_string(t: std::time::SystemTime) -> String {
+pub(super) fn pg_time_to_string(t: std::time::SystemTime) -> String {
     let dur = t
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or(std::time::Duration::ZERO);

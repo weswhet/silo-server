@@ -6,6 +6,9 @@
 #
 # --proxy-all sends every native row to Go, so any difference at all is the front's. The front's log
 # and origin log land next to the report.
+#
+# The baseline keeps ratelimit.backend at memory. A plan comparison asks one row at a time, so it turns on
+# SILO_FRONT_SPLIT_RATE_BUDGETS to reach the native rows; native-chain-isolation.sh covers the default.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 B_RUN="$CONF_ROOT/.run/stack-b"
@@ -41,6 +44,10 @@ DATABASE_URL="postgres://silo:silo@127.0.0.1:$(b_port CONF_PG_PORT)/silo?sslmode
   SILO_FRONT_WEB_DIST=rust/conformance/baseline/web-dist \
   SILO_FRONT_ORIGIN_LOG="$origin" \
   SILO_FRONT_FORCE_GO="$force_go" \
+  SILO_FRONT_SPLIT_RATE_BUDGETS=1 \
+  SILO_FRONT_GO_WORKDIR=/var/lib/silo \
+  SILO_FRONT_GO_REDIS_URL=redis://redis:6379 \
+  SILO_NODE_NAME=silo-conformance \
   rust/target/debug/silo \
   --front "main=127.0.0.1:18080,http://127.0.0.1:$(b_port CONF_API_PORT)" \
   --front "jellycompat=127.0.0.1:18096,http://127.0.0.1:$(b_port CONF_JF_PORT)" \
@@ -57,7 +64,21 @@ until curl -fsS -o /dev/null http://127.0.0.1:18080/api/v1/ready 2>/dev/null; do
   sleep 0.2
 done
 
+# CONF_ACTIVITY_DIR saves each stage's activity rows for activity-diff.py.
+dump_a=""
+dump_b=""
+if [ -n "${CONF_ACTIVITY_DIR:-}" ]; then
+  mkdir -p "$CONF_ACTIVITY_DIR"
+  : >"$CONF_ACTIVITY_DIR/reference.txt"
+  : >"$CONF_ACTIVITY_DIR/candidate.txt"
+  dump_a="$CONF_SCRIPTS_DIR/activity-dump.sh silo-conformance $CONF_ACTIVITY_DIR/reference.txt;"
+  dump_b="$CONF_SCRIPTS_DIR/activity-dump.sh ${CONF_B_PROJECT:-silo-conformance-b} $CONF_ACTIVITY_DIR/candidate.txt;"
+fi
+
 rc=0
+# The resets wait out the front's 2-second log batches: the front outlives them, and a row it flushed into
+# the restored database would fail the seed digest. Both wait, so both servers start together: their
+# background jobs race the first requests, as catalog export-jobs shows when one starts later.
 rust/target/debug/silo-conformance run \
   --reference "http://127.0.0.1:$CONF_API_PORT" \
   --candidate http://127.0.0.1:18080 \
@@ -67,13 +88,25 @@ rust/target/debug/silo-conformance run \
   --origin-log "$origin" \
   --candidate-kind strangler \
   --reference-forwarded-for 127.0.0.1 \
-  --reset-reference "$CONF_SCRIPTS_DIR/reset.sh --fast >/dev/null" \
-  --reset-candidate "env ${b_env[*]} $CONF_SCRIPTS_DIR/reset.sh --fast >/dev/null" \
+  --reset-reference "sleep 3; $dump_a $CONF_SCRIPTS_DIR/reset.sh --fast >/dev/null" \
+  --reset-candidate "sleep 3; $dump_b env ${b_env[*]} $CONF_SCRIPTS_DIR/reset.sh --fast >/dev/null" \
+  --empty-users-reference "$CONF_SCRIPTS_DIR/empty-users.sh silo-conformance" \
+  --empty-users-candidate "$CONF_SCRIPTS_DIR/empty-users.sh ${CONF_B_PROJECT:-silo-conformance-b}" \
   --source-revision "$(conf_revision)" \
   --out "$out" \
   "$@" || rc=$?
+if [ -n "$dump_a" ]; then
+  sleep 3
+  sh -c "$dump_a $dump_b"
+  python3 "$CONF_SCRIPTS_DIR/activity-diff.py" "$CONF_ACTIVITY_DIR/reference.txt" "$CONF_ACTIVITY_DIR/candidate.txt" \
+    >"$CONF_ACTIVITY_DIR/diff.txt" || true
+fi
 # A command to run against the running front, such as native-chain-traits.sh.
 if [ -n "${CONF_FRONT_AFTER:-}" ]; then
+  # From the seed, not from what the plan's writes left behind.
+  sleep 3
+  "$CONF_SCRIPTS_DIR/reset.sh" --fast >/dev/null
+  env "${b_env[@]}" "$CONF_SCRIPTS_DIR/reset.sh" --fast >/dev/null
   $CONF_FRONT_AFTER || rc=1
 fi
 exit "$rc"

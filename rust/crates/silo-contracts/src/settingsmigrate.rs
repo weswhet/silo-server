@@ -195,6 +195,28 @@ const CARD_OVERLAY_IDS: &[&str] = &[
 
 const CARD_OVERLAY_POSITIONS: &[&str] = &["top-left", "top-right", "bottom-left", "bottom-right"];
 
+/// `withRuntimeMirrors`.
+fn with_runtime_mirrors(
+    planned: Vec<(String, Option<String>)>,
+) -> Result<Vec<(String, Option<String>)>, String> {
+    let mut out = planned.clone();
+    for (key, value) in &planned {
+        match value {
+            None => {
+                if let Some(mirror) = mirror_key(key) {
+                    out.push((mirror.to_string(), None));
+                }
+            }
+            Some(value) => {
+                if let Some(mirror) = mirror_write(key, value)? {
+                    out.push((mirror.key.to_string(), Some(mirror.value)));
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// `settingsmigrate.CanonicalKey`.
 pub fn canonical_key(legacy: &str) -> &str {
     LEGACY_KEY_RENAMES
@@ -596,6 +618,73 @@ impl<'a> Planner<'a> {
     fn validate(&self, def: &Definition, value: &str) -> Result<(), String> {
         def.value_schema
             .validate_value(value.as_bytes(), &self.contract.schemas)
+    }
+
+    /// `Planner.PlanRuntimeValue`: the canonical values one legacy value becomes. `None` clears the row.
+    pub fn plan_runtime_value(
+        &self,
+        legacy_key: &str,
+        raw: &str,
+    ) -> Result<Vec<(String, Option<String>)>, String> {
+        let key = canonical_key(legacy_key);
+        if key == KEY_PREFERRED_QUALITY {
+            let mut result = PlanResult::default();
+            self.add_quality(
+                &mut result,
+                "user_device_settings",
+                "{}",
+                Scope::ProfileDevice,
+                &Row::default(),
+                raw,
+            );
+            if let Some(reject) = result.rejects.first() {
+                return Err(format!("{key}: {}", reject.reason));
+            }
+            let planned = |name: &str| {
+                result
+                    .rows
+                    .iter()
+                    .find(|row| row.key == name)
+                    .map(|row| row.value.clone())
+            };
+            return with_runtime_mirrors(vec![
+                (
+                    KEY_PREFERRED_QUALITY.to_string(),
+                    planned(KEY_PREFERRED_QUALITY),
+                ),
+                (
+                    settingskeys::PLAYBACK_MAX_BITRATE_KBPS.to_string(),
+                    planned(settingskeys::PLAYBACK_MAX_BITRATE_KBPS),
+                ),
+            ]);
+        }
+        let Some(def) = self.lookup(key).filter(|def| def.is_remote()) else {
+            return Err(format!("{key} has no remote contract definition"));
+        };
+        let value = self.coerce(def, raw).map_err(|e| format!("{key}: {e}"))?;
+        with_runtime_mirrors(vec![(key.to_string(), value)])
+    }
+
+    /// `Planner.RuntimeKeys`.
+    pub fn runtime_keys(&self, legacy_key: &str) -> Vec<String> {
+        let key = canonical_key(legacy_key);
+        let keys: Vec<String> = if key == KEY_PREFERRED_QUALITY {
+            vec![
+                KEY_PREFERRED_QUALITY.to_string(),
+                settingskeys::PLAYBACK_MAX_BITRATE_KBPS.to_string(),
+            ]
+        } else if self.lookup(key).is_some_and(|def| def.is_remote()) {
+            vec![key.to_string()]
+        } else {
+            return Vec::new();
+        };
+        let mut out = keys.clone();
+        for owned in &keys {
+            if let Some(mirror) = mirror_key(owned) {
+                out.push(mirror.to_string());
+            }
+        }
+        out
     }
 
     /// `Planner.Plan`: converts one user's legacy rows.

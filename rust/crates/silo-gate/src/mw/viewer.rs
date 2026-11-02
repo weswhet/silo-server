@@ -2,10 +2,12 @@
 //! `access/profile_token.go`, `access/household.go`, `access/groups.go`, `access/quality.go`,
 //! `access/viewer_preferences.go`, and `policy/viewer_resolver.go`.
 
-use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use silo_auth::claims::{Claims, token_type};
 use silo_auth::user::{User, UserError, UserRepository};
+use silo_config::config::UnratedContentPolicy;
 use silo_config::resolve::{self, Context as ResolveContext};
 use silo_http::Request;
 use silo_jwt::{Parser, RegisteredClaims};
@@ -16,7 +18,8 @@ use silo_store::userstore::profiles::{self, Profile};
 
 use super::auth::{ProfileId, get_claims};
 use super::denial::{self, Denial, reason};
-use crate::policy::{Domain, Engine, EvalError, ScopeDecision, ScopeInput};
+use crate::pdp::Pdp;
+use crate::policy::{EvalError, ScopeDecision, ScopeInput};
 
 /// A viewer resolution failure.
 #[derive(Debug, thiserror::Error)]
@@ -42,6 +45,9 @@ pub struct GroupPolicy {
     pub download_allowed: bool,
     pub max_remote_stream_bitrate_kbps: i32,
     pub max_local_stream_bitrate_kbps: i32,
+    /// `None` puts no mask on the account's permissions.
+    pub allowed_permissions: Option<Vec<String>>,
+    pub max_profiles: i32,
 }
 
 /// `access.EffectiveUserPolicy`, the same fields.
@@ -52,6 +58,8 @@ pub struct EffectivePolicy {
     pub download_allowed: bool,
     pub max_remote_stream_bitrate_kbps: i32,
     pub max_local_stream_bitrate_kbps: i32,
+    pub permissions: Vec<String>,
+    pub max_profiles: i32,
 }
 
 /// `access.ParsePlaybackQualityPreset` and `NormalizePlaybackQuality`.
@@ -99,7 +107,40 @@ pub fn apply_group_policy(user: &User, group: Option<&GroupPolicy>) -> Effective
             user.max_local_stream_bitrate_kbps,
             base.max_local_stream_bitrate_kbps,
         ),
+        // `NoGroupPolicy` and `AdminPolicy` carry `DefaultMaxProfiles` or none; see `max_profiles_base`.
+        max_profiles: user
+            .max_profiles
+            .map_or_else(|| max_profiles_base(user, group), |v| v.max(0)),
+        permissions: match group.and_then(|g| g.allowed_permissions.as_deref()) {
+            Some(mask) => intersect(&user.permissions, mask),
+            None => user.permissions.clone(),
+        },
     }
+}
+
+/// The household limit an account inherits: its group's, `NoGroupPolicy`'s, or `AdminPolicy`'s.
+fn max_profiles_base(user: &User, group: Option<&GroupPolicy>) -> i32 {
+    if user.role == "admin" {
+        return ADMIN_MAX_PROFILES;
+    }
+    group.map_or(DEFAULT_MAX_PROFILES, |g| g.max_profiles)
+}
+
+/// `DefaultMaxProfiles`.
+const DEFAULT_MAX_PROFILES: i32 = 5;
+/// `AdminPolicy().MaxProfiles`.
+const ADMIN_MAX_PROFILES: i32 = 0;
+
+/// `intersectStrings`.
+fn intersect(values: &[String], mask: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = values
+        .iter()
+        .map(|p| silo_gocompat::strings::trim_space(p).to_owned())
+        .filter(|p| !p.is_empty() && mask.iter().any(|m| m.trim() == p))
+        .collect();
+    out.sort();
+    out.dedup();
+    out
 }
 
 /// `access.GroupStore`, the `GetPolicyForUser` read.
@@ -118,7 +159,8 @@ impl GroupStore {
             .pool
             .query(
                 "SELECT g.library_ids, g.max_playback_quality, g.download_allowed,
-                    g.max_remote_stream_bitrate_kbps, g.max_local_stream_bitrate_kbps
+                    g.max_remote_stream_bitrate_kbps, g.max_local_stream_bitrate_kbps,
+                    g.allowed_permissions, g.max_profiles::int4
                  FROM users u JOIN access_groups g ON g.id = u.access_group_id WHERE u.id = $1",
                 &[&user_id],
             )
@@ -134,6 +176,8 @@ impl GroupStore {
                 download_allowed: row.try_get(2)?,
                 max_remote_stream_bitrate_kbps: row.try_get(3)?,
                 max_local_stream_bitrate_kbps: row.try_get(4)?,
+                allowed_permissions: row.try_get(5)?,
+                max_profiles: row.try_get(6)?,
             })
         };
         scan()
@@ -188,6 +232,31 @@ impl ProfileTokens {
         }
     }
 
+    /// `ProfileTokenService.Mint`: this service has no ttl, so the token carries no expiry.
+    pub fn mint(
+        &self,
+        user_id: i64,
+        session_id: &str,
+        profile_id: &str,
+        pin_revision: i64,
+        policy_revision: i64,
+    ) -> Result<String, String> {
+        let claims = ProfileJwtClaims {
+            user_id,
+            session_id: session_id.to_owned(),
+            profile_id: profile_id.to_owned(),
+            pin_revision: Some(pin_revision),
+            policy_revision,
+            registered: RegisteredClaims {
+                issued_at: Some(silo_jwt::NumericDate(
+                    (silo_jwt::now_unix_nanos() / 1_000_000_000) as i64,
+                )),
+                ..Default::default()
+            },
+        };
+        silo_jwt::sign_hs256(&claims, &self.secret).map_err(|e| e.to_string())
+    }
+
     pub fn validate(&self, token: &str) -> Result<ProfileTokenClaims, ResolveError> {
         let unverified = |why: String| ResolveError::ProfileUnverified(why);
         if token.is_empty() {
@@ -207,6 +276,26 @@ impl ProfileTokens {
             pin_revision,
             policy_revision: claims.policy_revision,
         })
+    }
+}
+
+impl silo_auth::device::ProfileTokenMinter for ProfileTokens {
+    fn mint(
+        &self,
+        user_id: i64,
+        session_id: &str,
+        profile_id: &str,
+        pin_revision: i64,
+        policy_revision: i64,
+    ) -> Result<String, String> {
+        ProfileTokens::mint(
+            self,
+            user_id,
+            session_id,
+            profile_id,
+            pin_revision,
+            policy_revision,
+        )
     }
 }
 
@@ -251,10 +340,34 @@ fn int_list(raw: &[u8]) -> Vec<i64> {
     ids.into_iter().filter(|id| *id > 0).collect()
 }
 
+/// `parseMetadataLanguageOverrides`: empty is Go's nil. Keys are read in sorted order, so when aliases
+/// collapse, the one that sorts first wins.
+pub fn parse_metadata_language_overrides(raw: &[u8]) -> HashMap<String, String> {
+    let Ok(stored) =
+        silo_gocompat::json::unmarshal::<std::collections::BTreeMap<String, Option<String>>>(raw)
+    else {
+        return HashMap::new();
+    };
+    let mut out = HashMap::new();
+    for (source, target) in stored {
+        let canonical = silo_config::lang::canonical(&source);
+        if canonical.is_empty() || out.contains_key(&canonical) {
+            continue;
+        }
+        if let Some(target) = silo_config::settings::validate::normalize_language_tag(
+            target.as_deref().unwrap_or_default(),
+        ) {
+            out.insert(canonical, target);
+        }
+    }
+    out
+}
+
 #[derive(Default)]
 struct Preferences {
-    disabled_library_ids: Vec<i64>,
+    disabled_library_ids: Option<Vec<i64>>,
     preferred_metadata_language: String,
+    metadata_language_overrides: HashMap<String, String>,
     next_up_mode: String,
     next_up_new_releases_first: bool,
     degraded: bool,
@@ -266,8 +379,9 @@ pub struct ViewerResolver {
     pool: Arc<Pool>,
     groups: GroupStore,
     tokens: ProfileTokens,
-    engine: Arc<Mutex<Engine>>,
+    pdp: Arc<Pdp>,
     defaults: Option<Arc<dyn resolve::ServerSettings>>,
+    unrated: Option<Arc<UnratedContentPolicy>>,
 }
 
 impl ViewerResolver {
@@ -275,22 +389,19 @@ impl ViewerResolver {
         users: UserRepository,
         pool: Arc<Pool>,
         tokens: ProfileTokens,
-        engine: Engine,
+        pdp: Arc<Pdp>,
         defaults: Option<Arc<dyn resolve::ServerSettings>>,
+        unrated: Option<Arc<UnratedContentPolicy>>,
     ) -> Self {
         Self {
             users,
             groups: GroupStore::new(pool.clone()),
             pool,
             tokens,
-            engine: Arc::new(Mutex::new(engine)),
+            pdp,
             defaults,
+            unrated,
         }
-    }
-
-    /// Replaces the engine, the reload half of `policy.System`.
-    pub fn set_engine(&self, engine: Engine) {
-        *self.engine.lock().unwrap_or_else(|e| e.into_inner()) = engine;
     }
 
     /// `ListProfiles`.
@@ -343,12 +454,15 @@ impl ViewerResolver {
         for value in values {
             let raw = value.value.as_bytes().unwrap_or_default();
             match value.key.as_str() {
-                "ui.disabled_library_ids" => out.disabled_library_ids = int_list(raw),
+                "ui.disabled_library_ids" => out.disabled_library_ids = Some(int_list(raw)),
                 "catalog.metadata_language" => {
                     if let Ok(language) = silo_gocompat::json::unmarshal::<String>(raw) {
                         out.preferred_metadata_language =
                             silo_gocompat::strings::trim_space(&language).to_owned();
                     }
+                }
+                "catalog.metadata_language_overrides" => {
+                    out.metadata_language_overrides = parse_metadata_language_overrides(raw);
                 }
                 "ui.next_up_mode" => {
                     if let Ok(mode) = silo_gocompat::json::unmarshal::<String>(raw) {
@@ -367,7 +481,11 @@ impl ViewerResolver {
     }
 
     /// `ViewerResolver.Resolve`.
-    pub async fn resolve(&self, input: &ResolveInput) -> Result<Scope, ResolveError> {
+    pub async fn resolve(
+        &self,
+        input: &ResolveInput,
+        request_id: &str,
+    ) -> Result<Scope, ResolveError> {
         let user_id = i64::from(input.user_id);
         let user = self.users.get_by_id(user_id).await.map_err(|e| match e {
             UserError::NotFound => ResolveError::Other(format!("loading user {user_id}: {e}")),
@@ -394,7 +512,7 @@ impl ViewerResolver {
             profile_verified = verify_profile(profile, input, user.id, &self.tokens)?;
         }
         let disabled = if input.content_access_only {
-            Vec::new()
+            None
         } else {
             preferences.disabled_library_ids.clone()
         };
@@ -404,11 +522,7 @@ impl ViewerResolver {
             user_id: user.id,
             session_id: input.session_id.clone(),
             profile_id: input.profile_id.clone(),
-            account_library_ids: effective
-                .library_ids
-                .as_deref()
-                .map(to_i64)
-                .unwrap_or_default(),
+            account_library_ids: effective.library_ids.as_deref().map(to_i64),
             account_restricted: effective.library_ids.is_some(),
             account_max_quality: effective.max_playback_quality.clone(),
             access_policy_revision: user.access_policy_revision,
@@ -423,70 +537,111 @@ impl ViewerResolver {
             policy_input.profile_max_advisory_age = profile.max_advisory_age;
             policy_input.profile_max_quality = profile.max_playback_quality.clone();
             policy_input.profile_library_limited = profile.library_restrictions_enabled;
-            policy_input.profile_library_ids = to_i64(&profile.allowed_library_ids);
+            policy_input.profile_library_ids = Some(to_i64(&profile.allowed_library_ids));
             policy_input.profile_has_pin = !profile.pin_hash.is_empty();
             policy_input.profile_metadata_lang = preferences.preferred_metadata_language.clone();
         }
-        let decision = self.decide(policy_input).await?;
+        let decision = self.decide(&policy_input, request_id).await?;
         if profile_verified && !decision.profile_verified {
             return Err(ResolveError::ProfileUnverified(
                 "revoked by policy".to_owned(),
             ));
         }
-        Ok(Scope {
-            user_id: user.id as i32,
-            profile_id: input.profile_id.clone(),
-            profile_pin_revision: profile.as_ref().map_or(0, |p| p.pin_revision),
-            allowed_library_ids: if decision.unrestricted {
-                Vec::new()
-            } else {
-                decision.allowed_library_ids.clone()
+        let allow_unrated = match &self.unrated {
+            Some(policy) => policy.allow_unrated_content().await,
+            None => false,
+        };
+        Ok(scope_from_decision(
+            &decision,
+            ScopeFacts {
+                user_id: user.id,
+                profile_id: &input.profile_id,
+                profile: profile.as_ref(),
+                effective: &effective,
+                access_policy_revision: user.access_policy_revision,
+                profile_verified,
+                skip_pin_verification: input.skip_pin_verification,
+                allow_unrated,
             },
-            disabled_library_ids: decision.disabled_library_ids.clone(),
-            libraries_restricted: decision.libraries_restricted,
-            hidden_library_ids: (!decision.hidden_library_ids.is_empty())
-                .then(|| decision.hidden_library_ids.clone()),
-            maturity_limits: MaturityLimits {
-                max_content_rating: decision.max_content_rating.clone(),
-                allow_unrated_content: false,
-                max_advisory_age: decision.max_advisory_age,
-                require_advisory_age: profile.as_ref().is_some_and(|p| p.require_advisory_age)
-                    && decision.max_advisory_age > 0,
-            },
-            max_playback_quality: decision.max_playback_quality.clone(),
-            max_remote_stream_bitrate_kbps: i64::from(effective.max_remote_stream_bitrate_kbps),
-            max_local_stream_bitrate_kbps: i64::from(effective.max_local_stream_bitrate_kbps),
-            preferred_metadata_language: decision.preferred_metadata_language.clone(),
-            policy_revision: user.access_policy_revision,
-            profile_verified: profile_verified && decision.profile_verified,
-            pin_verification_skipped: profile_verified
-                && profile.as_ref().is_some_and(|p| !p.pin_hash.is_empty())
-                && input.skip_pin_verification,
-            next_up_mode: preferences.next_up_mode,
-            next_up_new_releases_first: preferences.next_up_new_releases_first,
-            preferences_degraded: preferences.degraded,
-            ..Scope::default()
-        })
+            preferences,
+        ))
     }
 
-    /// `PDP.ResolveViewerScope`. Regorus is CPU work, so it runs off the async workers.
-    async fn decide(&self, input: ScopeInput) -> Result<ScopeDecision, ResolveError> {
-        let engine = self.engine.clone();
-        let value = serde_json::to_value(&input).map_err(|e| ResolveError::Other(e.to_string()))?;
-        let result = tokio::task::spawn_blocking(move || {
-            engine
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .evaluate::<ScopeDecision>(Domain::Scope, &value)
-        })
-        .await
-        .map_err(|e| ResolveError::Other(e.to_string()))?;
-        result.map_err(|e| match e {
-            EvalError::Eval { ref source, .. } if is_time_limit(source) => {
-                ResolveError::PolicyTimeout
-            }
-            other => ResolveError::Other(format!("resolve viewer scope policy: {other}")),
-        })
+    /// `PDP.ResolveViewerScope`.
+    async fn decide(
+        &self,
+        input: &ScopeInput,
+        request_id: &str,
+    ) -> Result<ScopeDecision, ResolveError> {
+        self.pdp
+            .resolve_viewer_scope(input, request_id)
+            .await
+            .map_err(|e| match e {
+                EvalError::Eval { ref source, .. } if is_time_limit(source) => {
+                    ResolveError::PolicyTimeout
+                }
+                other => ResolveError::Other(format!("resolve viewer scope policy: {other}")),
+            })
+    }
+}
+
+/// What `ResolveFacts` reads besides the decision.
+struct ScopeFacts<'a> {
+    user_id: i64,
+    profile_id: &'a str,
+    profile: Option<&'a Profile>,
+    effective: &'a EffectivePolicy,
+    access_policy_revision: i64,
+    profile_verified: bool,
+    skip_pin_verification: bool,
+    allow_unrated: bool,
+}
+
+/// The tail of `ViewerResolver.ResolveFacts`.
+fn scope_from_decision(
+    decision: &ScopeDecision,
+    facts: ScopeFacts<'_>,
+    preferences: Preferences,
+) -> Scope {
+    let profile = facts.profile;
+    Scope {
+        user_id: facts.user_id as i32,
+        profile_id: facts.profile_id.to_owned(),
+        profile_pin_revision: profile.map_or(0, |p| p.pin_revision),
+        allowed_library_ids: if decision.unrestricted {
+            Vec::new()
+        } else {
+            decision.allowed_library_ids.clone()
+        },
+        disabled_library_ids: decision.disabled_library_ids.clone(),
+        libraries_restricted: decision.libraries_restricted,
+        hidden_library_ids: (!decision.hidden_library_ids.is_empty())
+            .then(|| decision.hidden_library_ids.clone()),
+        maturity_limits: MaturityLimits {
+            max_content_rating: silo_store::rating::stricter_ceiling(
+                &decision.max_content_rating,
+                &decision.max_content_rating_override,
+            )
+            .to_owned(),
+            allow_unrated_content: facts.allow_unrated,
+            max_advisory_age: decision.max_advisory_age,
+            require_advisory_age: profile.is_some_and(|p| p.require_advisory_age)
+                && decision.max_advisory_age > 0,
+        },
+        max_playback_quality: decision.max_playback_quality.clone(),
+        max_remote_stream_bitrate_kbps: i64::from(facts.effective.max_remote_stream_bitrate_kbps),
+        max_local_stream_bitrate_kbps: i64::from(facts.effective.max_local_stream_bitrate_kbps),
+        preferred_metadata_language: decision.preferred_metadata_language.clone(),
+        metadata_language_overrides: preferences.metadata_language_overrides,
+        policy_revision: facts.access_policy_revision,
+        profile_verified: facts.profile_verified && decision.profile_verified,
+        pin_verification_skipped: facts.profile_verified
+            && decision.profile_verified
+            && profile.is_some_and(|p| !p.pin_hash.is_empty())
+            && facts.skip_pin_verification,
+        next_up_mode: preferences.next_up_mode,
+        next_up_new_releases_first: preferences.next_up_new_releases_first,
+        preferences_degraded: preferences.degraded,
     }
 }
 
@@ -512,7 +667,21 @@ pub async fn require_viewer_access(
     let claims = get_claims(r).ok_or_else(|| {
         Denial::unauthorized("Authentication required", reason::AUTHENTICATION_REQUIRED)
     })?;
-    let profile_id = r.header.get_str("X-Profile-Id").to_owned();
+    // A Go string holds any bytes, and these reach a store query that fails on them. Bytes that are not
+    // UTF-8 must not read as no profile, which is the account's whole scope.
+    let Ok(profile_id) = std::str::from_utf8(r.header.get("X-Profile-Id")).map(str::to_owned)
+    else {
+        tracing::warn!(
+            component = "api",
+            "resolving viewer access failed: a profile ID that is not UTF-8"
+        );
+        return Err(Denial::internal("Failed to resolve viewer access"));
+    };
+    let request_id = r
+        .extensions
+        .get::<super::RequestId>()
+        .map(|id| id.0.clone())
+        .unwrap_or_default();
     let input = ResolveInput {
         user_id: claims.user_id as i32,
         session_id: claims.session_id.clone(),
@@ -521,7 +690,7 @@ pub async fn require_viewer_access(
         skip_pin_verification: skips_pin(&claims),
         content_access_only: false,
     };
-    match resolver.resolve(&input).await {
+    match resolver.resolve(&input, &request_id).await {
         Ok(scope) => {
             r.extensions.insert(Arc::new(scope));
             if !profile_id.is_empty() {
@@ -558,7 +727,9 @@ pub async fn optional_profile_viewer_access(
     resolver: &ViewerResolver,
     r: &mut Request,
 ) -> Result<(), Denial> {
-    if silo_gocompat::strings::trim_space(r.header.get_str("X-Profile-Id")).is_empty() {
+    if silo_gocompat::strings::trim_space(&String::from_utf8_lossy(r.header.get("X-Profile-Id")))
+        .is_empty()
+    {
         return Ok(());
     }
     require_viewer_access(resolver, r).await
@@ -585,20 +756,94 @@ pub async fn household_profile_gate(resolver: &ViewerResolver, r: &Request) -> R
     Ok(())
 }
 
-impl GroupStore {
-    /// `GroupPolicy.AllowedPermissions`: `None` means every assignable one.
-    pub async fn allowed_permissions(&self, user_id: i64) -> Result<Option<Vec<String>>, String> {
-        let rows = self
-            .pool
-            .query(
-                "SELECT g.allowed_permissions FROM users u JOIN access_groups g ON g.id = u.access_group_id WHERE u.id = $1",
-                &[&user_id],
-            )
-            .await
-            .map_err(|e| e.to_string())?;
-        match rows.first() {
-            Some(row) => row.try_get(0).map_err(|e| e.to_string()),
-            None => Ok(None),
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn raw_vectors() -> serde_json::Value {
+        let raw = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../conformance/vectors/access/access.json"
+        ))
+        .unwrap();
+        silo_gocompat::json::unmarshal(&raw).unwrap()
+    }
+
+    #[test]
+    fn metadata_language_overrides_match_go() {
+        for case in raw_vectors()["overrides"].as_array().unwrap() {
+            let stored = case["stored"].as_str().unwrap();
+            let want: HashMap<String, String> = case["out"]
+                .as_object()
+                .map(|m| {
+                    m.iter()
+                        .map(|(k, v)| (k.clone(), v.as_str().unwrap().to_owned()))
+                        .collect()
+                })
+                .unwrap_or_default();
+            assert_eq!(
+                parse_metadata_language_overrides(stored.as_bytes()),
+                want,
+                "{stored}"
+            );
         }
+    }
+
+    #[test]
+    fn language_canonical_matches_go() {
+        for pair in raw_vectors()["canonical"].as_array().unwrap() {
+            let (input, want) = (pair[0].as_str().unwrap(), pair[1].as_str().unwrap());
+            assert_eq!(silo_config::lang::canonical(input), want, "{input:?}");
+        }
+    }
+
+    /// `scope.rego`'s `tighten` puts a custom ceiling only in the override field.
+    #[test]
+    fn a_custom_ceiling_reaches_the_scope() {
+        use crate::policy::{Domain, Engine};
+        let source = "package silo_custom.scope\nimport rego.v1\noverride(_, _) := {\"max_content_rating\": \"PG\"}";
+        let custom = std::collections::BTreeMap::from([(Domain::Scope, source.to_owned())]);
+        let mut engine = Engine::with_custom(&custom).unwrap();
+        let input = ScopeInput {
+            schema_version: 1,
+            user_id: 2,
+            profile_verified: true,
+            ..ScopeInput::default()
+        };
+        let decision: ScopeDecision = engine
+            .evaluate(Domain::Scope, &serde_json::to_value(&input).unwrap())
+            .unwrap();
+        assert_eq!(decision.max_content_rating_override, "PG");
+        let effective = EffectivePolicy::default();
+        let scope = scope_from_decision(
+            &decision,
+            ScopeFacts {
+                user_id: 2,
+                profile_id: "",
+                profile: None,
+                effective: &effective,
+                access_policy_revision: 1,
+                profile_verified: true,
+                skip_pin_verification: false,
+                allow_unrated: true,
+            },
+            Preferences::default(),
+        );
+        assert_eq!(scope.maturity_limits.max_content_rating, "PG");
+        assert!(scope.maturity_limits.allow_unrated_content);
+    }
+
+    #[test]
+    fn a_failed_group_read_is_not_a_missing_mask() {
+        let group = GroupPolicy {
+            allowed_permissions: Some(vec!["a".to_owned()]),
+            ..GroupPolicy::default()
+        };
+        let user = User {
+            permissions: vec!["a".to_owned(), "b".to_owned()],
+            ..User::default()
+        };
+        assert_eq!(apply_group_policy(&user, Some(&group)).permissions, ["a"]);
+        assert_eq!(apply_group_policy(&user, None).permissions, ["a", "b"]);
     }
 }

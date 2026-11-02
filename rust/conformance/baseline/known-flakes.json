@@ -100,6 +100,18 @@
         "EtagBehaviour revalidation status"
       ],
       "why": "These are the viewer's first capability read after a stage's restart. sourceBitratePercentile answers one with no bandwidth_probe_target_kbps and starts the read in the background, so the ETag changes once that read lands, and the replay gets 304 or 200 depending on which came first. Seen Go vs Go in both directions: the peer case in a lab run, and #user as 200 against 304 in 1 of 10 resets of both Go stacks."
+    },
+    {
+      "cases": [
+        "api_v1 GET /api/v1/admin/stats/timeseries#admin",
+        "api_v2 GET /api/v2/admin/stats/timeseries#admin",
+        "api_v2 GET /api/v2/admin/stats/timeseries#after_writes",
+        "api_v1 GET /api/v1/admin/stats/timeseries#after_writes"
+      ],
+      "signatures": [
+        "ValueMismatch $.oldest_sample_at"
+      ],
+      "why": "The bucket of a server's first dashboard sample after a reset, which it writes as it boots. Two Go servers restarted on either side of a minute boundary differ: a Go vs Go reset 21 seconds apart read 07:12:00 and 07:13:00."
     }
   ]
 }

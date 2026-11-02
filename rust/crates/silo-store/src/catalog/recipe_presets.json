@@ -1,0 +1,381 @@
+{
+ "admin_curated_list": [
+  {
+   "display_name": "Editor's Picks",
+   "default_params": {
+    "item_ids": []
+   }
+  }
+ ],
+ "anniversaries": [
+  {
+   "display_name": "Anniversaries",
+   "default_params": {
+    "milestone_years": 5
+   }
+  }
+ ],
+ "award_winners": [
+  {
+   "display_name": "Oscar Winners",
+   "default_params": {
+    "award_type": "oscar"
+   }
+  },
+  {
+   "display_name": "Emmy Winners",
+   "default_params": {
+    "award_type": "emmy"
+   }
+  },
+  {
+   "display_name": "Cannes Selections",
+   "default_params": {
+    "award_type": "cannes"
+   }
+  }
+ ],
+ "because_you_watched": [
+  {
+   "display_name": "Because You Watched",
+   "default_params": {
+    "anchor_item_id": ""
+   }
+  }
+ ],
+ "collection": [
+  {
+   "display_name": "Collection",
+   "default_params": {
+    "library_collection_id": ""
+   }
+  }
+ ],
+ "continue_watching": [
+  {
+   "display_name": "Continue Watching",
+   "default_params": {
+    "continue_type": "watching"
+   }
+  },
+  {
+   "display_name": "Continue Listening",
+   "default_params": {
+    "continue_type": "listening"
+   }
+  }
+ ],
+ "critically_acclaimed": [
+  {
+   "display_name": "Critically Acclaimed",
+   "default_params": {
+    "min_score": 8.0
+   }
+  }
+ ],
+ "custom_filter": [],
+ "editorial_spotlight": [
+  {
+   "display_name": "Director Spotlight",
+   "default_params": {
+    "subject_type": "director",
+    "auto_rotate": true,
+    "rotation_cadence": "weekly"
+   }
+  },
+  {
+   "display_name": "Actor Spotlight",
+   "default_params": {
+    "subject_type": "actor",
+    "auto_rotate": true,
+    "rotation_cadence": "weekly"
+   }
+  },
+  {
+   "display_name": "Studio Spotlight",
+   "default_params": {
+    "subject_type": "studio",
+    "auto_rotate": true,
+    "rotation_cadence": "weekly"
+   }
+  },
+  {
+   "display_name": "The 80s",
+   "default_params": {
+    "subject_type": "era",
+    "subject": "1980s"
+   }
+  }
+ ],
+ "favorites": [
+  {
+   "display_name": "Favorites",
+   "default_params": {}
+  }
+ ],
+ "forgotten_favorites": [
+  {
+   "display_name": "Forgotten Favorites",
+   "default_params": {
+    "lookback_days": 365
+   }
+  }
+ ],
+ "format_showcase": [
+  {
+   "display_name": "4K Showcase",
+   "default_params": {
+    "format": "4k"
+   }
+  },
+  {
+   "display_name": "New in 4K",
+   "default_params": {
+    "format": "4k",
+    "sort": "recent"
+   }
+  },
+  {
+   "display_name": "Dolby Vision Picks",
+   "default_params": {
+    "format": "dolby_vision"
+   }
+  },
+  {
+   "display_name": "HDR Highlights",
+   "default_params": {
+    "format": "hdr"
+   }
+  }
+ ],
+ "genre": [],
+ "genre_roulette": [
+  {
+   "display_name": "Genre Roulette",
+   "default_params": {
+    "rotation_cadence": "weekly"
+   }
+  }
+ ],
+ "hidden_gems": [
+  {
+   "display_name": "Hidden Gems",
+   "default_params": {
+    "min_rating": 7.5,
+    "max_play_count": 2
+   }
+  }
+ ],
+ "mood_collection": [
+  {
+   "display_name": "Feel-Good Comedies",
+   "default_params": {
+    "mood": "feel_good"
+   }
+  },
+  {
+   "display_name": "Mind-Bending Sci-Fi",
+   "default_params": {
+    "mood": "mind_bending"
+   }
+  },
+  {
+   "display_name": "Comfort Rewatches",
+   "default_params": {
+    "mood": "comfort"
+   }
+  },
+  {
+   "display_name": "Edge of Your Seat",
+   "default_params": {
+    "mood": "edge_of_seat"
+   }
+  },
+  {
+   "display_name": "Tearjerkers",
+   "default_params": {
+    "mood": "tearjerker"
+   }
+  },
+  {
+   "display_name": "Quiet Sunday Cinema",
+   "default_params": {
+    "mood": "quiet_sunday"
+   }
+  },
+  {
+   "display_name": "Date Night",
+   "default_params": {
+    "mood": "date_night"
+   }
+  },
+  {
+   "display_name": "After Midnight",
+   "default_params": {
+    "mood": "after_midnight"
+   }
+  }
+ ],
+ "most_watched": [
+  {
+   "display_name": "Most Watched This Week",
+   "default_params": {
+    "window": "week"
+   }
+  },
+  {
+   "display_name": "Most Watched This Month",
+   "default_params": {
+    "window": "month"
+   }
+  }
+ ],
+ "new_to_library": [
+  {
+   "display_name": "New to Library This Month",
+   "default_params": {
+    "lookback_days": 30
+   }
+  }
+ ],
+ "next_in_series": [
+  {
+   "display_name": "Next in Series",
+   "default_params": {}
+  }
+ ],
+ "next_up": [
+  {
+   "display_name": "Next Up",
+   "default_params": {}
+  }
+ ],
+ "profile_activity_feed": [
+  {
+   "display_name": "What Others Just Watched",
+   "default_params": {
+    "profile_id": ""
+   }
+  }
+ ],
+ "random": [
+  {
+   "display_name": "Surprise Me",
+   "default_params": {}
+  }
+ ],
+ "recently_added": [
+  {
+   "display_name": "Recently Added",
+   "default_params": {}
+  }
+ ],
+ "recently_released": [
+  {
+   "display_name": "New Releases",
+   "default_params": {}
+  }
+ ],
+ "recommended_for_you": [
+  {
+   "display_name": "Recommended For You",
+   "default_params": {}
+  }
+ ],
+ "returning_shows": [
+  {
+   "display_name": "Returning Shows",
+   "default_params": {
+    "lookback_days": 30
+   }
+  }
+ ],
+ "seasonal_themed": [
+  {
+   "display_name": "Seasonal Picks",
+   "default_params": {
+    "enabled_themes": [
+     "halloween",
+     "christmas",
+     "new_year",
+     "valentines",
+     "st_patricks",
+     "easter",
+     "thanksgiving",
+     "summer_blockbuster",
+     "saturday_morning"
+    ]
+   }
+  },
+  {
+   "display_name": "Family Movie Night",
+   "default_params": {
+    "enabled_themes": [
+     "family_movie_night"
+    ]
+   }
+  }
+ ],
+ "short_watches": [
+  {
+   "display_name": "Short \u0026 Sweet",
+   "default_params": {
+    "max_minutes": 95
+   }
+  }
+ ],
+ "similar_users_liked": [
+  {
+   "display_name": "Profiles Like You Enjoyed",
+   "default_params": {}
+  }
+ ],
+ "taste_match": [
+  {
+   "display_name": "Top Picks Today",
+   "default_params": {}
+  }
+ ],
+ "trending_discover": [
+  {
+   "display_name": "TMDB Trending Today",
+   "default_params": {
+    "source": "tmdb",
+    "window": "day"
+   }
+  },
+  {
+   "display_name": "TMDB Trending This Week",
+   "default_params": {
+    "source": "tmdb",
+    "window": "week"
+   }
+  }
+ ],
+ "trending_on_server": [
+  {
+   "display_name": "Trending Now (24h)",
+   "default_params": {
+    "window": "24h"
+   }
+  },
+  {
+   "display_name": "Trending This Week",
+   "default_params": {
+    "window": "7d"
+   }
+  },
+  {
+   "display_name": "Trending This Month",
+   "default_params": {
+    "window": "30d"
+   }
+  }
+ ],
+ "watchlist": [
+  {
+   "display_name": "Watchlist",
+   "default_params": {}
+  }
+ ]
+}

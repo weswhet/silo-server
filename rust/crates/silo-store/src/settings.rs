@@ -308,7 +308,7 @@ pub const SENSITIVE_SETTING_KEYS: &[&str] = &[
     "notifications.push_relay_api_key",
 ];
 
-fn is_sensitive(key: &str) -> bool {
+pub fn is_sensitive(key: &str) -> bool {
     SENSITIVE_SETTING_KEYS.contains(&key)
 }
 

@@ -13,28 +13,9 @@
 //!
 //! # What is and is not ported here
 //!
-//! Only the trait and its error/result types are ported — no implementation of it. Specifically:
-//!
-//! - **`LocalProvider`** (password sign-in against the local Postgres `users` table, with bcrypt
-//!   via `internal/auth/passwordhash`, break-glass admin bypass, the server-wide local-login
-//!   switch, and the constant-time-against-enumeration placeholder-hash comparison) is **not**
-//!   ported. It needs a `UserRepository` (`internal/auth/repository.go`, 829 Go lines — account
-//!   CRUD, not attempted this session) and the password-hash/placeholder machinery
-//!   (`internal/auth/password_hash.go`, `internal/auth/local_login_policy.go`), neither of which
-//!   exists in this crate yet. **Every local password sign-in stays served by Go** behind the
-//!   strangler proxy until that work lands.
-//! - **`PluginProvider`** (sign-in through an LDAP/SSO/etc. plugin, over the plugin host's gRPC
-//!   client) is **not** ported, and structurally cannot be until `silo-plugins`/`pluginhost`
-//!   exist as crates (milestone order, same as the critique's finding). **Every plugin-backed
-//!   sign-in stays served by Go** for the same reason — not merely "not yet ported" but blocked
-//!   on a dependency that does not exist in this workspace.
-//! - [`crate::session::SessionRepository::is_valid`] is already a complete, independent port of
-//!   the one piece both providers' `ValidateSession` delegates to (`LocalProvider.ValidateSession`
-//!   and `PluginProvider`'s equivalent both just call `sessions.IsValid`), so a caller that only
-//!   needs session validation — not authentication — already has a working Rust path.
-//!
-//! A Rust implementation of [`AuthProvider`] added in a later session, for either kind of
-//! provider, slots in without changing this trait or any caller already written against it.
+//! Only the trait and its error and result types live here. The local provider's sign-in is
+//! [`crate::service::AuthService`]. `PluginProvider` needs the plugin host, which has no Rust port, so
+//! the rows that would reach one stay on Go while any auth plugin is configured.
 
 use std::future::Future;
 
@@ -116,6 +97,33 @@ pub fn looks_like_email(identifier: &str) -> bool {
             .is_some_and(|ip| ip.chars().all(is_dtext) && ip.parse::<std::net::IpAddr>().is_ok());
     }
     is_dot_atom(domain)
+}
+
+/// `auth.ValidateEmail`'s verdict: one bare mailbox with a dotted domain, or a bracketed address.
+#[allow(clippy::result_unit_err)]
+pub fn validate_email(email: &str) -> Result<(), ()> {
+    let trimmed = silo_gocompat::strings::trim_space(email);
+    let at = trimmed.rfind('@').ok_or(())?;
+    let domain = &trimmed[at + 1..];
+    if let Some(literal) = domain.strip_prefix('[') {
+        let inner = literal.strip_suffix(']').ok_or(())?;
+        // `netip.ParseAddr` with no zone.
+        if inner.contains('%') || inner.parse::<std::net::IpAddr>().is_err() {
+            return Err(());
+        }
+        return if is_dot_atom(&trimmed[..at]) {
+            Ok(())
+        } else {
+            Err(())
+        };
+    }
+    if !is_dot_atom(&trimmed[..at]) || !is_dot_atom(domain) {
+        return Err(());
+    }
+    match domain.rfind('.') {
+        Some(dot) if dot > 0 && dot < domain.len() - 1 => Ok(()),
+        _ => Err(()),
+    }
 }
 
 /// `net/mail`'s `isVchar`: visible ASCII, or any multi-byte character.

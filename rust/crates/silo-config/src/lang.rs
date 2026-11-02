@@ -905,3 +905,18 @@ pub fn canonical_country(value: &str) -> String {
     }
     get_region_id(trimmed.as_bytes()).unwrap_or(trimmed)
 }
+
+/// `lang.Canonical`: the base language, or the trimmed lowercase input when it does not parse.
+pub fn canonical(value: &str) -> String {
+    let trimmed = silo_gocompat::strings::to_lower(silo_gocompat::strings::trim_space(value));
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    match language_parse(&trimmed) {
+        // A private-use tag has no base language.
+        Some(tag) if tag != "und" && !tag.starts_with("x-") => {
+            tag.split('-').next().unwrap_or(&tag).to_owned()
+        }
+        _ => trimmed,
+    }
+}

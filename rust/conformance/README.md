@@ -89,8 +89,18 @@ rust/target/debug/silo-conformance run \
 `SILO_FRONT_FORCE_GO=all` sends every native row to Go too, which is the proxy-all run: every route
 is then `not_ported`, and any difference at all is the front's.
 
+`scripts/native-chain-traits.sh` (run as `CONF_FRONT_AFTER`) and `scripts/native-chain-isolation.sh` cover
+what a request plan cannot: non-UTF-8 headers, policy and settings reloads, the decision log, the live tail,
+and the deployments whose credentialed rows stay on Go.
+
 `baseline/web-dist` is the stub frontend the baseline image embeds. `scripts/front-compare.sh` runs
 all of the above, with `--proxy-all` for the proxy-all run.
+
+`CONF_ACTIVITY_DIR=<dir>` makes `front-compare.sh` also save each stage's `activity_log` rows, grouped by method,
+route pattern, path, status, accounts, and audit action, and write `diff.txt` with `scripts/activity-diff.py`. The
+differ reads those rows only as feeds, so this is what shows a wrong route pattern or a request logged twice. Two
+differences here are not the front's: rows dropped with a batch when a first-run setup case removes the users they
+name, which Go's batch writer does too, and `GET /` rows from a local process on the host that probes new listeners.
 
 ## Peer lab
 
@@ -286,6 +296,13 @@ reference feed, and these count under `reference_matches_fault`, not as escapes.
 The proxy only touches requests carrying the runner's `--tag-cases` header, so logins and
 liveness probes stay honest and each fault maps to one case.
 
+## Multi-request flows
+
+`src/auth_flows.rs` adds cases that use what an earlier answer gave each side (`Case.capture_facts`), so sign-in
+rows reach a success and read-after-write through Go-served rows is compared. A case with `needs_empty_users`
+runs `scripts/empty-users.sh` on both stacks first, for first-run setup, and the next stage's reset restores the
+seed. Facts named `flow_*` survive the liveness check's fresh login.
+
 ## Baselines
 
 `baseline/expected.json` is recorded from Go vs Go over several runs:
@@ -331,7 +348,8 @@ These lower what a green result proves. Parity counts the first group as not mat
 - HTTPS and response compression are not exercised: the client neither speaks TLS nor
   sends `Accept-Encoding`.
 - Activity log rows are only visible through feeds and `admin/ips`, so a route that stops writing one
-  shows nowhere unless it carries a user. Native rows on the front write none.
+  shows nowhere unless it carries a user. `native-chain-traits.sh` reads the rows, the decision log, and
+  the live tail for the native rows.
 - `reset.sh --fast` restores Postgres and Redis only. Files the run writes to the data
   volume, such as catalog exports, survive into later runs.
 - Generated request bodies fill required fields only, so optional-field behaviour is only

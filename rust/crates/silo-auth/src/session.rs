@@ -132,7 +132,7 @@ pub fn is_session_not_found(err: &Error) -> bool {
 
 type Result<T> = std::result::Result<T, Error>;
 
-const SESSION_COLUMNS: &str = "id, user_id, device_name, COALESCE(device_id, '') AS device_id, \
+pub(crate) const SESSION_COLUMNS: &str = "id, user_id, device_name, COALESCE(device_id, '') AS device_id, \
     COALESCE(device_platform, '') AS device_platform, COALESCE(host(ip_address), '') AS ip_address, \
     created_at, expires_at, revoked_at, impersonator_user_id, impersonation_started_at, identity_id, \
     provider_since, last_seen_at, purpose, COALESCE(bound_profile_id, '') AS bound_profile_id, \
@@ -143,7 +143,7 @@ fn int4(op: &'static str, value: i64) -> Result<i32> {
     i32::try_from(value).map_err(|_| Error::Int4OutOfRange { op, value })
 }
 
-fn scan_session(op: &'static str, row: &Row) -> Result<AuthSession> {
+pub(crate) fn scan_session(op: &'static str, row: &Row) -> Result<AuthSession> {
     let scan = |source: silo_pg::DriverError| Error::Scan {
         op,
         source: PgError::from(source),

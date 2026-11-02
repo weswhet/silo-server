@@ -28,6 +28,8 @@ pub struct LogFields {
     pub user_id: Option<i64>,
     pub impersonator_user_id: Option<i64>,
     pub session_id: String,
+    /// The status of each audited mutation this request committed (`LogContext.Committed`).
+    pub committed_statuses: Vec<i32>,
 }
 
 /// The shared cell the outermost logging middleware reads back.
@@ -163,7 +165,7 @@ pub fn declared_profile_id(r: &Request) -> String {
     if !id.is_empty() {
         return id;
     }
-    r.header.get_str("X-Profile-Id").to_owned()
+    String::from_utf8_lossy(r.header.get("X-Profile-Id")).into_owned()
 }
 
 /// `ErrCurrentCredentialInvalid` and friends.
@@ -502,7 +504,7 @@ impl AuthGate {
 
 /// `RequireProfile`.
 pub fn require_profile(r: &mut Request) -> Result<(), Denial> {
-    let id = r.header.get_str("X-Profile-Id").to_owned();
+    let id = String::from_utf8_lossy(r.header.get("X-Profile-Id")).into_owned();
     if id.is_empty() {
         return Err(Denial::profile_header_required());
     }

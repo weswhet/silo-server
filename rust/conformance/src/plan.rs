@@ -179,16 +179,16 @@ fn accepts_body(route: &Route) -> bool {
     }
 }
 
-struct Builder<'a> {
-    src: &'a Sources,
-    index: BTreeMap<(Surface, String, String), usize>,
+pub(crate) struct Builder<'a> {
+    pub(crate) src: &'a Sources,
+    pub(crate) index: BTreeMap<(Surface, String, String), usize>,
     cases: Vec<Case>,
     skipped: Vec<Skip>,
     seen_ids: BTreeSet<String>,
 }
 
 impl Builder<'_> {
-    fn push(&mut self, mut c: Case) {
+    pub(crate) fn push(&mut self, mut c: Case) {
         let route = &self.src.routes[c.route];
         let mut id = format!("{}#{}", route.key(), c.name);
         let mut n = 2;
@@ -201,14 +201,20 @@ impl Builder<'_> {
         self.cases.push(c);
     }
 
-    fn skip(&mut self, what: String, reason: impl Into<String>) {
+    pub(crate) fn skip(&mut self, what: String, reason: impl Into<String>) {
         self.skipped.push(Skip {
             what,
             reason: reason.into(),
         });
     }
 
-    fn blank(&self, route_idx: usize, name: &str, phase: Phase, identity: Identity) -> Case {
+    pub(crate) fn blank(
+        &self,
+        route_idx: usize,
+        name: &str,
+        phase: Phase,
+        identity: Identity,
+    ) -> Case {
         let route = &self.src.routes[route_idx];
         Case {
             id: String::new(),
@@ -224,6 +230,7 @@ impl Builder<'_> {
             },
             path: route.path.clone(),
             query: required_query(self.src, route),
+            raw_query: None,
             headers: required_headers(self.src, route),
             body: None,
             content_type: None,
@@ -247,6 +254,8 @@ impl Builder<'_> {
             host: None,
             settle_on: None,
             wait_ms: 0,
+            capture_facts: Vec::new(),
+            needs_empty_users: false,
         }
     }
 
@@ -417,6 +426,8 @@ pub fn build(src: &Sources) -> Plan {
     add_slash_variants(&mut b);
     add_doc_examples(&mut b);
     add_peer_cases(&mut b);
+    crate::settings_flows::add(&mut b);
+    crate::auth_flows::add(&mut b);
     let mut plan = Plan {
         cases: std::mem::take(&mut b.cases),
         skipped: std::mem::take(&mut b.skipped),
@@ -765,6 +776,9 @@ fn add_doc_examples(b: &mut Builder) {
 /// the spelling is the only thing authenticating the request.
 /// Rows behind the native chain, each with its credential and profile refusals. A row in no such list
 /// still gets the generated anonymous cases.
+/// The contract's public operations in the native rows: they get the v2 guards' cases too.
+const PUBLIC_V2_ROWS: &[&str] = &["/api/v2/openapi.json", "/api/v2/auth/device/capability"];
+
 const CHAIN_ROWS: &[(Surface, &str, bool)] = &[
     (Surface::ApiV1, "/api/v1/auth/me", false),
     (Surface::ApiV1, "/api/v1/auth/account/capability", true),
@@ -773,10 +787,139 @@ const CHAIN_ROWS: &[(Surface, &str, bool)] = &[
     (Surface::ApiV2, "/api/v2/account/password/capability", true),
     (Surface::ApiV2, "/api/v2/images/capabilities", true),
     (Surface::ApiV2, "/api/v2/user/libraries/capabilities", true),
+    (Surface::ApiV1, "/api/v1/auth/sessions", false),
+    (Surface::ApiV2, "/api/v2/auth/sessions", false),
+    (Surface::ApiV2, "/api/v2/auth/sessions/capabilities", false),
+    (Surface::ApiV1, "/api/v1/api-keys/", false),
+    (Surface::ApiV1, "/api/v1/api-keys/scopes", false),
+    (Surface::ApiV2, "/api/v2/api-keys", false),
+    (Surface::ApiV2, "/api/v2/api-keys/scopes", false),
+    (Surface::ApiV1, "/api/v1/admin/api-keys", true),
+    (Surface::ApiV2, "/api/v2/admin/api-keys", true),
+    (Surface::ApiV2, "/api/v2/admin/api-keys/capabilities", true),
+    (Surface::ApiV1, "/api/v1/settings/", true),
+    (Surface::ApiV1, "/api/v1/settings/overlay-config", true),
+    (Surface::ApiV1, "/api/v1/settings/contract", true),
+    (Surface::ApiV2, "/api/v2/settings/contract", true),
+    (Surface::ApiV2, "/api/v2/settings/overlay-config", true),
+    (Surface::ApiV1, "/api/v1/profiles/", true),
+    (Surface::ApiV2, "/api/v2/profiles", true),
+    (Surface::ApiV1, "/api/v1/admin/settings", true),
+    (Surface::ApiV2, "/api/v2/admin/settings", true),
+    (Surface::ApiV1, "/api/v1/libraries/", true),
+    (
+        Surface::ApiV1,
+        "/api/v1/libraries/metadata-match-queue",
+        true,
+    ),
+    (Surface::ApiV1, "/api/v1/libraries/provider-defaults", true),
+    (Surface::ApiV1, "/api/v1/libraries/roots", true),
+    (Surface::ApiV1, "/api/v1/libraries/skipped-roots", true),
+    (Surface::ApiV1, "/api/v1/libraries/stale-ids", true),
+    (Surface::ApiV1, "/api/v1/libraries/unmatched-items", true),
+    (
+        Surface::ApiV1,
+        "/api/v1/libraries/{id}/metadata-match-queue",
+        true,
+    ),
+    (Surface::ApiV1, "/api/v1/libraries/{id}/providers", true),
+    (Surface::ApiV1, "/api/v1/library-playback-prefs/", true),
+    (Surface::ApiV1, "/api/v1/library/{id}/layout", true),
+    (Surface::ApiV1, "/api/v1/user/libraries", true),
+    (Surface::ApiV2, "/api/v2/libraries", true),
+    (Surface::ApiV2, "/api/v2/libraries/capabilities", true),
+    (
+        Surface::ApiV2,
+        "/api/v2/libraries/metadata-match-queue",
+        true,
+    ),
+    (Surface::ApiV2, "/api/v2/libraries/provider-defaults", true),
+    (
+        Surface::ApiV2,
+        "/api/v2/libraries/realtime-monitoring",
+        true,
+    ),
+    (Surface::ApiV2, "/api/v2/libraries/roots", true),
+    (Surface::ApiV2, "/api/v2/libraries/skipped-roots", true),
+    (Surface::ApiV2, "/api/v2/libraries/stale-ids", true),
+    (Surface::ApiV2, "/api/v2/libraries/unmatched-items", true),
+    (
+        Surface::ApiV2,
+        "/api/v2/libraries/{id}/metadata-match-queue",
+        true,
+    ),
+    (Surface::ApiV2, "/api/v2/libraries/{id}/providers", true),
+    (Surface::ApiV2, "/api/v2/library-jobs/{job_id}", true),
+    (Surface::ApiV2, "/api/v2/library-playback-prefs", true),
+    (Surface::ApiV2, "/api/v2/library/{id}/layout", true),
+    (Surface::ApiV2, "/api/v2/user/libraries", true),
 ];
 
+/// `queryGuard`, Huma's unknown-parameter refusal, and the v2 representation guards.
+fn add_v2_guards(b: &mut Builder, i: usize, identity: Identity) {
+    let query = |name: &str, spelled: &str, b: &mut Builder| {
+        let mut c = b.blank(i, &format!("chain:query_{name}"), Phase::Reads, identity);
+        c.raw_query = Some(spelled.to_string());
+        b.push(c);
+    };
+    query("unknown", "nope=1", b);
+    query("empty_key", "=1", b);
+    query("empty_pairs", "&&", b);
+    query("bad_percent", "nope=%zz", b);
+    query("bad_percent_key", "%zz=1", b);
+    query("semicolon", "a=1;b=2", b);
+    query("plus_key", "a+b=1", b);
+    query("token", "token=not.a.token", b);
+    let headers: [(&str, &str, &str); 5] = [
+        ("accept_unacceptable", "Accept", "text/plain"),
+        ("accept_q0", "Accept", "application/json;q=0"),
+        ("identity_forbidden", "Accept-Encoding", "identity;q=0"),
+        ("star_forbidden", "Accept-Encoding", "*;q=0"),
+        ("request_encoded", "Content-Encoding", "gzip"),
+    ];
+    for (name, header, value) in headers {
+        let mut c = b.blank(i, &format!("chain:{name}"), Phase::Reads, identity);
+        c.headers.push((header.to_string(), value.to_string()));
+        b.push(c);
+    }
+}
+
+/// Library jobs the seed holds (`normalize.sql`), one of each state a poll reports. A plan run's own jobs
+/// race the workers that finish them, so only terminal ones can be compared.
+fn add_seeded_library_jobs(b: &mut Builder) {
+    const PATH: &str = "/api/v2/library-jobs/{job_id}";
+    let Some(&i) = b
+        .index
+        .get(&(Surface::ApiV2, "GET".to_string(), PATH.to_string()))
+    else {
+        return;
+    };
+    for job in [
+        "01CONF0RMANCEJ0B000000REFR",
+        "01CONF0RMANCEJ0B000000FAIL",
+        "01CONF0RMANCEJ0B000000DELE",
+    ] {
+        let mut c = b.blank(i, &format!("seeded:{job}"), Phase::Reads, Identity::Admin);
+        c.path = format!("/api/v2/library-jobs/{job}");
+        b.push(c);
+    }
+}
+
 fn add_native_chain_refusals(b: &mut Builder) {
+    add_seeded_library_jobs(b);
     const NO_SUCH_PROFILE: &str = "c0f00000-0000-4000-8000-0000000000ff";
+    for path in PUBLIC_V2_ROWS {
+        match b
+            .index
+            .get(&(Surface::ApiV2, "GET".to_string(), path.to_string()))
+        {
+            Some(&i) => add_v2_guards(b, i, Identity::Anon),
+            None => b.skip(
+                format!("api_v2 GET {path}"),
+                "chain row is not in the sources",
+            ),
+        }
+    }
     for &(surface, path, viewer) in CHAIN_ROWS {
         let Some(&i) = b.index.get(&(surface, "GET".to_string(), path.to_string())) else {
             b.skip(
@@ -785,6 +928,9 @@ fn add_native_chain_refusals(b: &mut Builder) {
             );
             continue;
         };
+        if surface == Surface::ApiV2 {
+            add_v2_guards(b, i, Identity::User);
+        }
         let credentials = [
             ("anonymous", Identity::Anon, None),
             ("malformed_scheme", Identity::Anon, Some("Basic abc")),
@@ -806,11 +952,9 @@ fn add_native_chain_refusals(b: &mut Builder) {
             b.push(c);
         }
         let mut c = b.blank(i, "chain:query_token_refused", Phase::Reads, Identity::Anon);
-        if surface == Surface::ApiV1 {
-            c.query
-                .push(("token".to_string(), "not.a.token".to_string()));
-            b.push(c);
-        }
+        c.query
+            .push(("token".to_string(), "not.a.token".to_string()));
+        b.push(c);
         let profiles = [
             ("wrong_profile", Identity::UserJwt, NO_SUCH_PROFILE),
             (

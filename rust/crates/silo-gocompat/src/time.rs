@@ -395,6 +395,17 @@ impl GoTime {
         }
     }
 
+    /// The instant as a system clock reading.
+    pub fn to_system_time(self) -> std::time::SystemTime {
+        let epoch = std::time::UNIX_EPOCH;
+        if self.unix_secs >= 0 {
+            epoch + std::time::Duration::new(self.unix_secs as u64, self.nanos)
+        } else {
+            epoch - std::time::Duration::from_secs(self.unix_secs.unsigned_abs())
+                + std::time::Duration::from_nanos(u64::from(self.nanos))
+        }
+    }
+
     /// `Time.UTC`.
     pub const fn to_utc(self) -> Self {
         Self {
@@ -406,7 +417,12 @@ impl GoTime {
 
     /// The current time in UTC.
     pub fn now_utc() -> Self {
-        match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+        Self::from_system_time(std::time::SystemTime::now())
+    }
+
+    /// A system clock reading, in UTC.
+    pub fn from_system_time(time: std::time::SystemTime) -> Self {
+        match time.duration_since(std::time::UNIX_EPOCH) {
             Ok(d) => Self::from_unix(d.as_secs() as i64, d.subsec_nanos()),
             Err(e) => {
                 let d = e.duration();

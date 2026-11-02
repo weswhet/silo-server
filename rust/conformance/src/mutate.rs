@@ -542,8 +542,8 @@ fn mutate_json(ctx: &mut Ctx, doc: &mut Value, status: u16, name: &str) -> bool 
             ctx,
             doc,
             |_, v| {
-                v.as_array()
-                    .is_some_and(|a| a.len() >= 2 && a.iter().any(|e| e != &a[0]))
+                // Reversing a palindrome changes nothing, so it would be no fault at all.
+                v.as_array().is_some_and(|a| a.iter().ne(a.iter().rev()))
             },
             |v| {
                 let mut a = v.as_array()?.clone();

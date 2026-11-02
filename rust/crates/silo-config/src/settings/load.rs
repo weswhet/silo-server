@@ -57,7 +57,12 @@ fn resource_url(name: &str) -> String {
     let cwd = std::env::current_dir()
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_default();
-    format!("file://{cwd}/{name}")
+    {
+        // The schema's location appears in validation messages, and Go derives it from its working
+        // directory. A front beside a Go server in another directory names Go's.
+        let cwd = std::env::var("SILO_FRONT_GO_WORKDIR").unwrap_or_else(|_| cwd.to_string());
+        format!("file://{cwd}/{name}")
+    }
 }
 
 fn load_embedded() -> Result<Loaded, String> {

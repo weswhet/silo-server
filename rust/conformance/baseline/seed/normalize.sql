@@ -81,4 +81,21 @@ FROM (SELECT content_id, row_number() OVER (ORDER BY content_id) AS n FROM media
 WHERE i.content_id = o.content_id;
 UPDATE media_files f SET created_at = '2026-01-01T00:00:00Z'::timestamptz + (f.id * interval '1 hour');
 
+-- Rows only a long run would otherwise leave behind, so the library reads have something to show. They are all
+-- terminal, which nothing picks up by itself. Queue rows cannot be seeded: the matcher revives parked rows at start.
+INSERT INTO admin_jobs (id, job_type, status, created_by_user_id, request_payload, result_payload,
+                        progress_current, progress_total, requested_at, started_at, completed_at, updated_at)
+VALUES
+  ('01CONF0RMANCEJ0B000000REFR', 'library_refresh', 'completed', 1, '{"library_id":1}',
+   '{"library_id":1,"refreshed_ok":2,"refreshed_failed":1,"pipeline_ok":1,"pipeline_failed":0}', 3, 3,
+   '2026-01-01T00:00:00Z', '2026-01-01T00:00:01.5Z', '2026-01-01T00:00:02Z', '2026-01-01T00:00:02Z'),
+  ('01CONF0RMANCEJ0B000000FAIL', 'library_refresh', 'failed', 1, '{"library_id":2}', '{}', 1, 2,
+   '2026-01-01T00:00:00Z', '2026-01-01T00:00:01Z', '2026-01-01T00:00:02Z', '2026-01-01T00:00:02Z'),
+  ('01CONF0RMANCEJ0B000000DELE', 'delete_library', 'cancelled', 1, '{"library_id":9}', '{}', 0, 0,
+   '2026-01-01T00:00:00Z', NULL, '2026-01-01T00:00:02Z', '2026-01-01T00:00:02Z');
+INSERT INTO stale_media_ids (content_id, provider, provider_id, first_seen_at, last_seen_at)
+VALUES
+  ('movie-tmdb-9000001', 'tmdb', '9000001', '2026-01-01T00:00:00Z', '2026-01-01T00:00:03Z'),
+  ('series-tvdb-9000003', 'imdb', 'tt0000999', '2026-01-01T00:00:00Z', '2026-01-01T00:00:02Z');
+
 COMMIT;

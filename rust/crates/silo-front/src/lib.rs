@@ -22,6 +22,7 @@ use std::time::Duration;
 
 use silo_http::{BoxHandler, Server, ServerConfig, handler_fn};
 use silo_pg::{Pool, PoolConfig};
+use silo_runtime::cache::event_bus::{EventBus, new_event_bus};
 use tokio::net::{TcpListener, lookup_host};
 
 use crate::frontend::{BrandingSource, WebDist};
@@ -30,9 +31,6 @@ use crate::origin::OriginLog;
 use crate::relay::ListenerCtx;
 use crate::rows::{ROWS, Surface, native_count};
 use crate::trust::{DEFAULT_TRUSTED_PROXIES, SETTING_TRUSTED_PROXIES, TrustList};
-
-/// How often the trusted list is re-read. Go reloads on a settings event; this polls.
-const TRUST_POLL: Duration = Duration::from_secs(2);
 
 /// One public listener and the Go listener behind it.
 #[derive(Clone, Debug)]
@@ -88,16 +86,13 @@ pub struct FrontConfig {
     pub origin_log: Option<PathBuf>,
     /// `SECRET_KEY`: decrypts `auth.jwt_secret`. Without it the rows behind a credential stay on Go.
     pub secret_key: Option<String>,
-    /// `REDIS_URL`: the limiter's counters, shared with Go. Without it they stay in this process.
+    /// `SILO_FRONT_SPLIT_RATE_BUDGETS`: serve rows natively on Go's memory rate limit backend, with
+    /// counters of its own. Only a comparison of one row at a time can use this.
+    pub split_rate_budgets: bool,
+    /// `REDIS_URL`: the limiter's counters and the event bus, shared with Go.
     pub redis_url: Option<String>,
     /// `SILO_FRONT_FORCE_GO`: comma-separated surfaces to send back to Go, or `all`.
     pub force_go: Vec<Surface>,
-}
-
-impl FrontConfig {
-    fn trusted_list(&self) -> String {
-        self.trusted_proxies.clone().unwrap_or_default()
-    }
 }
 
 /// Parses `SILO_FRONT_FORCE_GO`.
@@ -186,13 +181,28 @@ pub async fn start(cfg: FrontConfig) -> Result<Vec<(String, SocketAddr)>, String
     };
     let trust = Arc::new(TrustList::parse(DEFAULT_TRUSTED_PROXIES)?);
     trust.update(&initial)?;
+    // The bus Go publishes settings and policy changes on. Without Redis nothing reaches this process.
+    let bus: Option<Arc<dyn EventBus>> = cfg.redis_url.as_ref().map(|url| {
+        Arc::from(new_event_bus(&silo_config::config::RedisConfig {
+            url: url.clone(),
+            db: String::new(),
+        }))
+    });
     if let Some(pool) = &pool {
         let pool = pool.clone();
         let trust = trust.clone();
+        let (signal, poll) = native::chain::admin_reload_signal(
+            bus.as_ref(),
+            &[native::chain::EVENT_SETTINGS_CHANGED],
+        )
+        .await;
         tokio::spawn(async move {
-            let mut tick = tokio::time::interval(TRUST_POLL);
+            let mut tick = tokio::time::interval(poll);
             loop {
-                tick.tick().await;
+                tokio::select! {
+                    _ = tick.tick() => {}
+                    () = signal.notified() => {}
+                }
                 match read_trusted(&pool).await.and_then(|raw| trust.update(&raw)) {
                     Ok(()) => {}
                     Err(e) => {
@@ -214,15 +224,17 @@ pub async fn start(cfg: FrontConfig) -> Result<Vec<(String, SocketAddr)>, String
         stack: None,
     };
     if let (Some(pool), Some(secret)) = (&pool, &cfg.secret_key) {
-        let stack = native::chain::build(
+        inputs.stack = native::chain::build(
             Arc::new(pool.clone()),
-            secret,
-            cfg.redis_url.as_deref(),
-            cfg.trusted_list(),
+            native::chain::BuildOptions {
+                secret_key: secret,
+                redis_url: cfg.redis_url.as_deref(),
+                bus: bus.clone(),
+                split_rate_budgets: cfg.split_rate_budgets,
+            },
         )
         .await
         .map_err(|e| format!("building the request chain: {e}"))?;
-        inputs.stack = Some(stack);
     }
     match (&cfg.web_dist, &pool) {
         (Some(dir), Some(pool)) => {

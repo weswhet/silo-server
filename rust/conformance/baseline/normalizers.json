@@ -28,7 +28,10 @@
         "$.room_access_token",
         "$.user.token",
         "$.user.accessToken",
-        "$.user.refreshToken"
+        "$.user.refreshToken",
+        "$.tokens.access_token",
+        "$.tokens.refresh_token",
+        "$.profile_token"
       ]
     },
     {
@@ -70,7 +73,9 @@
         "$..LastLoginDate",
         "$..LastActivityDate",
         "$..DateAdded",
-        "$..DateLastActivity"
+        "$..DateLastActivity",
+        "$..session_expires_at",
+        "$..revoked_at"
       ]
     },
     {
@@ -422,14 +427,15 @@
         "$.sessions[*].id",
         "$.items[*].id",
         "$.items[*].session_id",
-        "$[*].session_id"
+        "$[*].session_id",
+        "$.current_session.id"
       ],
       "alias": true
     },
     {
       "id": "api-key-material",
       "why": "Generated API keys are random.",
-      "route": "(GET|POST) /api/v[12]/(admin/(api-keys|users/\\{[^}]+\\}/api-keys)|api-keys/?)",
+      "route": "(GET|POST|PUT) /api/v[12]/(admin/(api-keys(/\\{[^}]+\\}(/tier)?)?|users/\\{[^}]+\\}/api-keys)|api-keys/?)",
       "format": {
         "kind": "regex",
         "pattern": "^sa_([0-9a-f]{8}(?:[0-9a-f]{56})?)$"
@@ -535,7 +541,7 @@
     {
       "id": "device-pairing-match-code",
       "why": "The phrase shown to compare devices is two random words.",
-      "route": "POST /api/v[12]/auth/device/start",
+      "route": "(POST /api/v[12]/auth/device/start|GET /api/v[12]/auth/device)",
       "format": {
         "kind": "regex",
         "pattern": "^([a-z]+) ([a-z]+)$",
@@ -555,6 +561,20 @@
       },
       "json_paths": [
         "$.verification_uri_complete"
+      ]
+    },
+    {
+      "id": "device-pairing-ip-hint",
+      "why": "The masked address of the device that opened the request, which is each server's own Docker bridge gateway.",
+      "route": "GET /api/v[12]/auth/device",
+      "not_in_peer_lab": true,
+      "format": {
+        "kind": "regex",
+        "pattern": "^([0-9]+\\.[0-9]+)\\.\\*\\.\\*$",
+        "any_length": true
+      },
+      "json_paths": [
+        "$.ip_address_hint"
       ]
     },
     {
@@ -902,6 +922,20 @@
         "kind": "same_length"
       },
       "body": true
+    },
+    {
+      "id": "legacy-device-setting-updated-at",
+      "why": "The legacy device settings store timestamps its rows with the server clock, in Postgres' text form, to the microsecond. A Go vs Go run differs here on every write.",
+      "route": "GET /api/v1/settings/(effective|subtitle_appearance/effective)",
+      "format": {
+        "kind": "regex",
+        "pattern": "^(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?\\+00)$",
+        "any_length": true
+      },
+      "json_paths": [
+        "$.updated_at",
+        "$.settings[*].updated_at"
+      ]
     }
   ]
 }

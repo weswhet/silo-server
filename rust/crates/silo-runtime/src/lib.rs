@@ -14,4 +14,5 @@ pub mod cache;
 pub mod database;
 pub mod idgen_lease;
 pub mod locks;
+pub mod logstream;
 pub mod mail;

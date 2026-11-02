@@ -16,10 +16,10 @@
 //!   of a deliberately small Rego subset. It never accepts what Go refuses, and it refuses some
 //!   sources Go accepts; `rego_check`'s module doc lists which.
 //!
-//! Not ported: [`decisionlog`], the Postgres-backed [`store`]/[`document_mutations`] CRUD for admin
+//! Not ported: the Postgres-backed [`store`]/[`document_mutations`] CRUD for admin
 //! policy sources, [`viewer_resolver`] (the Go-side caller that builds a [`ScopeInput`] from
-//! catalog/userstore/access state — those crates don't exist yet), and [`system`]/[`pdp`] (the
-//! service wiring `NewEngineFromStore`/`Reload`/`PDP.CheckAction` etc. around the engine). Those
+//! catalog/userstore/access state — those crates don't exist yet), and [`system`] (the
+//! service wiring `NewEngineFromStore`/`Reload` etc. around the engine). Those
 //! each need crates this session's dependency graph doesn't have (catalog, userstore wiring,
 //! Postgres document storage for custom sources).
 //!
@@ -160,9 +160,9 @@ impl Engine {
 
     /// `policy.NewEngineWithCustom`. `custom` maps an active domain to its administrator-authored
     /// Rego source; a domain missing from the map uses the vendor stub. Every source goes through
-    /// [`compile_check`] first. Unlike Go's boot path, a refused source is an error rather than a
-    /// skip: callers that want to keep booting call [`compile_check`] per source and pass only the
-    /// ones that pass, as Go's `Reload` effectively does.
+    /// [`compile_check`] first, and a refused source is an error, as in Go's `Reload`. [`compile_check`]
+    /// refuses sources OPA accepts, so a caller cannot treat a refusal as Go's skip: it has to stop
+    /// answering for that policy (`silo_front::native::chain`).
     pub fn with_custom(custom: &BTreeMap<Domain, String>) -> Result<Self, EvalError> {
         for (domain, source) in custom {
             compile_check(domain.as_str(), source)
@@ -244,12 +244,13 @@ pub struct ScopeInput {
     pub user_id: i64,
     pub session_id: String,
     pub profile_id: String,
-    pub account_library_ids: Vec<i64>,
+    /// Nil marshals to `null`, so a policy sees what it sees from Go.
+    pub account_library_ids: Option<Vec<i64>>,
     pub account_restricted: bool,
     #[serde(rename = "account_max_playback_quality")]
     pub account_max_quality: String,
     pub access_policy_revision: i64,
-    pub disabled_library_ids: Vec<i64>,
+    pub disabled_library_ids: Option<Vec<i64>>,
     pub profile_present: bool,
     #[serde(rename = "profile_max_content_rating")]
     pub profile_max_rating: String,
@@ -259,7 +260,7 @@ pub struct ScopeInput {
     #[serde(rename = "profile_library_restricted")]
     pub profile_library_limited: bool,
     #[serde(rename = "profile_allowed_library_ids")]
-    pub profile_library_ids: Vec<i64>,
+    pub profile_library_ids: Option<Vec<i64>>,
     pub profile_has_pin: bool,
     pub profile_verified: bool,
     #[serde(rename = "profile_preferred_metadata_language")]

@@ -34,6 +34,14 @@ pub struct User {
     pub break_glass: bool,
 }
 
+/// The columns `allColumns` names that the request path reads, for a statement in this crate.
+pub(crate) const USER_COLUMNS: &str = COLUMNS;
+
+/// `scanUser`.
+pub(crate) fn scan_user(row: &Row) -> Result<User, silo_pg::DriverError> {
+    scan(row)
+}
+
 /// `email` is citext, which the driver reads only through a cast.
 const COLUMNS: &str = "id, email::text, username, password_hash, local_password_login_enabled, password_change_required, role, permissions, enabled,
     library_ids, max_playback_quality, access_policy_revision,
@@ -90,6 +98,55 @@ pub struct UserRepository {
 impl UserRepository {
     pub fn new(pool: Arc<Pool>) -> Self {
         Self { pool }
+    }
+
+    /// `Repository.GetByUsername`.
+    pub async fn get_by_username(&self, username: &str) -> Result<User, UserError> {
+        let sql = format!("SELECT {COLUMNS} FROM users WHERE username = $1::text::citext");
+        let name = silo_gocompat::strings::trim_space(username);
+        let rows = self
+            .pool
+            .query(&sql, &[&name])
+            .await
+            .map_err(|e| UserError::Store(e.to_string()))?;
+        let row = rows.first().ok_or(UserError::NotFound)?;
+        scan(row).map_err(|e| UserError::Store(e.to_string()))
+    }
+
+    /// `Repository.GetByEmail`.
+    pub async fn get_by_email(&self, email: &str) -> Result<User, UserError> {
+        let sql = format!("SELECT {COLUMNS} FROM users WHERE email = $1::text::citext");
+        let email = silo_gocompat::strings::trim_space(email);
+        let rows = self
+            .pool
+            .query(&sql, &[&email])
+            .await
+            .map_err(|e| UserError::Store(e.to_string()))?;
+        let row = rows.first().ok_or(UserError::NotFound)?;
+        scan(row).map_err(|e| UserError::Store(e.to_string()))
+    }
+
+    /// `LookupLogin`: a username first, then, for what looks like an address, an email.
+    pub async fn lookup_login(&self, identifier: &str) -> Result<User, UserError> {
+        match self.get_by_username(identifier).await {
+            Err(UserError::NotFound) if crate::provider::looks_like_email(identifier) => {
+                self.get_by_email(identifier).await
+            }
+            other => other,
+        }
+    }
+
+    /// `Repository.Count`.
+    pub async fn count(&self) -> Result<i64, UserError> {
+        let rows = self
+            .pool
+            .query("SELECT COUNT(*) FROM users", &[])
+            .await
+            .map_err(|e| UserError::Store(e.to_string()))?;
+        rows.first()
+            .ok_or(UserError::NotFound)?
+            .try_get(0)
+            .map_err(|e| UserError::Store(e.to_string()))
     }
 
     /// `Repository.GetByID`.

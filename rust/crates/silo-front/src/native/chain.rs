@@ -1,16 +1,27 @@
 //! The request chain: `useBaseMiddleware`, the v1 route groups' gates, and the v2 `classGate`,
 //! `writeProblem`, and `prepareCapabilityOperation` rendering around them.
 
-use std::sync::{Arc, Mutex};
-use std::time::{Instant, SystemTime};
+use std::collections::HashMap;
+use std::panic::{AssertUnwindSafe, resume_unwind};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant, SystemTime};
 
+use futures_util::FutureExt;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use silo_api_v2::problem::{self as p, Problem, ProblemError};
 use silo_auth::api_key_store::ApiKeyRepository;
+use silo_auth::attempts::{
+    AttemptLimiter, MemoryAttempts, PROFILE_PIN_POLICY, QUICK_CONNECT_CODE_POLICY,
+    SIGN_IN_NAME_POLICY,
+};
 use silo_auth::claims::{Claims, JwtService};
+use silo_auth::device::DeviceLoginService;
+use silo_auth::service::AuthService;
 use silo_auth::session::SessionRepository;
 use silo_auth::user::UserRepository;
+use silo_core::redis::{CHANNEL_ADMIN, Event};
 use silo_gate::clientip::{self, RequestContext, RequestFields, Resolver};
 use silo_gate::limiter::{Limiter, RateLimit, RateRequest, RedisLimiter, config_from_settings};
 use silo_gate::mw::activity::{self, ActivityWriter, LogEntry};
@@ -20,17 +31,58 @@ use silo_gate::mw::logging::{Metrics, request_logger_skips};
 use silo_gate::mw::policy_gates::PolicyGates;
 use silo_gate::mw::viewer::{self, GroupStore, ProfileTokens, ViewerResolver};
 use silo_gate::mw::{AuthGate, Denial, RequestId, new_request_id};
+use silo_gate::pdp::{DecisionLogger, Pdp};
 use silo_gate::policy::Engine;
 use silo_gate::ratelimit::MemoryLimiter;
+use silo_gate::settings_cache::{admin_defaults, unrated_content};
 use silo_http::chi::{Middleware, middleware_fn};
 use silo_http::{
-    BoxFuture, BoxHandler, Header, Hijacked, Request, ResponseWriter, WriteError, handler_fn,
+    AbortHandler, BoxFuture, BoxHandler, Header, Hijacked, Request, ResponseWriter, WriteError,
+    handler_fn,
 };
 use silo_pg::Pool;
+use silo_runtime::cache::event_bus::EventBus;
+use silo_runtime::logstream::Hub;
 use silo_store::settings::{EncryptedSettingsRepo, ServerSettingsRepo};
 
-/// How often settings the chain reads are re-read. Go reloads on a settings event; this polls.
-const SETTINGS_POLL: std::time::Duration = std::time::Duration::from_secs(2);
+/// `cache.EventSettingsChanged` and `EventPolicyChanged`.
+pub const EVENT_SETTINGS_CHANGED: &str = "settings_changed";
+pub const EVENT_POLICY_CHANGED: &str = "policy_changed";
+/// `cache.EventAuthProvidersChanged` and `EventPluginsChanged`, which rebuild Go's provider list.
+pub const EVENT_AUTH_PROVIDERS_CHANGED: &str = "auth_providers_changed";
+pub const EVENT_PLUGINS_CHANGED: &str = "plugins_changed";
+/// `cache.EventUserSessionsRevoked`.
+pub const EVENT_USER_SESSIONS_REVOKED: &str = "user_sessions_revoked";
+
+/// `nodeconfig`'s and `policy.System`'s poll fallback, for an event this process missed.
+pub const POLL_WITH_BUS: Duration = Duration::from_secs(60);
+/// Without Redis, Go has no way to tell this process anything, and it applies a change at once.
+pub const POLL_WITHOUT_BUS: Duration = Duration::from_secs(2);
+
+/// A reload signal from `silo:admin`, and how often to re-read anyway. With no bus, or when the
+/// subscription fails, the short poll is all there is.
+pub async fn admin_reload_signal(
+    bus: Option<&Arc<dyn EventBus>>,
+    kinds: &'static [&'static str],
+) -> (Arc<tokio::sync::Notify>, Duration) {
+    let notify = Arc::new(tokio::sync::Notify::new());
+    let Some(bus) = bus else {
+        return (notify, POLL_WITHOUT_BUS);
+    };
+    let signal = notify.clone();
+    let handler = Arc::new(move |event: Event| {
+        if kinds.contains(&event.event_type.as_str()) {
+            signal.notify_one();
+        }
+    });
+    match bus.subscribe(CHANNEL_ADMIN, handler).await {
+        Ok(()) => (notify, POLL_WITH_BUS),
+        Err(e) => {
+            tracing::warn!(component = "front", error = %e, "subscribing to the admin channel failed; polling");
+            (notify, POLL_WITHOUT_BUS)
+        }
+    }
+}
 
 /// One gate. Lists run in order, as a chi group's `Use` calls do.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -104,18 +156,230 @@ pub struct Stack {
     pub resolver: Arc<Resolver>,
     pub metrics: Metrics,
     pub node_id: String,
+    /// An active custom policy could not be loaded, so this process cannot answer for it.
+    policy_refused: AtomicBool,
+    pub jwt: Arc<JwtService>,
+    pub sign_in: AuthService,
+    pub devices: DeviceLoginService,
+    pub api_keys: ApiKeyRepository,
+    pub profile_tokens: ProfileTokens,
+    pub cursors: silo_api_v2::cursor::Cursors,
+    pub hub: Arc<Hub>,
+    pub bus: Option<Arc<dyn EventBus>>,
+    /// `config.NewAdminDefaults`.
+    pub admin_defaults: Option<Arc<dyn silo_config::resolve::ServerSettings>>,
+    /// `SettingsRepo`, decrypting.
+    pub encrypted: Arc<EncryptedSettingsRepo>,
+    /// `deps.ProfilePINAttempts`.
+    pub pin_attempts: Arc<dyn AttemptLimiter>,
+    /// The artwork signer's secret, and whether avatars live in the local store.
+    pub artwork_secret: String,
+    pub local_operational_store: bool,
+    /// `cfg.S3.MetadataPresignExpiry`, read at startup as Go's signer takes it.
+    pub artwork_url_ttl: Duration,
+    /// `cfg.Matcher.TVSeriesRootQueueEnabled()`, read at startup as `NewRouter` reads it.
+    pub tv_series_root_queue: bool,
+    /// An auth plugin binding or a linked identity exists, so sign-in needs the plugin host, on Go.
+    external_sign_in: AtomicBool,
 }
 
-/// Builds the chain from the reference's database.
+/// `config.parseDuration`: a whole number of days, or Go's own form.
+fn parse_config_duration(raw: &str) -> Option<i64> {
+    let raw = silo_gocompat::strings::trim_space(raw);
+    if let Some(days) = raw.strip_suffix('d')
+        && let Ok(days) = days.parse::<i64>()
+    {
+        return days.checked_mul(86_400_000_000_000);
+    }
+    silo_gocompat::time::parse_duration(raw).ok().map(|d| d.0)
+}
+
+/// Whether `blobstore.Open` puts avatars in the local store: no private bucket and a local backend.
+/// S3 presigning is not ported, so a deployment with a bucket keeps the profile rows on Go.
+async fn local_operational_store(settings: &ServerSettingsRepo) -> bool {
+    let mut keys = vec![
+        "s3.private_bucket",
+        "s3.public_bucket",
+        "s3.operational_bucket",
+    ];
+    keys.push("artwork.storage_backend");
+    let Ok(values) = settings.get_many(&keys).await else {
+        return false;
+    };
+    let set = |key: &str| values.get(key).is_some_and(|v| !v.trim().is_empty());
+    let backend = values
+        .get("artwork.storage_backend")
+        .map_or("", |v| v.trim());
+    let env_bucket = ["S3_BUCKET", "S3_PUBLIC_BUCKET", "S3_PRIVATE_BUCKET"]
+        .iter()
+        .any(|name| std::env::var(name).is_ok_and(|v| !v.is_empty()));
+    !env_bucket
+        && !set("s3.private_bucket")
+        && !set("s3.public_bucket")
+        && !set("s3.operational_bucket")
+        && !silo_gocompat::strings::equal_fold(backend, "s3")
+}
+
+/// `auth.access_token_expiry` and `auth.refresh_token_expiry`, with `EffectiveAdminSettings`' defaults.
+fn token_expiries(all: &HashMap<String, String>) -> (i64, i64) {
+    const HOUR: i64 = 3_600_000_000_000;
+    let read = |key: &str, default: i64| {
+        all.get(key)
+            .and_then(|v| parse_config_duration(v))
+            .filter(|v| *v > 0)
+            .unwrap_or(default)
+    };
+    (
+        read("auth.access_token_expiry", 8 * HOUR),
+        read("auth.refresh_token_expiry", 30 * 24 * HOUR),
+    )
+}
+
+/// Whether sign-in depends on a plugin provider: any binding, or an identity a re-check would consult.
+async fn external_sign_in_configured(pool: &Pool) -> Result<bool, String> {
+    let rows = pool
+        .query(
+            "SELECT EXISTS(SELECT 1 FROM plugin_auth_bindings) OR EXISTS(SELECT 1 FROM plugin_auth_identities)",
+            &[],
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    match rows.first() {
+        Some(row) => row
+            .try_get(0)
+            .map_err(|e: silo_pg::DriverError| e.to_string()),
+        None => Ok(true),
+    }
+}
+
+/// `cfg.UserDB.Backend`, `cfg.RateLimit.Backend` and what the front does with them: Rust reads profiles
+/// from Postgres only, and native rows need the rate limit counters Go has. Each reason a stack cannot
+/// answer for Go keeps every row behind a credential on Go.
+fn why_not_native(
+    all: &HashMap<String, String>,
+    redis: bool,
+    split_budgets: bool,
+) -> Option<String> {
+    let setting = |key: &str, default: &'static str| -> String {
+        all.get(key)
+            .filter(|v| !v.is_empty())
+            .cloned()
+            .unwrap_or_else(|| default.to_owned())
+    };
+    let userdb = setting("userdb.backend", "postgres");
+    if userdb != "postgres" {
+        return Some(format!(
+            "userdb.backend is {userdb}, and native rows read profiles from Postgres only"
+        ));
+    }
+    if split_budgets || !config_from_settings(all).enabled {
+        return None;
+    }
+    let backend = setting("ratelimit.backend", "memory");
+    if backend != "redis" {
+        return Some(format!(
+            "ratelimit.backend is {backend}, so Go's counters are in its process and native rows would add a second budget"
+        ));
+    }
+    if !redis {
+        return Some(
+            "ratelimit.backend is redis but REDIS_URL is not set, so native rows would add a second budget"
+                .to_owned(),
+        );
+    }
+    None
+}
+
+/// What [`build`] takes from the process's environment.
+pub struct BuildOptions<'a> {
+    pub secret_key: &'a str,
+    pub redis_url: Option<&'a str>,
+    pub bus: Option<Arc<dyn EventBus>>,
+    /// `SILO_FRONT_SPLIT_RATE_BUDGETS`: keep rows native on the memory backend, with separate counters.
+    /// For a comparison that compares one row at a time.
+    pub split_rate_budgets: bool,
+}
+
+/// `clientip.DefaultTrustedProxies` when the setting is empty, as `registerClientIPConfigReload` does.
+fn trusted_cidrs(raw: Option<&String>) -> Result<Vec<clientip::IpNet>, String> {
+    let raw = raw.map_or("", String::as_str);
+    let list = if raw.is_empty() {
+        clientip::DEFAULT_TRUSTED_PROXIES
+    } else {
+        raw
+    };
+    clientip::parse_cidrs(list).map_err(|e| e.0)
+}
+
+/// `cfg.Policy`'s decision log settings.
+fn apply_decision_log_settings(logger: &DecisionLogger, all: &HashMap<String, String>) {
+    logger.set_verbosity(
+        all.get("policy.decision_log_verbosity")
+            .map_or("", String::as_str),
+    );
+    if let Some(Ok(rate)) = all
+        .get("policy.decision_log_scope_sample_rate")
+        .filter(|v| !v.is_empty())
+        .map(|v| silo_gocompat::strings::trim_space(v).parse())
+    {
+        logger.set_scope_sample_rate(rate);
+    }
+}
+
+/// `resolveNodeIdentity`.
+fn node_identity() -> String {
+    for name in ["SILO_NODE_NAME", "NODE_NAME"] {
+        if let Some(value) = std::env::var_os(name).filter(|v| !v.is_empty()) {
+            return value.to_string_lossy().into_owned();
+        }
+    }
+    let mut buf = [0u8; 256];
+    // SAFETY: the pointer and length describe `buf`, which outlives the call.
+    let rc = unsafe { libc::gethostname(buf.as_mut_ptr().cast(), buf.len()) };
+    if rc != 0 {
+        return String::new();
+    }
+    let end = buf.iter().position(|b| *b == 0).unwrap_or(buf.len());
+    String::from_utf8_lossy(&buf[..end]).into_owned()
+}
+
+/// Another process only shows a row whose source is not its own, so this cannot be Go's node name.
+pub(super) fn hub_source(node_id: &str) -> String {
+    format!("{node_id}-front-{}", std::process::id())
+}
+
+/// Builds the chain from the reference's database. `Ok(None)` means this deployment's rows behind a
+/// credential stay on Go.
 pub async fn build(
     pool: Arc<Pool>,
-    secret_key: &str,
-    redis_url: Option<&str>,
-    trusted_fallback: String,
-) -> Result<Arc<Stack>, String> {
+    options: BuildOptions<'_>,
+) -> Result<Option<Arc<Stack>>, String> {
     let cipher =
-        silo_core::secret::Cipher::new(secret_key.as_bytes()).map_err(|e| e.to_string())?;
+        silo_core::secret::Cipher::new(options.secret_key.as_bytes()).map_err(|e| e.to_string())?;
     let settings = ServerSettingsRepo::new(pool.clone());
+    let all = settings.get_all().await.map_err(|e| e.to_string())?;
+    let artwork_url_ttl = all
+        .get("s3.metadata_presign_expiry")
+        .and_then(|v| parse_config_duration(v))
+        .filter(|ns| *ns > 0)
+        .map_or(Duration::from_secs(4 * 3600), |ns| {
+            Duration::from_nanos(ns as u64)
+        });
+    let setting_true = |key: &str, default: bool| {
+        all.get(key).filter(|v| !v.is_empty()).map_or(default, |v| {
+            matches!(v.as_str(), "1" | "t" | "T" | "TRUE" | "true" | "True")
+        })
+    };
+    let tv_series_root_queue = setting_true("matcher.enable_tv_series_root_queue", true)
+        || setting_true("matcher.enable_tv_series_group_queue", false);
+    if let Some(why) = why_not_native(
+        &all,
+        options.redis_url.is_some(),
+        options.split_rate_budgets,
+    ) {
+        tracing::warn!(component = "front", reason = %why, "rows behind a credential stay on Go");
+        return Ok(None);
+    }
     let encrypted = EncryptedSettingsRepo::new(settings.clone(), cipher);
     let jwt_secret = encrypted
         .get("auth.jwt_secret")
@@ -124,20 +388,58 @@ pub async fn build(
     if jwt_secret.is_empty() {
         return Err("auth.jwt_secret is empty".to_owned());
     }
-    let jwt = Arc::new(JwtService::new(jwt_secret.clone().into_bytes(), 0, 0));
+    let (access_expiry, refresh_expiry) = token_expiries(&all);
+    let jwt = Arc::new(JwtService::new(
+        jwt_secret.clone().into_bytes(),
+        access_expiry,
+        refresh_expiry,
+    ));
     let users = UserRepository::new(pool.clone());
     let api_keys = ApiKeyRepository::new(pool.clone());
     let sessions = SessionRepository::new(pool.clone());
-    let auth = AuthGate::new(jwt, sessions, api_keys, users.clone());
+    let auth = AuthGate::new(
+        jwt.clone(),
+        sessions.clone(),
+        api_keys.clone(),
+        users.clone(),
+    );
+    let node_id = node_identity();
 
-    let engine = load_engine(&pool).await?;
-    let gate_engine = Arc::new(Mutex::new(load_engine(&pool).await?));
+    let logger = DecisionLogger::start(pool.clone(), node_id.clone());
+    apply_decision_log_settings(&logger, &all);
+    // `System.initialEngine`: a store that cannot be read or a bundle that does not load must not stop
+    // the process, so it starts on the vendor policy, and the rows it governs go to Go until it can read
+    // the stored policy.
+    let loaded = load_policy(&pool).await;
+    let (scope, permission, generation, refused) = match loaded {
+        Ok((engines, generation)) => (engines.0, engines.1, generation, false),
+        Err(e) => {
+            tracing::error!(component = "policy", error = %e, "custom policy not loaded; rows behind a credential stay on Go until it loads");
+            let vendor = |e: silo_gate::policy::EvalError| e.to_string();
+            (
+                Engine::new().map_err(vendor)?,
+                Engine::new().map_err(vendor)?,
+                0,
+                true,
+            )
+        }
+    };
+    let pdp = Arc::new(Pdp::new(
+        scope,
+        permission,
+        generation,
+        Some(logger.clone()),
+    ));
+    let defaults = admin_defaults(settings.clone());
+    let refresher = defaults.clone();
+    tokio::spawn(async move { refresher.run().await });
     let viewer = Arc::new(ViewerResolver::new(
         users.clone(),
         pool.clone(),
-        ProfileTokens::new(jwt_secret.into_bytes()),
-        engine,
-        None,
+        ProfileTokens::new(jwt_secret.clone().into_bytes()),
+        pdp.clone(),
+        Some(Arc::new(defaults.clone())),
+        Some(Arc::new(unrated_content(settings.clone()))),
     ));
     let groups = GroupStore::new(pool.clone());
     let gates = PolicyGates {
@@ -145,15 +447,14 @@ pub async fn build(
         users: users.clone(),
         groups: groups.clone(),
         pool: pool.clone(),
-        engine: gate_engine.clone(),
+        pdp: pdp.clone(),
     };
 
-    let all = settings.get_all().await.map_err(|e| e.to_string())?;
     // `cfg.RateLimit.Backend`: the configured backend, memory by default, as Go chooses at startup.
     let backend = all
         .get("ratelimit.backend")
         .map_or("memory", String::as_str);
-    let limiter = match redis_url.filter(|_| backend == "redis") {
+    let limiter = match options.redis_url.filter(|_| backend == "redis") {
         Some(url) => {
             let config = silo_config::config::RedisConfig {
                 url: url.to_owned(),
@@ -167,21 +468,78 @@ pub async fn build(
         None => Limiter::Memory(MemoryLimiter::new()),
     };
     let rate = RateLimit::new(limiter, config_from_settings(&all));
+    let resolver = Arc::new(Resolver::new(trusted_cidrs(
+        all.get(clientip::SETTING_TRUSTED_PROXIES),
+    )?));
 
-    let raw = all
-        .get(clientip::SETTING_TRUSTED_PROXIES)
-        .cloned()
-        .filter(|v| !v.is_empty())
-        .unwrap_or(trusted_fallback);
-    let list = if raw.is_empty() {
-        clientip::DEFAULT_TRUSTED_PROXIES
-    } else {
-        &raw
+    // `NewSignInNameAttemptLimiter` and `NewQuickConnectCodeAttemptLimiter`: shared through Redis whenever
+    // the deployment has it, whatever the request limiter's backend.
+    let attempts = |policy| -> Arc<dyn AttemptLimiter> { Arc::new(MemoryAttempts::new(policy)) };
+    let (sign_in_attempts, quick_connect_attempts, pin_attempts) = match options.redis_url {
+        Some(url) => {
+            let config = silo_config::config::RedisConfig {
+                url: url.to_owned(),
+                db: String::new(),
+            };
+            let conn = silo_runtime::cache::connect(&config, "api")
+                .await
+                .map_err(|e| format!("connecting to Redis: {e}"))?;
+            let shared = |policy| -> Arc<dyn AttemptLimiter> {
+                Arc::new(silo_gate::limiter::RedisAttempts::new(conn.clone(), policy))
+            };
+            (
+                shared(SIGN_IN_NAME_POLICY),
+                shared(QUICK_CONNECT_CODE_POLICY),
+                shared(PROFILE_PIN_POLICY),
+            )
+        }
+        None => (
+            attempts(SIGN_IN_NAME_POLICY),
+            attempts(QUICK_CONNECT_CODE_POLICY),
+            attempts(PROFILE_PIN_POLICY),
+        ),
     };
-    let resolver = Arc::new(Resolver::new(clientip::parse_cidrs(list).map_err(|e| e.0)?));
+    let profile_tokens = ProfileTokens::new(jwt_secret.clone().into_bytes());
+    let sign_in = AuthService::new(
+        pool.clone(),
+        jwt.clone(),
+        sessions,
+        users.clone(),
+        Some(sign_in_attempts),
+    );
+    let devices = DeviceLoginService::new(
+        pool.clone(),
+        users.clone(),
+        jwt.clone(),
+        Arc::new(profile_tokens.clone()),
+        Some(quick_connect_attempts),
+    );
+    let external_sign_in = external_sign_in_configured(&pool)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!(component = "front", error = %e, "reading auth bindings failed; sign-in stays on Go");
+            true
+        });
 
+    let hub = Arc::new(Hub::new(hub_source(&node_id), options.bus.clone()));
     let stack = Arc::new(Stack {
-        activity: ActivityWriter::start(pool.clone()),
+        activity: ActivityWriter::start(pool.clone(), hub.clone()),
+        jwt,
+        sign_in,
+        devices,
+        api_keys,
+        profile_tokens,
+        cursors: silo_api_v2::cursor::Cursors::new(jwt_secret.clone().into_bytes()),
+        hub,
+        bus: options.bus.clone(),
+        admin_defaults: Some(Arc::new(defaults.clone())),
+        encrypted: Arc::new(encrypted),
+        pin_attempts,
+        artwork_secret: jwt_secret.clone(),
+        local_operational_store: local_operational_store(&settings).await,
+        artwork_url_ttl,
+        tv_series_root_queue,
+        external_sign_in: external_sign_in.into(),
         pool: pool.clone(),
         auth,
         users,
@@ -192,47 +550,164 @@ pub async fn build(
         settings: settings.clone(),
         resolver: resolver.clone(),
         metrics: Metrics::default(),
-        node_id: all.get("node.id").cloned().unwrap_or_default(),
+        node_id,
+        policy_refused: refused.into(),
     });
 
+    // Its own subscription, as in Go, so a slow settings read holds up nothing else.
+    if let Some(bus) = &options.bus {
+        let defaults = defaults.clone();
+        let handler = Arc::new(move |event: Event| {
+            if event.event_type == EVENT_SETTINGS_CHANGED {
+                let defaults = defaults.clone();
+                tokio::spawn(async move { defaults.changed(&event.payload).await });
+            }
+        });
+        if let Err(e) = bus.subscribe(CHANNEL_ADMIN, handler).await {
+            tracing::warn!(component = "front", error = %e, "subscribing to the admin channel failed");
+        }
+    }
+    const KINDS: &[&str] = &[
+        EVENT_SETTINGS_CHANGED,
+        EVENT_POLICY_CHANGED,
+        EVENT_AUTH_PROVIDERS_CHANGED,
+        EVENT_PLUGINS_CHANGED,
+    ];
+    let (signal, poll) = admin_reload_signal(options.bus.as_ref(), KINDS).await;
     let poller = stack.clone();
     tokio::spawn(async move {
-        let mut tick = tokio::time::interval(SETTINGS_POLL);
+        let mut tick = tokio::time::interval(poll);
         let mut sources = None;
         loop {
-            tick.tick().await;
-            if let Ok(all) = poller.settings.get_all().await {
-                poller.rate.reload(config_from_settings(&all));
-                if let Some(raw) = all
-                    .get(clientip::SETTING_TRUSTED_PROXIES)
-                    .filter(|v| !v.is_empty())
-                    && let Ok(cidrs) = clientip::parse_cidrs(raw)
-                {
-                    poller.resolver.update_trusted_cidrs(cidrs);
-                }
+            tokio::select! {
+                _ = tick.tick() => {}
+                () = signal.notified() => {}
             }
-            match active_sources(&poller.pool).await {
-                Ok(current) if sources.as_ref() != Some(&current) => match engine_for(&current) {
-                    Ok(engine) => {
-                        poller.viewer.set_engine(engine);
-                        if let Ok(engine) = engine_for(&current) {
-                            *gate_engine.lock().unwrap_or_else(|e| e.into_inner()) = engine;
-                        }
-                        sources = Some(current);
-                    }
-                    Err(e) => {
-                        tracing::warn!(component = "policy", error = %e, "custom policy refused; keeping the last engine");
-                        sources = Some(current);
-                    }
-                },
-                Ok(_) => {}
-                Err(e) => {
-                    tracing::warn!(component = "policy", error = %e, "reading policies failed")
-                }
-            }
+            poller.reload(&logger, &pdp, &mut sources).await;
         }
     });
-    Ok(stack)
+    Ok(Some(stack))
+}
+
+impl Stack {
+    /// Whether rows behind a credential must go to Go, because this process cannot load a policy Go may
+    /// be enforcing. [`silo_gate::policy::compile_check`] refuses sources OPA accepts, so a refusal says
+    /// nothing about what Go does with the source; Go always answers correctly for its own policy.
+    pub fn policy_refused(&self) -> bool {
+        self.policy_refused.load(Ordering::Relaxed)
+    }
+
+    /// Whether sign-in needs a plugin provider. Those rows go to Go.
+    pub fn external_sign_in(&self) -> bool {
+        self.external_sign_in.load(Ordering::Relaxed)
+    }
+
+    /// `OnUserSessionsRevoked`: every Go replica discards its cached Jellyfin-compatible sessions.
+    /// Without a bus no event can reach Go, and persistent lookups still check the deleted rows.
+    pub async fn publish_sessions_revoked(&self, user_id: i64) {
+        let Some(bus) = &self.bus else {
+            return;
+        };
+        let event = Event {
+            event_type: EVENT_USER_SESSIONS_REVOKED.to_owned(),
+            payload: user_id.to_string(),
+        };
+        if let Err(e) = bus.publish(CHANNEL_ADMIN, event).await {
+            tracing::warn!(user_id, error = %e, "publish session revocation failed");
+        }
+    }
+
+    /// The request's `auditmutation.LogContext`.
+    pub fn audit_request(
+        self: &Arc<Self>,
+        r: &Request,
+        opted_in: bool,
+    ) -> silo_auth::audit::AuditRequest {
+        let fields = r
+            .extensions
+            .get::<LogContext>()
+            .map(|log| log.0.lock().unwrap_or_else(|e| e.into_inner()).clone())
+            .unwrap_or_default();
+        let hub = self.hub.clone();
+        silo_auth::audit::AuditRequest {
+            opted_in,
+            client_ip: client_ip_of(r),
+            user_id: fields.user_id,
+            impersonator_user_id: fields.impersonator_user_id,
+            session_id: fields.session_id,
+            request_id: request_id_of(r),
+            node_id: self.node_id.clone(),
+            method: r.method.clone(),
+            path: String::from_utf8_lossy(&r.url.path).into_owned(),
+            pattern: pattern_of(r),
+            user_agent: String::from_utf8_lossy(r.header.get("User-Agent")).into_owned(),
+            started: Instant::now(),
+            publish: Some(Arc::new(move |json| {
+                if let Err(e) = hub.publish_append(silo_runtime::logstream::Stream::Audit, json) {
+                    tracing::warn!(component = "activitylog", error = %e, "publishing an audit row failed");
+                }
+            })),
+            committed: r.extensions.get::<LogContext>().map(|log| {
+                let log = log.clone();
+                Arc::new(move |status| {
+                    log.0
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .committed_statuses
+                        .push(status);
+                }) as Arc<dyn Fn(i32) + Send + Sync>
+            }),
+        }
+    }
+
+    /// One reload: what the settings event and the policy event each change in Go.
+    async fn reload(&self, logger: &DecisionLogger, pdp: &Pdp, sources: &mut Option<Sources>) {
+        match external_sign_in_configured(&self.pool).await {
+            Ok(configured) => self.external_sign_in.store(configured, Ordering::Relaxed),
+            Err(e) => {
+                tracing::warn!(component = "front", error = %e, "reading auth bindings failed")
+            }
+        }
+        match self.settings.get_all().await {
+            Ok(all) => {
+                let (access, refresh) = token_expiries(&all);
+                self.jwt.set_expiries(access, refresh);
+                self.rate.reload(config_from_settings(&all));
+                apply_decision_log_settings(logger, &all);
+                match trusted_cidrs(all.get(clientip::SETTING_TRUSTED_PROXIES)) {
+                    Ok(cidrs) => self.resolver.update_trusted_cidrs(cidrs),
+                    Err(e) => {
+                        tracing::warn!(component = "app", error = %e, "clientip config reload failed");
+                    }
+                }
+            }
+            Err(e) => tracing::warn!(component = "app", error = %e, "reading settings failed"),
+        }
+        match active_sources(&self.pool).await {
+            Ok(current) if sources.as_ref() != Some(&current) => {
+                let generation = policy_generation(&self.pool)
+                    .await
+                    .unwrap_or(pdp.generation());
+                match engines_for(&current) {
+                    Ok((scope, permission)) => {
+                        pdp.swap(scope, permission, generation);
+                        self.policy_refused.store(false, Ordering::Relaxed);
+                    }
+                    Err(e) => {
+                        tracing::error!(component = "policy", error = %e, "custom policy not loaded; rows behind a credential go to Go until it loads");
+                        self.policy_refused.store(true, Ordering::Relaxed);
+                    }
+                }
+                *sources = Some(current);
+            }
+            Ok(_) => {
+                if let Ok(generation) = policy_generation(&self.pool).await {
+                    pdp.set_generation(generation);
+                }
+            }
+            Err(e) => tracing::warn!(component = "policy", error = %e, "reading policies failed"),
+        }
+    }
 }
 
 type Sources = Vec<(String, String)>;
@@ -271,8 +746,32 @@ fn engine_for(sources: &Sources) -> Result<Engine, String> {
     Engine::with_custom(&custom).map_err(|e| e.to_string())
 }
 
-async fn load_engine(pool: &Pool) -> Result<Engine, String> {
-    engine_for(&active_sources(pool).await?)
+/// One engine per decision; see [`Pdp`].
+fn engines_for(sources: &Sources) -> Result<(Engine, Engine), String> {
+    Ok((engine_for(sources)?, engine_for(sources)?))
+}
+
+/// `PolicyStore.Generation`.
+async fn policy_generation(pool: &Pool) -> Result<i64, String> {
+    let rows = pool
+        .query(
+            "SELECT generation FROM policy_generation WHERE id = true",
+            &[],
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    match rows.first() {
+        Some(row) => row
+            .try_get(0)
+            .map_err(|e: silo_pg::DriverError| e.to_string()),
+        None => Err("no policy generation row".to_owned()),
+    }
+}
+
+async fn load_policy(pool: &Pool) -> Result<((Engine, Engine), i64), String> {
+    let sources = active_sources(pool).await?;
+    let generation = policy_generation(pool).await?;
+    Ok((engines_for(&sources)?, generation))
 }
 
 /// `chimw.GetReqID`.
@@ -280,6 +779,13 @@ pub fn request_id_of(r: &Request) -> String {
     r.extensions
         .get::<RequestId>()
         .map(|id| id.0.clone())
+        .unwrap_or_default()
+}
+
+/// `clientip.FromContext`, the address.
+pub fn client_ip_of(r: &Request) -> String {
+    client_context(r)
+        .map(|c| c.client_ip.clone())
         .unwrap_or_default()
 }
 
@@ -326,22 +832,39 @@ impl ResponseWriter for StatusWriter<'_> {
     }
 }
 
-fn header_values<'a>(h: &'a Header, key: &str) -> Vec<&'a str> {
+/// A Go string holds any bytes, and a value that is not text must stay a value that matches nothing,
+/// not vanish.
+fn header_values(h: &Header, key: &str) -> Vec<String> {
     h.values(key)
         .iter()
-        .filter_map(|v| std::str::from_utf8(v).ok())
+        .map(|v| String::from_utf8_lossy(v).into_owned())
         .collect()
+}
+
+fn as_strs(values: &[String]) -> Vec<&str> {
+    values.iter().map(String::as_str).collect()
 }
 
 /// `clientip.Middleware`.
 fn resolve_client(resolver: &Resolver, r: &Request) -> RequestContext {
-    let xff = header_values(&r.header, "X-Forwarded-For");
-    let real = header_values(&r.header, "X-Real-Ip");
-    let forwarded = header_values(&r.header, "Forwarded");
-    let proto = header_values(&r.header, "X-Forwarded-Proto");
-    let host = header_values(&r.header, "X-Forwarded-Host");
-    let upgrade = header_values(&r.header, "Upgrade");
-    let connection = header_values(&r.header, "Connection");
+    let (xff, real, forwarded, proto, host, upgrade, connection) = (
+        header_values(&r.header, "X-Forwarded-For"),
+        header_values(&r.header, "X-Real-Ip"),
+        header_values(&r.header, "Forwarded"),
+        header_values(&r.header, "X-Forwarded-Proto"),
+        header_values(&r.header, "X-Forwarded-Host"),
+        header_values(&r.header, "Upgrade"),
+        header_values(&r.header, "Connection"),
+    );
+    let (xff, real, forwarded, proto, host, upgrade, connection) = (
+        as_strs(&xff),
+        as_strs(&real),
+        as_strs(&forwarded),
+        as_strs(&proto),
+        as_strs(&host),
+        as_strs(&upgrade),
+        as_strs(&connection),
+    );
     resolver.middleware(&RequestFields {
         remote_addr: &r.remote_addr,
         host: std::str::from_utf8(&r.host).unwrap_or_default(),
@@ -357,8 +880,9 @@ fn resolve_client(resolver: &Resolver, r: &Request) -> RequestContext {
 }
 
 impl Stack {
-    /// `useBaseMiddleware`: request ID, client IP, request logger, metrics, activity log. Compression
-    /// runs inside it, on the mux, as in Go; nothing it does changes what these read.
+    /// The first half of `useBaseMiddleware`: request ID, client IP, request logger. [`recoverer`] and
+    /// [`Self::observe_middleware`] follow it, so the logger sees a recovered panic's 500 and the other
+    /// two do not run for it, as in Go.
     pub fn base_middleware(self: &Arc<Self>) -> Middleware {
         let stack = self.clone();
         middleware_fn(move |next: BoxHandler| {
@@ -376,9 +900,9 @@ impl Stack {
                     r.extensions.insert(log.clone());
                     let path = String::from_utf8_lossy(&r.url.path).into_owned();
                     let method = r.method.clone();
-                    let user_agent = r.header.get_str("User-Agent").to_owned();
+                    let user_agent =
+                        String::from_utf8_lossy(r.header.get("User-Agent")).into_owned();
                     let started = Instant::now();
-                    let timestamp = SystemTime::now();
 
                     let mut wrapped = StatusWriter {
                         inner: w,
@@ -388,17 +912,9 @@ impl Stack {
                     next.serve_http(&mut wrapped, r).await;
                     let status = wrapped.status;
 
-                    let pattern = r
-                        .extensions
-                        .get::<RowPattern>()
-                        .map(|p| p.0.clone())
-                        .unwrap_or_default();
-                    let elapsed = started.elapsed();
+                    let pattern = pattern_of(r);
                     let fields = log.0.lock().unwrap_or_else(|e| e.into_inner()).clone();
                     let is_v2 = path.starts_with(silo_gate::mw::API_V2_PREFIX);
-                    if !is_v2 {
-                        stack.metrics.observe(&method, &pattern, status, elapsed);
-                    }
                     if !request_logger_skips(&path) || is_v2 {
                         tracing::info!(
                             component = "api",
@@ -407,7 +923,7 @@ impl Stack {
                             path = %path,
                             path_pattern = %pattern,
                             status,
-                            duration_ms = elapsed.as_millis() as u64,
+                            duration_ms = started.elapsed().as_millis() as u64,
                             client_ip = %client_ip,
                             user_agent = %user_agent,
                             node_id = %stack.node_id,
@@ -416,14 +932,53 @@ impl Stack {
                             "api request"
                         );
                     }
+                })
+            })
+        })
+    }
+
+    /// The rest of `useBaseMiddleware`: metrics and the activity log.
+    pub fn observe_middleware(self: &Arc<Self>) -> Middleware {
+        let stack = self.clone();
+        middleware_fn(move |next: BoxHandler| {
+            let stack = stack.clone();
+            handler_fn(move |w, r| {
+                let stack = stack.clone();
+                let next = next.clone();
+                Box::pin(async move {
+                    let path = String::from_utf8_lossy(&r.url.path).into_owned();
+                    let method = r.method.clone();
+                    let user_agent =
+                        String::from_utf8_lossy(r.header.get("User-Agent")).into_owned();
+                    let started = Instant::now();
+                    let timestamp = SystemTime::now();
+                    let mut wrapped = StatusWriter {
+                        inner: w,
+                        status: 200,
+                        wrote: false,
+                    };
+                    next.serve_http(&mut wrapped, r).await;
+                    let status = wrapped.status;
+                    let elapsed = started.elapsed();
+                    let pattern = pattern_of(r);
+                    if !path.starts_with(silo_gate::mw::API_V2_PREFIX) {
+                        stack.metrics.observe(&method, &pattern, status, elapsed);
+                    }
                     if activity::recorded(&path) {
+                        let fields = r
+                            .extensions
+                            .get::<LogContext>()
+                            .map(|log| log.0.lock().unwrap_or_else(|e| e.into_inner()).clone())
+                            .unwrap_or_default();
                         stack.activity.write(LogEntry {
                             timestamp,
-                            client_ip,
+                            client_ip: client_context(r)
+                                .map(|c| c.client_ip.clone())
+                                .unwrap_or_default(),
                             user_id: fields.user_id,
                             impersonator_user_id: fields.impersonator_user_id,
                             session_id: fields.session_id,
-                            request_id: id,
+                            request_id: request_id_of(r),
                             node_id: stack.node_id.clone(),
                             method,
                             path: path.clone(),
@@ -431,6 +986,7 @@ impl Stack {
                             status_code: i32::from(status),
                             user_agent,
                             duration_ms: elapsed.as_millis() as i32,
+                            persisted: fields.committed_statuses.contains(&i32::from(status)),
                         });
                     }
                 })
@@ -513,9 +1069,156 @@ impl Stack {
         })
     }
 
+    /// A v1 route group's `Use` list, for a mounted subrouter: it runs before the subrouter's own 404 and
+    /// 405, so an unauthenticated caller gets the 401 at any path below the mount.
+    pub fn v1_group(self: &Arc<Self>, steps: &'static [Step]) -> Middleware {
+        let stack = self.clone();
+        middleware_fn(move |next: BoxHandler| {
+            let stack = stack.clone();
+            handler_fn(move |w, r| {
+                let stack = stack.clone();
+                let next = next.clone();
+                Box::pin(async move {
+                    if let Err(denial) = stack.run_steps(steps, w.header(), r).await {
+                        write_v1_denial(w, &denial).await;
+                        return;
+                    }
+                    next.serve_http(w, r).await;
+                })
+            })
+        })
+    }
+
+    /// A v2 operation whose gates differ from its class's: a named budget, or a demo restriction.
+    pub fn v2_steps(
+        self: &Arc<Self>,
+        pattern: &str,
+        steps: &'static [Step],
+        handler: BoxHandler,
+    ) -> BoxHandler {
+        v2_wrap(Some(self.clone()), pattern, steps, handler)
+    }
+
     /// A v2 operation: `classGate` with the `denialWriter` translation, `defaultHeaders`, and the guards.
     pub fn v2(self: &Arc<Self>, pattern: &str, class: V2Class, handler: BoxHandler) -> BoxHandler {
         v2_wrap(Some(self.clone()), pattern, class.steps(), handler)
+    }
+}
+
+/// `middleware.Recoverer`. An abort still ends the connection, and an upgrade gets no status.
+pub fn recoverer() -> Middleware {
+    middleware_fn(|next: BoxHandler| {
+        handler_fn(move |w, r| {
+            let next = next.clone();
+            Box::pin(async move {
+                let served = AssertUnwindSafe(next.serve_http(w, r)).catch_unwind().await;
+                if let Err(payload) = served {
+                    if payload.is::<AbortHandler>() {
+                        resume_unwind(payload);
+                    }
+                    tracing::error!(component = "api", panic = %panic_text(payload.as_ref()), "panic serving a request");
+                    if r.header.get("Connection") != b"Upgrade" {
+                        w.write_header(500).await;
+                    }
+                }
+            })
+        })
+    })
+}
+
+fn panic_text(payload: &(dyn std::any::Any + Send)) -> String {
+    payload
+        .downcast_ref::<&str>()
+        .map(|s| (*s).to_owned())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "non-string panic".to_owned())
+}
+
+/// `bufferedWriter`: a v2 operation's response stays here until it ends, so a panic can replace it.
+struct BufferedWriter<'a> {
+    inner: &'a mut dyn ResponseWriter,
+    status: u16,
+    body: Vec<u8>,
+}
+
+impl ResponseWriter for BufferedWriter<'_> {
+    fn header(&mut self) -> &mut Header {
+        self.inner.header()
+    }
+    fn write_header(&mut self, code: u16) -> BoxFuture<'_, ()> {
+        if self.status == 0 {
+            self.status = code;
+        }
+        Box::pin(async {})
+    }
+    fn write<'a>(&'a mut self, data: &'a [u8]) -> BoxFuture<'a, Result<usize, WriteError>> {
+        if self.status == 0 {
+            self.status = 200;
+        }
+        self.body.extend_from_slice(data);
+        Box::pin(async move { Ok(data.len()) })
+    }
+    fn write_string<'a>(&'a mut self, data: &'a str) -> BoxFuture<'a, Result<usize, WriteError>> {
+        self.write(data.as_bytes())
+    }
+    fn flush(&mut self) -> BoxFuture<'_, Result<(), WriteError>> {
+        Box::pin(async { Ok(()) })
+    }
+    fn hijack(&mut self) -> BoxFuture<'_, Result<Hijacked, WriteError>> {
+        self.inner.hijack()
+    }
+}
+
+impl BufferedWriter<'_> {
+    /// `discard`: the operation's status, body and headers go, except the request ID.
+    fn discard(&mut self) {
+        self.status = 0;
+        self.body.clear();
+        let h = self.inner.header();
+        let id = h.get_raw_values("X-Request-ID").to_vec();
+        *h = Header::new();
+        if !id.is_empty() {
+            h.set_raw("X-Request-ID", id);
+        }
+    }
+
+    /// `flush`.
+    async fn finish(self) {
+        let status = if self.status == 0 { 200 } else { self.status };
+        let mut body = self.body;
+        let h = self.inner.header();
+        // `IdentityEncoded`: declares identity, and no-transform, to preserve the strong ETag.
+        if !h.get("ETag").is_empty() {
+            h.set("Content-Encoding", "identity");
+            let values = h.values("Cache-Control");
+            let policy = values
+                .iter()
+                .map(|v| String::from_utf8_lossy(v).into_owned())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let transformed = policy.split(',').any(|d| {
+                silo_gocompat::strings::equal_fold(
+                    silo_gocompat::strings::trim_space(d),
+                    "no-transform",
+                )
+            });
+            if !transformed {
+                let joined = if policy.is_empty() {
+                    "no-transform".to_owned()
+                } else {
+                    format!("{policy}, no-transform")
+                };
+                h.set("Cache-Control", joined);
+            }
+        }
+        if status == 304 || status == 204 {
+            h.del("Content-Type");
+            body.clear();
+        } else if h.get("Content-Length").is_empty() {
+            h.set("Content-Length", body.len().to_string());
+        }
+        self.inner.write_header(status).await;
+        let _ = self.inner.write(&body).await;
     }
 }
 
@@ -621,6 +1324,11 @@ pub fn denial_problem(denial: &Denial) -> Problem {
     }
 }
 
+/// A catalog entry by id.
+pub fn problem_type(id: &str) -> p::ProblemType {
+    find(id)
+}
+
 fn find(id: &str) -> p::ProblemType {
     p::CATALOG
         .iter()
@@ -677,6 +1385,147 @@ fn accepts_json(accept: &str) -> bool {
     best > 0 && best_q > 0.0
 }
 
+/// What the contract declares about one v2 operation.
+#[derive(Clone, Debug, Default)]
+pub struct OperationMeta {
+    /// `metaIdentityOnly`: its output declares an ETag, or it is a guarded write answering a receipt.
+    identity_only: bool,
+    /// `queryParams`, name to whether it is an array and whether it is a boolean.
+    query: HashMap<String, QueryParam>,
+    /// The path and query parameters Huma parses and validates, in the contract's order.
+    params: Vec<(String, String, serde_json::Value, bool)>,
+    /// The JSON body schema.
+    body: Option<serde_json::Value>,
+    body_required: bool,
+}
+
+/// `queryParam`.
+#[derive(Clone, Copy, Debug, Default)]
+struct QueryParam {
+    array: bool,
+    boolean: bool,
+}
+
+/// Path, then method, read from the contract the operations were generated from.
+fn operations() -> &'static HashMap<String, HashMap<String, OperationMeta>> {
+    static OPERATIONS: OnceLock<HashMap<String, HashMap<String, OperationMeta>>> = OnceLock::new();
+    OPERATIONS.get_or_init(|| {
+        let document: serde_json::Value =
+            silo_gocompat::json::unmarshal(silo_contracts::embedded::openapi_v2())
+                .expect("the embedded contract is JSON");
+        let mut out: HashMap<String, HashMap<String, OperationMeta>> = HashMap::new();
+        for (path, item) in document["paths"].as_object().expect("paths") {
+            for (method, op) in item.as_object().expect("a path item") {
+                out.entry(path.clone()).or_default().insert(
+                    silo_gocompat::strings::to_upper(method),
+                    operation_meta(method, op),
+                );
+            }
+        }
+        out
+    })
+}
+
+fn operation_meta(method: &str, op: &serde_json::Value) -> OperationMeta {
+    let declares_etag = op["responses"].as_object().is_some_and(|responses| {
+        responses.values().any(|r| {
+            r["headers"]
+                .as_object()
+                .is_some_and(|h| h.contains_key("ETag"))
+        })
+    });
+    // `GuardedReceipt` is a guarded PUT or PATCH: the one guarded write that does not declare the ETag.
+    let guarded = op["x-silo-guarded"].as_bool().unwrap_or(false);
+    let receipt = guarded && matches!(method, "put" | "patch");
+    let mut query = HashMap::new();
+    let mut params = Vec::new();
+    for parameter in op["parameters"].as_array().into_iter().flatten() {
+        let location = parameter["in"].as_str().unwrap_or_default();
+        if matches!(location, "path" | "query" | "header") && parameter["schema"].is_object() {
+            params.push((
+                location.to_owned(),
+                parameter["name"].as_str().unwrap_or_default().to_owned(),
+                parameter["schema"].clone(),
+                parameter["required"].as_bool().unwrap_or(false),
+            ));
+        }
+        if parameter["in"] == "query" && parameter["schema"].is_object() {
+            let kind = &parameter["schema"]["type"];
+            query.insert(
+                parameter["name"].as_str().unwrap_or_default().to_owned(),
+                QueryParam {
+                    array: kind == "array",
+                    boolean: kind == "boolean",
+                },
+            );
+        }
+    }
+    let body = op["requestBody"]["content"]["application/json"]["schema"].clone();
+    OperationMeta {
+        identity_only: declares_etag || receipt,
+        query,
+        params,
+        body: body.is_object().then_some(body),
+        body_required: op["requestBody"]["required"].as_bool().unwrap_or(false),
+    }
+}
+
+fn validation_problem(errors: Vec<ProblemError>) -> Problem {
+    Problem::new(
+        find("validation_failed"),
+        "The request did not pass validation; see errors.",
+    )
+    .with_errors(errors)
+}
+
+/// `queryGuard`, then Huma's `RejectUnknownQueryParameters`. A problem in the query is the only thing
+/// either answers.
+fn query_problem(raw: &[u8], meta: &OperationMeta) -> Option<Problem> {
+    if raw.is_empty() {
+        return None;
+    }
+    let (values, error) = silo_gocompat::url::parse_query(&String::from_utf8_lossy(raw));
+    if error.is_some() {
+        return Some(Problem::new(
+            find("malformed_request"),
+            "The query string is not valid percent-encoded form data.",
+        ));
+    }
+    let mut invalid = Vec::new();
+    let mut unknown = Vec::new();
+    for (name, list) in &values {
+        let Some(param) = meta.query.get(name) else {
+            unknown.push(ProblemError {
+                location: format!("query.{name}"),
+                code: "unknown_parameter".to_owned(),
+                detail: "unknown query parameter".to_owned(),
+            });
+            continue;
+        };
+        if list.len() > 1 && !param.array {
+            return Some(Problem::new(
+                find("malformed_request"),
+                "A scalar query parameter was repeated.",
+            ));
+        }
+        if param.boolean {
+            for value in list {
+                if value != "true" && value != "false" {
+                    invalid.push(ProblemError {
+                        location: format!("query.{name}"),
+                        code: "invalid_type".to_owned(),
+                        detail: "expected the lowercase literal true or false".to_owned(),
+                    });
+                }
+            }
+        }
+    }
+    if !invalid.is_empty() {
+        return Some(validation_problem(invalid));
+    }
+    (!unknown.is_empty()).then(|| validation_problem(unknown))
+}
+
 /// `identityForbidden`.
 fn identity_forbidden(field: &str) -> bool {
     let (mut identity, mut star) = (-1.0, -1.0);
@@ -723,82 +1572,199 @@ fn v2_wrap(
     handler: BoxHandler,
 ) -> BoxHandler {
     let pattern = pattern.to_owned();
+    let methods = operations()
+        .get(&pattern)
+        .unwrap_or_else(|| panic!("{pattern} is not in the contract"));
     handler_fn(move |w, r| {
         let stack = stack.clone();
         let handler = handler.clone();
         let pattern = pattern.clone();
         Box::pin(async move {
             r.extensions.insert(RowPattern(pattern));
-            w.header().set("Cache-Control", p::DEFAULT_CACHE_CONTROL);
-            if let Some(stack) = &stack {
-                // `denialWriter`: what a gate sets stays off the response unless translated.
-                let mut sink = Header::new();
-                if let Err(denial) = stack.run_steps(steps, &mut sink, r).await {
-                    write_problem(w, r, denial_problem(&denial)).await;
-                    return;
-                }
-            }
-            let accept = r.header.get_str("Accept").to_owned();
-            if !accept.is_empty() && !accepts_json(&accept) {
-                write_problem(
-                    w,
-                    r,
-                    Problem::new(
-                        find("not_acceptable"),
-                        "No acceptable representation is available for this operation.",
-                    ),
-                )
-                .await;
-                return;
-            }
-            r.header.set("Accept", "application/json");
-            if !content_encoding_ok(r.header.get_str("Content-Encoding")) {
-                write_problem(
-                    w,
-                    r,
-                    Problem::new(
-                        find("unsupported_media_type"),
-                        "Compressed request bodies are not supported; send an unencoded application/json body.",
-                    ),
-                )
-                .await;
-                return;
-            }
-            // `encodingGuard`, for the operations that carry a validator.
-            let excluded = r.header.values("Accept-Encoding");
-            if !excluded.is_empty() && identity_only(&pattern_of(r)) {
-                let field: Vec<String> = excluded
-                    .iter()
-                    .map(|v| String::from_utf8_lossy(v).into_owned())
-                    .collect();
-                if identity_forbidden(&field.join(",")) {
-                    write_problem(
-                        w,
-                        r,
-                        Problem::new(
-                            find("not_acceptable"),
-                            "This response carries a validator and is served identity-encoded; Accept-Encoding must not exclude identity.",
-                        ),
-                    )
+            // `bufferResponse`.
+            let mut buffered = BufferedWriter {
+                inner: w,
+                status: 0,
+                body: Vec::new(),
+            };
+            let meta = methods.get(&r.method);
+            let served =
+                AssertUnwindSafe(v2_operation(stack, steps, meta, &handler, &mut buffered, r))
+                    .catch_unwind()
                     .await;
-                    return;
+            if let Err(payload) = served {
+                if payload.is::<AbortHandler>() {
+                    resume_unwind(payload);
                 }
+                tracing::error!(component = "apiv2", request_id = %request_id_of(r), panic = %panic_text(payload.as_ref()), "apiv2 handler panic");
+                buffered.discard();
+                write_problem(
+                    &mut buffered,
+                    r,
+                    Problem::new(find("internal_error"), "An unexpected error occurred."),
+                )
+                .await;
             }
-            handler.serve_http(w, r).await;
+            buffered.finish().await;
         })
     })
 }
 
-fn pattern_of(r: &Request) -> String {
-    r.extensions
-        .get::<RowPattern>()
-        .map(|p| p.0.clone())
-        .unwrap_or_default()
+/// The operation behind `bufferResponse`: `defaultHeaders`, `classGate`, and the guards, in Go's order.
+async fn v2_operation(
+    stack: Option<Arc<Stack>>,
+    steps: &'static [Step],
+    meta: Option<&OperationMeta>,
+    handler: &BoxHandler,
+    w: &mut dyn ResponseWriter,
+    r: &mut Request,
+) {
+    w.header().set("Cache-Control", p::DEFAULT_CACHE_CONTROL);
+    if let Some(stack) = &stack {
+        // `denialWriter`: what a gate sets stays off the response unless translated.
+        let mut sink = Header::new();
+        if let Err(denial) = stack.run_steps(steps, &mut sink, r).await {
+            write_problem(w, r, denial_problem(&denial)).await;
+            return;
+        }
+    }
+    let accept = String::from_utf8_lossy(r.header.get("Accept")).into_owned();
+    if !accept.is_empty() && !accepts_json(&accept) {
+        write_problem(
+            w,
+            r,
+            Problem::new(
+                find("not_acceptable"),
+                "No acceptable representation is available for this operation.",
+            ),
+        )
+        .await;
+        return;
+    }
+    r.header.set("Accept", "application/json");
+    // `encodingGuard`, for the operations that declare a validator.
+    let excluded = r.header.values("Accept-Encoding");
+    if !excluded.is_empty() && meta.is_some_and(|m| m.identity_only) {
+        let field: Vec<String> = excluded
+            .iter()
+            .map(|v| String::from_utf8_lossy(v).into_owned())
+            .collect();
+        if identity_forbidden(&field.join(",")) {
+            write_problem(
+                w,
+                r,
+                Problem::new(
+                    find("not_acceptable"),
+                    "This response carries a validator and is served identity-encoded; Accept-Encoding must not exclude identity.",
+                ),
+            )
+            .await;
+            return;
+        }
+    }
+    // `mediaTypeGuard`.
+    if !content_encoding_ok(&String::from_utf8_lossy(r.header.get("Content-Encoding"))) {
+        write_problem(
+            w,
+            r,
+            Problem::new(
+                find("unsupported_media_type"),
+                "Compressed request bodies are not supported; send an unencoded application/json body.",
+            ),
+        )
+        .await;
+        return;
+    }
+    let empty = OperationMeta::default();
+    let meta = meta.unwrap_or(&empty);
+    if meta.body.is_some() {
+        let content_type = String::from_utf8_lossy(r.header.get("Content-Type")).into_owned();
+        if !structured_media_type_ok(&content_type) {
+            write_problem(
+                w,
+                r,
+                Problem::new(
+                    find("unsupported_media_type"),
+                    "The request media type is not supported; send application/json.",
+                ),
+            )
+            .await;
+            return;
+        }
+        r.header.set("Content-Type", "application/json");
+    }
+    if let Some(problem) = query_problem(&r.url.raw_query, meta) {
+        write_problem(w, r, problem).await;
+        return;
+    }
+    if let Err(problem) =
+        super::huma::read_input(r, &meta.params, meta.body.as_ref(), meta.body_required).await
+    {
+        write_problem(w, r, problem).await;
+        return;
+    }
+    handler.serve_http(w, r).await;
 }
 
-/// `metaIdentityOnly`: this port sets it on capability documents and the contract document.
-fn identity_only(pattern: &str) -> bool {
-    pattern.ends_with("/capability") || pattern.ends_with("/capabilities")
+/// `structuredMediaTypeOK`: exactly `application/json`, with `charset=utf-8` the only parameter.
+fn structured_media_type_ok(content_type: &str) -> bool {
+    use silo_gocompat::strings::{to_lower, trim_space};
+    let mut parts = content_type.split(';');
+    if to_lower(trim_space(parts.next().unwrap_or_default())) != "application/json" {
+        return false;
+    }
+    parts.all(|param| {
+        let mut kv = trim_space(param).splitn(2, '=');
+        let (name, value) = (kv.next().unwrap_or_default(), kv.next());
+        value.is_some_and(|value| {
+            to_lower(trim_space(name)) == "charset" && to_lower(value.trim_matches('"')) == "utf-8"
+        })
+    })
+}
+
+/// The v1 `r.Route` mounts that hold native rows, read from `internal/api/router.go`. A v1 row's gates that
+/// sit on or above its mount run before the subrouter matches, and so do its own 404 and 405.
+const V1_MOUNTS: &[&str] = &[
+    "/api/v1/admin",
+    "/api/v1/api-keys",
+    "/api/v1/auth",
+    "/api/v1/libraries",
+    "/api/v1/library-playback-prefs",
+    "/api/v1/profiles",
+    "/api/v1/settings",
+];
+
+/// chi's `RoutePattern` for a v1 request that never reached a row: the deepest mount it matched.
+fn v1_mount_pattern(path: &str) -> Option<String> {
+    let rest = path.strip_prefix("/api/v1")?;
+    if !rest.starts_with('/') {
+        return None;
+    }
+    for mount in V1_MOUNTS {
+        if let Some(below) = path.strip_prefix(mount) {
+            if below.is_empty() || below == "/" {
+                return Some((*mount).to_owned());
+            }
+            if below.starts_with('/') {
+                return Some(format!("{mount}/*"));
+            }
+        }
+    }
+    Some("/api/v1/*".to_owned())
+}
+
+/// chi's `RoutePattern`, as the loggers and metrics read it after the handler ran. A row with a mounted
+/// `/` reads without the slash. Outside v1 a request that reached no row has no pattern.
+pub fn pattern_of(r: &Request) -> String {
+    match r.extensions.get::<RowPattern>() {
+        Some(p) => {
+            let pattern = p.0.as_str();
+            pattern.strip_suffix('/').unwrap_or(pattern).to_owned()
+        }
+        // A row on a mounted subrouter that names no pattern, or the mount itself when a gate on it refused.
+        None if r.pattern.starts_with("/api/v1/") => r.pattern.clone(),
+        None => v1_mount_pattern(&String::from_utf8_lossy(&r.url.path)).unwrap_or_default(),
+    }
 }
 
 /// A public v2 operation needs no stack.
@@ -880,6 +1846,15 @@ pub async fn write_v1_json<T: Serialize>(w: &mut dyn ResponseWriter, status: u16
 
 /// A JSON response the Huma way: `Content-Type` and no HTML escaping.
 pub async fn write_v2_json<T: Serialize>(w: &mut dyn ResponseWriter, value: &T) {
+    write_v2_json_status(w, 200, value).await;
+}
+
+/// [`write_v2_json`] with the operation's `DefaultStatus`.
+pub async fn write_v2_json_status<T: Serialize>(
+    w: &mut dyn ResponseWriter,
+    status: u16,
+    value: &T,
+) {
     let mut body = Vec::new();
     {
         let mut enc = silo_gocompat::json::Encoder::new(&mut body);
@@ -887,7 +1862,7 @@ pub async fn write_v2_json<T: Serialize>(w: &mut dyn ResponseWriter, value: &T) 
         enc.encode(value).expect("a response marshals");
     }
     w.header().set("Content-Type", "application/json");
-    w.write_header(200).await;
+    w.write_header(status).await;
     let _ = w.write(&body).await;
 }
 
@@ -969,3 +1944,231 @@ pub fn capability_json<T: Serialize>(value: &T) -> Vec<u8> {
 
 /// The Go map shape: sorted keys.
 pub type GoMap<V> = std::collections::BTreeMap<&'static str, V>;
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_v1_request_that_reached_no_row_reads_as_its_deepest_mount() {
+        for (path, want) in [
+            ("/api/v1/libraries", Some("/api/v1/libraries")),
+            ("/api/v1/libraries/", Some("/api/v1/libraries")),
+            ("/api/v1/libraries/1/providers", Some("/api/v1/libraries/*")),
+            ("/api/v1/auth/me/", Some("/api/v1/auth/*")),
+            ("/api/v1/library/1/layout/", Some("/api/v1/*")),
+            ("/api/v1/libraries-x", Some("/api/v1/*")),
+            ("/api/v2/libraries", None),
+        ] {
+            assert_eq!(v1_mount_pattern(path).as_deref(), want, "{path}");
+        }
+    }
+
+    use super::*;
+
+    #[derive(Default)]
+    struct Recorded {
+        header: Header,
+        status: Option<u16>,
+        body: Vec<u8>,
+    }
+
+    impl ResponseWriter for Recorded {
+        fn header(&mut self) -> &mut Header {
+            &mut self.header
+        }
+        fn write_header(&mut self, code: u16) -> BoxFuture<'_, ()> {
+            self.status.get_or_insert(code);
+            Box::pin(async {})
+        }
+        fn write<'a>(&'a mut self, data: &'a [u8]) -> BoxFuture<'a, Result<usize, WriteError>> {
+            self.status.get_or_insert(200);
+            self.body.extend_from_slice(data);
+            Box::pin(async move { Ok(data.len()) })
+        }
+        fn write_string<'a>(
+            &'a mut self,
+            data: &'a str,
+        ) -> BoxFuture<'a, Result<usize, WriteError>> {
+            self.write(data.as_bytes())
+        }
+        fn flush(&mut self) -> BoxFuture<'_, Result<(), WriteError>> {
+            Box::pin(async { Ok(()) })
+        }
+        fn hijack(&mut self) -> BoxFuture<'_, Result<Hijacked, WriteError>> {
+            Box::pin(async { Err(WriteError::Hijacked) })
+        }
+    }
+
+    fn panics() -> BoxHandler {
+        handler_fn(|_w, _r| Box::pin(async { panic!("boom") }))
+    }
+
+    /// chi's `Recoverer`, recorded in `vectors/access/access.json`.
+    #[tokio::test]
+    async fn recoverer_answers_like_chi() {
+        let raw = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../conformance/vectors/access/access.json"
+        ))
+        .unwrap();
+        let data: serde_json::Value = silo_gocompat::json::unmarshal(&raw).unwrap();
+        for case in data["recoverer"].as_array().unwrap() {
+            let handler = recoverer()(panics());
+            let mut w = Recorded::default();
+            let mut r = Request::new_for_test("GET", "/");
+            let connection = case["connection"].as_str().unwrap();
+            if !connection.is_empty() {
+                r.header.set("Connection", connection);
+            }
+            handler.serve_http(&mut w, &mut r).await;
+            let wrote = case["written"].as_bool().unwrap();
+            assert_eq!(w.status.is_some(), wrote, "{connection:?}");
+            if wrote {
+                assert_eq!(
+                    i64::from(w.status.unwrap()),
+                    case["status"].as_i64().unwrap()
+                );
+            }
+            assert!(w.body.is_empty());
+        }
+    }
+
+    #[tokio::test]
+    #[should_panic]
+    async fn recoverer_passes_an_abort_on() {
+        let handler = recoverer()(handler_fn(|_w, _r| {
+            Box::pin(async { silo_http::abort_handler() })
+        }));
+        let mut r = Request::new_for_test("GET", "/");
+        handler.serve_http(&mut Recorded::default(), &mut r).await;
+    }
+
+    /// `bufferResponse`: what the operation wrote and set goes, and the problem takes its place.
+    #[tokio::test]
+    async fn a_v2_panic_is_the_internal_error_problem() {
+        let handler = v2_public(
+            "/api/v2/auth/device/capability",
+            handler_fn(|w, _r| {
+                Box::pin(async move {
+                    w.header().set("ETag", "\"x\"");
+                    let _ = w.write(b"partial").await;
+                    panic!("boom")
+                })
+            }),
+        );
+        let mut w = Recorded::default();
+        w.header.set_raw("X-Request-ID", vec![b"abc".to_vec()]);
+        let mut r = Request::new_for_test("GET", "/");
+        r.extensions.insert(RequestId("abc".to_owned()));
+        handler.serve_http(&mut w, &mut r).await;
+        assert_eq!(w.status, Some(500));
+        assert!(w.header.get("ETag").is_empty());
+        assert_eq!(w.header.get_raw_values("X-Request-ID"), [b"abc".to_vec()]);
+        let body: serde_json::Value = silo_gocompat::json::unmarshal(&w.body).unwrap();
+        assert_eq!(body["detail"], "An unexpected error occurred.");
+        assert_eq!(body["instance"], "urn:silo:request:abc");
+    }
+
+    fn meta() -> OperationMeta {
+        OperationMeta {
+            identity_only: false,
+            params: Vec::new(),
+            body: None,
+            body_required: false,
+            query: HashMap::from([
+                (
+                    "ids".to_owned(),
+                    QueryParam {
+                        array: true,
+                        boolean: false,
+                    },
+                ),
+                (
+                    "flag".to_owned(),
+                    QueryParam {
+                        array: false,
+                        boolean: true,
+                    },
+                ),
+                ("q".to_owned(), QueryParam::default()),
+            ]),
+        }
+    }
+
+    /// The rows that take a query are not ported yet, so this covers what the harness cannot reach.
+    #[test]
+    fn query_guard_grammar() {
+        for (raw, want) in [
+            ("", None),
+            ("&&", None),
+            ("q=1", None),
+            ("ids=1&ids=2", None),
+            ("flag=true", None),
+            (
+                "q=1&q=2",
+                Some((400, "A scalar query parameter was repeated.")),
+            ),
+            (
+                "flag=TRUE",
+                Some((422, "The request did not pass validation; see errors.")),
+            ),
+            (
+                "flag=1",
+                Some((422, "The request did not pass validation; see errors.")),
+            ),
+            (
+                "nope=1",
+                Some((422, "The request did not pass validation; see errors.")),
+            ),
+            (
+                "q=%zz",
+                Some((
+                    400,
+                    "The query string is not valid percent-encoded form data.",
+                )),
+            ),
+            (
+                "q=1;r=2",
+                Some((
+                    400,
+                    "The query string is not valid percent-encoded form data.",
+                )),
+            ),
+        ] {
+            let got = query_problem(raw.as_bytes(), &meta());
+            assert_eq!(
+                got.as_ref().map(|p| (p.status, p.detail.as_str())),
+                want,
+                "{raw}"
+            );
+        }
+    }
+
+    /// Go's rule, a declared ETag, not a path spelling.
+    #[test]
+    fn identity_only_follows_the_contract() {
+        let get = |path: &str| operations()[path]["GET"].identity_only;
+        assert!(get("/api/v2/openapi.json"));
+        assert!(get("/api/v2/images/capabilities"));
+        assert!(!get("/api/v2/account/me"));
+    }
+
+    /// R5 and R8: what would hand a client a second budget or the wrong profiles stays on Go.
+    #[test]
+    fn why_rows_stay_on_go() {
+        let set = |pairs: &[(&str, &str)]| -> HashMap<String, String> {
+            pairs
+                .iter()
+                .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+                .collect()
+        };
+        assert!(why_not_native(&set(&[]), true, false).is_some());
+        assert!(why_not_native(&set(&[]), true, true).is_none());
+        assert!(why_not_native(&set(&[("ratelimit.enabled", "false")]), false, false).is_none());
+        let redis = set(&[("ratelimit.backend", "redis")]);
+        assert!(why_not_native(&redis, true, false).is_none());
+        assert!(why_not_native(&redis, false, false).is_some());
+        let sqlite = set(&[("userdb.backend", "sqlite"), ("ratelimit.backend", "redis")]);
+        assert!(why_not_native(&sqlite, true, false).is_some());
+        assert!(why_not_native(&sqlite, true, true).is_some());
+    }
+}

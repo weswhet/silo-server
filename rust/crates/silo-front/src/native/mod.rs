@@ -4,9 +4,19 @@
 //! and refusals are Go's. Each domain keeps its rows and handlers in its own file. See `README.md`,
 //! Adding a native row.
 
+// A `Problem` is the refusal itself: every handler returns one or an answer, on the way to the wire.
+#![allow(clippy::result_large_err)]
+
 pub mod account;
+pub mod admin_settings;
+pub mod api_keys;
+pub mod auth;
 pub mod chain;
 pub mod discovery;
+pub mod huma;
+pub mod libraries;
+pub mod profiles;
+pub mod settings;
 pub mod system;
 
 use std::sync::Arc;
@@ -23,7 +33,17 @@ use crate::http1::RequestHead;
 use crate::rows::{NativeRow, ROWS, Surface, in_table, is_native};
 
 /// Every domain's rows. A new domain adds one line here and one in [`main_handler`].
-pub const DOMAINS: &[&[NativeRow]] = &[system::ROWS, account::ROWS, discovery::ROWS];
+pub const DOMAINS: &[&[NativeRow]] = &[
+    system::ROWS,
+    account::ROWS,
+    discovery::ROWS,
+    auth::ROWS,
+    api_keys::ROWS,
+    settings::ROWS,
+    profiles::ROWS,
+    admin_settings::ROWS,
+    libraries::ROWS,
+];
 
 const fn all_in_table() -> bool {
     let mut d = 0;
@@ -104,14 +124,25 @@ async fn write_problem(
     let _ = w.write(&body).await;
 }
 
-/// The methods the contract declares on a v2 path, sorted as `Registry.AllowedMethods` sorts them.
+/// `methodOrder`.
+const METHOD_ORDER: [&str; 7] = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
+
+/// `Registry.AllowedMethods`: every declared operation the concrete path is an instance of.
 fn v2_methods(path: &str) -> Vec<&'static str> {
     let mut methods: Vec<&'static str> = ROWS
         .iter()
-        .filter(|r| r.surface == Surface::ApiV2 && r.path == path)
+        .filter(|r| r.surface == Surface::ApiV2 && matches_template(r.path, path))
         .map(|r| r.method)
         .collect();
     methods.sort_unstable();
+    methods.dedup();
+    let rank = |m: &str| {
+        METHOD_ORDER
+            .iter()
+            .position(|o| *o == m)
+            .unwrap_or(usize::MAX)
+    };
+    methods.sort_by_key(|m| rank(m));
     methods
 }
 
@@ -126,8 +157,13 @@ fn identity_encoded(info: &ResponseInfo, h: &Header) -> bool {
 pub fn main_handler(inputs: &NativeInputs) -> BoxHandler {
     let api = Mux::new();
     let skip_response: silo_http::compress::SkipResponse = Arc::new(identity_encoded);
-    if let Some(stack) = &inputs.stack {
-        api.use_middleware([stack.base_middleware()]);
+    match &inputs.stack {
+        Some(stack) => api.use_middleware([
+            stack.base_middleware(),
+            chain::recoverer(),
+            stack.observe_middleware(),
+        ]),
+        None => api.use_middleware([chain::recoverer()]),
     }
     api.use_middleware([compress_with_exclusions(None, Some(skip_response), &[])]);
 
@@ -166,6 +202,12 @@ pub fn main_handler(inputs: &NativeInputs) -> BoxHandler {
     discovery::mount_public(&api, &v2);
     if let Some(stack) = &inputs.stack {
         account::mount(stack, &api, &v2);
+        auth::mount(stack, &api, &v2);
+        api_keys::mount(stack, &api, &v2);
+        settings::mount(stack, &api, &v2);
+        profiles::mount(stack, &api, &v2);
+        admin_settings::mount_v2(stack, &v2);
+        libraries::mount(stack, &api, &v2);
         discovery::mount(stack, &api, &v2);
     }
 
@@ -184,16 +226,51 @@ pub fn main_handler(inputs: &NativeInputs) -> BoxHandler {
 pub struct Gate {
     health: bool,
     spa: bool,
-    chain: bool,
+    stack: Option<Arc<Stack>>,
     /// Surfaces sent back to Go, the rollback switch and proxy-all mode.
     force_go: Vec<Surface>,
 }
 
+/// Whether a request path is an instance of a row's template. A row spelled with a trailing slash is
+/// chi's mounted `/`, which answers both spellings.
+fn matches_template(template: &str, path: &str) -> bool {
+    let template = template.strip_suffix('/').unwrap_or(template);
+    let mut a = template.split('/');
+    let mut b = path.split('/');
+    loop {
+        match (a.next(), b.next()) {
+            (None, None) => return true,
+            (Some(t), Some(p)) => {
+                if t.starts_with('{') {
+                    if p.is_empty() {
+                        return false;
+                    }
+                } else if t != p {
+                    return false;
+                }
+            }
+            _ => return false,
+        }
+    }
+}
+
+/// The row for a path: an exact spelling wins over a template, so a literal Go row beside a native
+/// `{id}` row stays Go's.
 fn domain_row(path: &str) -> Option<&'static NativeRow> {
-    DOMAINS
-        .iter()
-        .flat_map(|rows| rows.iter())
-        .find(|r| r.path == path && matches!(r.surface, Surface::ApiV1 | Surface::ApiV2))
+    let rows = || {
+        DOMAINS
+            .iter()
+            .flat_map(|rows| rows.iter())
+            .filter(|r| matches!(r.surface, Surface::ApiV1 | Surface::ApiV2))
+    };
+    if let Some(row) = rows().find(|r| r.path.strip_suffix('/').unwrap_or(r.path) == path) {
+        return Some(row);
+    }
+    let literal_elsewhere = ROWS.iter().any(|r| r.path == path);
+    if literal_elsewhere {
+        return None;
+    }
+    rows().find(|r| r.path.contains('{') && matches_template(r.path, path))
 }
 
 /// Rows that need no credential: these work without the chain.
@@ -223,7 +300,7 @@ impl Gate {
         Self {
             health: inputs.identity.is_some(),
             spa: inputs.spa.is_some(),
-            chain: inputs.stack.is_some(),
+            stack: inputs.stack.clone(),
             force_go,
         }
     }
@@ -259,21 +336,33 @@ impl Gate {
             if row.path == "/api/v1/health" && !self.health {
                 return false;
             }
-            if !is_public(row) && !self.chain {
+            // A policy this process cannot load stays Go's to enforce.
+            if !is_public(row) && self.stack.as_ref().is_none_or(|s| s.policy_refused()) {
                 return false;
             }
-            // A Go-owned method at this path stays on Go.
-            let spelled_exactly = bare == path_text;
-            if spelled_exactly
-                && !is_native(row.surface, method, bare)
-                && ROWS
-                    .iter()
-                    .any(|r| r.surface == row.surface && r.path == bare && r.method == method)
+            // Sign-in with a configured external provider needs the plugin host.
+            if auth::PROVIDER_PATHS.contains(&bare)
+                && self.stack.as_ref().is_some_and(|s| s.external_sign_in())
             {
                 return false;
             }
-            // `queryGuard` and Huma's unknown-parameter refusal are not ported.
-            if row.surface == Surface::ApiV2 && !head.query().is_none_or(<[u8]>::is_empty) {
+            // Avatars and library posters in S3 need presigned URLs, which are not ported.
+            if (profiles::ROWS.contains(row) || libraries::ROWS.contains(row))
+                && self
+                    .stack
+                    .as_ref()
+                    .is_some_and(|s| !s.local_operational_store)
+            {
+                return false;
+            }
+            // A Go-owned method at this path stays on Go.
+            let spelled_exactly = bare == path_text || row.path.ends_with('/');
+            if spelled_exactly
+                && !is_native(row.surface, method, row.path)
+                && ROWS
+                    .iter()
+                    .any(|r| r.surface == row.surface && r.path == row.path && r.method == method)
+            {
                 return false;
             }
             return true;

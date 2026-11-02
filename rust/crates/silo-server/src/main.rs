@@ -18,7 +18,9 @@ Environment:
   DATABASE_URL           the Go server's database; read for the trust list, health identity, and branding
   SILO_TRUSTED_PROXIES   the trusted list when there is no DATABASE_URL
   SECRET_KEY             decrypts the signing secret; without it rows behind a credential stay on Go
-  REDIS_URL              the Go server's Redis, for shared rate limit counters
+  REDIS_URL              the Go server's Redis, for shared rate limit counters and its change events
+  SILO_FRONT_SPLIT_RATE_BUDGETS  serve rows natively on Go's memory rate limit backend, with separate
+                         counters; for comparing one row at a time
   SILO_FRONT_WEB_DIST    the web build output the Go server embeds; without it the SPA stays on Go
   SILO_FRONT_ORIGIN_LOG  file to append one JSON line per request to, naming who answered it
   SILO_FRONT_FORCE_GO    comma-separated surfaces to send back to Go (api_v1, api_v2, root), or all
@@ -51,6 +53,7 @@ fn config() -> Result<FrontConfig, String> {
         origin_log: non_empty_env("SILO_FRONT_ORIGIN_LOG").map(PathBuf::from),
         secret_key: non_empty_env("SECRET_KEY"),
         redis_url: non_empty_env("REDIS_URL"),
+        split_rate_budgets: non_empty_env("SILO_FRONT_SPLIT_RATE_BUDGETS").is_some(),
         force_go: non_empty_env("SILO_FRONT_FORCE_GO")
             .map_or_else(|| Ok(Vec::new()), |raw| parse_force_go(&raw))?,
     })

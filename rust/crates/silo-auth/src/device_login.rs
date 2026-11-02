@@ -1,14 +1,6 @@
 //! `internal/auth/device_login_words.go`: the match-code word lists and `randomMatchCode`.
 //!
-//! The rest of `device_login.go` (1,528 Go lines: the request/approval/poll state machine and its
-//! `device_login_requests` CRUD) is NOT ported this session — it is a large, mostly-independent
-//! piece gated on this crate having no settled transaction/repository convention yet beyond
-//! [`crate::session`]'s, and on `silo_core::apikey` already carrying the two primitives
-//! (`hash_device_login_secret`, `normalize_user_code`/`format_user_code`) that this file and
-//! `device_login.go` both depend on — reused here, not re-ported, per the dedup rule. A caller
-//! assembling the full flow needs: [`random_match_code`] for the human-readable pairing phrase,
-//! `silo_core::apikey::hash_device_login_secret` for the stored secret hash, and
-//! `silo_core::apikey::{normalize_user_code, format_user_code}` for the short code a person types.
+//! The state machine is [`crate::device`].
 
 /// `deviceMatchAdjectives`.
 const ADJECTIVES: [&str; 12] = [

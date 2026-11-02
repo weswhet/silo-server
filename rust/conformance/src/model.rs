@@ -183,6 +183,8 @@ pub struct Case {
     pub method: String,
     pub path: String,
     pub query: Vec<(String, String)>,
+    /// Sent as is after `?`, in place of `query`, for a spelling encoding would change.
+    pub raw_query: Option<String>,
     pub headers: Vec<(String, String)>,
     pub body: Option<Vec<u8>>,
     pub content_type: Option<String>,
@@ -207,6 +209,11 @@ pub struct Case {
     /// Before sending, wait this long for a batched write. For a read of what requests themselves
     /// add up to, where polling would change the answer.
     pub wait_ms: u64,
+    /// After the answer, keep these per side: fact name, then a JSON pointer into the body or
+    /// `header:<name>`. A later case on each side uses its own value through `${fact}`.
+    pub capture_facts: Vec<(String, String)>,
+    /// Before sending, run the `--empty-users-*` commands, so a first-run setup can succeed.
+    pub needs_empty_users: bool,
 }
 
 pub const PROXY_MARKER_HEADER: &str = "X-Silo-Strangler-Upstream";

@@ -45,7 +45,7 @@ done
 [ "${#faults[@]}" -gt 0 ] || conf_die "name at least one fault"
 
 cd "$CONF_REPO" || exit 1
-cargo build --quiet --manifest-path rust/Cargo.toml
+cargo build --quiet --manifest-path rust/Cargo.toml -j 3
 proxy=rust/target/debug/conformance-mutproxy
 proxy_pid=""
 stop_proxy() {
@@ -115,6 +115,8 @@ for fault in "${faults[@]}"; do
     --surface "metrics=http://127.0.0.1:$CONF_METRICS_PORT,http://127.0.0.1:$P_METRICS" \
     --reset-reference "$CONF_SCRIPTS_DIR/reset.sh --fast >/dev/null" \
     --reset-candidate "env ${b_env[*]} $CONF_SCRIPTS_DIR/reset.sh --fast >/dev/null" \
+    --empty-users-reference "$CONF_SCRIPTS_DIR/empty-users.sh silo-conformance" \
+    --empty-users-candidate "$CONF_SCRIPTS_DIR/empty-users.sh $B_PROJECT" \
     --out "$dir/report" ${baseline[@]+"${baseline[@]}"} >"$dir/run.txt" 2>&1
   run_exit=$?
   set -e

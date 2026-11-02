@@ -63,6 +63,12 @@ struct RunArgs {
     /// Shell command that resets the candidate database and waits until it is ready.
     #[arg(long)]
     reset_candidate: Option<String>,
+    /// Shell command that deletes every account on the reference, for the first-run setup cases.
+    #[arg(long)]
+    empty_users_reference: Option<String>,
+    /// Shell command that deletes every account on the candidate.
+    #[arg(long)]
+    empty_users_candidate: Option<String>,
     /// Compare with a stored baseline; any regression exits 1. Repeatable.
     #[arg(long)]
     baseline: Vec<PathBuf>,
@@ -296,6 +302,8 @@ fn run(args: RunArgs) -> Result<ExitCode> {
         origin_log: args.origin_log.clone(),
         reset_reference: args.reset_reference.clone(),
         reset_candidate: args.reset_candidate.clone(),
+        empty_users_reference: args.empty_users_reference.clone(),
+        empty_users_candidate: args.empty_users_candidate.clone(),
         only,
         progress: !args.quiet,
         tag_cases: args.tag_cases,

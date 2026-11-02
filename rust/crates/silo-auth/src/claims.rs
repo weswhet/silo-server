@@ -150,6 +150,37 @@ impl JwtService {
         self.refresh_expiry_ns.load(Ordering::SeqCst)
     }
 
+    /// `generateAccessToken`, with every claim the caller set.
+    pub fn access_token_for(&self, claims: Claims) -> Result<String, JwtError> {
+        self.generate_token(
+            claims,
+            token_type::ACCESS,
+            self.access_expiry_ns(),
+            now_unix_nanos(),
+        )
+    }
+
+    /// `generateRefreshToken`, with every claim the caller set.
+    pub fn refresh_token_for(&self, claims: Claims) -> Result<String, JwtError> {
+        self.generate_token(
+            claims,
+            token_type::REFRESH,
+            self.refresh_expiry_ns(),
+            now_unix_nanos(),
+        )
+    }
+
+    /// `accessExpiresIn`: the access token's lifetime, or the time left before the session ends.
+    pub fn access_expires_in(&self, claims: &Claims) -> i64 {
+        let mut expiry = self.access_expiry_ns();
+        if let Some(ends_at) = claims.session_ends_at {
+            let now = now_unix_nanos();
+            let left = (i128::from(ends_at) * 1_000_000_000 - now).max(0);
+            expiry = expiry.min(i64::try_from(left).unwrap_or(i64::MAX));
+        }
+        expiry / 1_000_000_000
+    }
+
     /// `JWTService.GenerateAccessToken`.
     pub fn generate_access_token(
         &self,

@@ -44,5 +44,7 @@ exec rust/target/debug/silo-conformance run \
   --surface "metrics=http://127.0.0.1:$CONF_METRICS_PORT,http://127.0.0.1:$(b_port CONF_METRICS_PORT)" \
   --reset-reference "$CONF_SCRIPTS_DIR/reset.sh --fast >/dev/null" \
   --reset-candidate "env ${b_env[*]} $CONF_SCRIPTS_DIR/reset.sh --fast >/dev/null" \
+  --empty-users-reference "$CONF_SCRIPTS_DIR/empty-users.sh silo-conformance" \
+  --empty-users-candidate "$CONF_SCRIPTS_DIR/empty-users.sh $B_PROJECT" \
   --source-revision "$(conf_revision)" \
   "$@"

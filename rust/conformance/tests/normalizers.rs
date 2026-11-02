@@ -99,6 +99,20 @@ fn row_for(id: &str) -> Option<Row> {
                 ],
             )
         }
+        "device-pairing-ip-hint" => row(
+            "api_v2",
+            "GET /api/v2/auth/device",
+            json!("172.18.*.*"),
+            json!("172.19.*.*"),
+            vec![json!("not masked"), json!("172.18.0.1")],
+        ),
+        "legacy-device-setting-updated-at" => row(
+            "api_v1",
+            "GET /api/v1/settings/effective",
+            json!("2026-11-02 04:36:30.614088+00"),
+            json!("2026-11-02 04:36:30.63+00"),
+            vec![json!("yesterday"), json!("2026-11-02T04:36:30Z")],
+        ),
         "run-time-timestamps" => row(
             "api_v2",
             "GET /api/v2/x",
@@ -602,7 +616,12 @@ fn feed_route(id: &str) -> &'static str {
 fn the_peer_lab_compares_client_addresses_exactly() {
     let lab = load_rules().for_peer_lab();
     assert!(lab.rules.iter().all(|r| r.spec.id != "client-address"));
-    assert_eq!(lab.rules.len() + 1, load_rules().rules.len());
+    let topology = load_rules()
+        .rules
+        .iter()
+        .filter(|r| r.spec.not_in_peer_lab)
+        .count();
+    assert_eq!(lab.rules.len() + topology, load_rules().rules.len());
 }
 
 #[test]

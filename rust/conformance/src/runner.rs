@@ -35,6 +35,9 @@ pub struct Config {
     pub origin_log: Option<std::path::PathBuf>,
     pub reset_reference: Option<String>,
     pub reset_candidate: Option<String>,
+    /// Shell commands that delete every account, for the first-run setup cases.
+    pub empty_users_reference: Option<String>,
+    pub empty_users_candidate: Option<String>,
     pub only: Option<Regex>,
     pub progress: bool,
     /// Name each recorded case on its candidate request, for `conformance-mutproxy`.
@@ -344,8 +347,19 @@ impl<'a> Runner<'a> {
                 self.event("bootstrap_problem", format!("{name}: {p}"));
             }
         }
-        self.reference.facts = r.0;
-        self.candidate.facts = c.0;
+        // What a multi-request flow captured outlives a login the liveness check repeated.
+        let keep = |facts: &mut BTreeMap<String, String>, old: &BTreeMap<String, String>| {
+            for (k, v) in old {
+                if k.starts_with("flow_") {
+                    facts.insert(k.clone(), v.clone());
+                }
+            }
+        };
+        let (mut a, mut b) = (r.0, c.0);
+        keep(&mut a, &self.reference.facts);
+        keep(&mut b, &self.candidate.facts);
+        self.reference.facts = a;
+        self.candidate.facts = b;
     }
 
     pub fn run(mut self, cases: &[Case]) -> Result<RunOutput> {
@@ -492,7 +506,10 @@ impl<'a> Runner<'a> {
         let mut filled = case.clone();
         filled.path = fill(&case.path, &state.facts);
         let mut path = resolve_path(&filled, route, state);
-        if !case.query.is_empty() {
+        if let Some(raw) = &case.raw_query {
+            path.push('?');
+            path.push_str(raw);
+        } else if !case.query.is_empty() {
             let q: Vec<(String, String)> = case
                 .query
                 .iter()
@@ -586,6 +603,27 @@ impl<'a> Runner<'a> {
         if let Some(path) = &case.settle_on {
             self.settle(path, &base_r, &base_c);
         }
+        if case.needs_empty_users {
+            let (Some(a), Some(b)) = (
+                &self.cfg.empty_users_reference,
+                &self.cfg.empty_users_candidate,
+            ) else {
+                self.out.not_run.insert(
+                    case.id.clone(),
+                    "no --empty-users-reference and --empty-users-candidate".to_string(),
+                );
+                return Ok(());
+            };
+            for cmd in [a, b] {
+                let out = Command::new("sh").arg("-c").arg(cmd).output()?;
+                if !out.status.success() {
+                    bail!(
+                        "emptying users failed: {}",
+                        String::from_utf8_lossy(&out.stderr)
+                    );
+                }
+            }
+        }
         thread::sleep(self.cfg.pace);
         thread::sleep(std::time::Duration::from_millis(case.wait_ms));
         let tag: Vec<(Side, (String, String))> = if self.cfg.tag_cases && record {
@@ -604,6 +642,20 @@ impl<'a> Runner<'a> {
 
         if let Some(prefix) = &case.capture_as {
             self.capture_created(prefix, &r, &c);
+        }
+        for (fact, at) in &case.capture_facts {
+            let (a, b) = (captured_fact(&r, at), captured_fact(&c, at));
+            if let (Some(a), Some(b)) = (&a, &b) {
+                if diff::same_id_shape(a, b) {
+                    self.aliases.add(a, b);
+                }
+            }
+            if let Some(a) = a {
+                self.reference.facts.insert(fact.clone(), a);
+            }
+            if let Some(b) = b {
+                self.candidate.facts.insert(fact.clone(), b);
+            }
         }
 
         let method_path = format!("{} {}", route.method, route.path);
@@ -742,6 +794,19 @@ impl<'a> Runner<'a> {
             self.bootstrap();
         }
         Ok(())
+    }
+}
+
+/// A case's `capture_facts` entry, read from one side's answer.
+fn captured_fact(e: &Exchange, at: &str) -> Option<String> {
+    if let Some(name) = at.strip_prefix("header:") {
+        return e.header(name);
+    }
+    let v: Value = serde_json::from_slice(&e.body).ok()?;
+    match v.pointer(at)? {
+        Value::String(s) if !s.is_empty() => Some(s.clone()),
+        Value::Number(n) => Some(n.to_string()),
+        _ => None,
     }
 }
 

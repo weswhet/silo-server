@@ -813,3 +813,65 @@ impl RateLimit {
         tracing::warn!(component = "ratelimit", mode = %q.mode, user_id = claims.user_id, session_id = %claims.session_id, path, "sign-in session over its hourly request quota");
     }
 }
+
+/// `redisAttempts`, with `AttemptLimiter`'s fail-open on a backend error.
+pub struct RedisAttempts {
+    conn: MultiplexedConnection,
+    policy: silo_auth::attempts::AttemptPolicy,
+    script: redis::Script,
+}
+
+impl RedisAttempts {
+    pub fn new(conn: MultiplexedConnection, policy: silo_auth::attempts::AttemptPolicy) -> Self {
+        Self {
+            conn,
+            policy,
+            script: redis::Script::new(silo_core::redis_lua::RATELIMIT_ATTEMPT),
+        }
+    }
+}
+
+impl silo_auth::attempts::AttemptLimiter for RedisAttempts {
+    fn reserve<'a>(
+        &'a self,
+        key: &'a str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), Duration>> + Send + 'a>>
+    {
+        Box::pin(async move {
+            let mut conn = self.conn.clone();
+            let mut call = self.script.key(silo_core::redis::attempt_key(key));
+            call.arg(self.policy.max_attempts)
+                .arg(self.policy.window.as_millis() as i64);
+            match call.invoke_async::<Vec<i64>>(&mut conn).await {
+                Ok(values) if values.len() == 2 && values[0] == 1 => Ok(()),
+                Ok(values) if values.len() == 2 => {
+                    Err(Duration::from_millis(values[1].max(0) as u64))
+                }
+                Ok(_) | Err(_) => {
+                    tracing::warn!(
+                        component = "ratelimit",
+                        key,
+                        "attempt limit backend error, allowing attempt"
+                    );
+                    Ok(())
+                }
+            }
+        })
+    }
+
+    fn reset<'a>(
+        &'a self,
+        key: &'a str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>> {
+        Box::pin(async move {
+            let mut conn = self.conn.clone();
+            let deleted: Result<i64, _> = redis::cmd("DEL")
+                .arg(silo_core::redis::attempt_key(key))
+                .query_async(&mut conn)
+                .await;
+            if let Err(e) = deleted {
+                tracing::warn!(component = "ratelimit", error = %e, key, "attempt limit reset failed");
+            }
+        })
+    }
+}

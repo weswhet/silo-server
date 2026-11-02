@@ -242,6 +242,7 @@ fn world() -> World {
             method: r.method.clone(),
             path: r.path.clone(),
             query: vec![],
+            raw_query: None,
             headers: vec![],
             body: None,
             content_type: None,
@@ -252,6 +253,8 @@ fn world() -> World {
             host: None,
             settle_on: None,
             wait_ms: 0,
+            capture_facts: Vec::new(),
+            needs_empty_users: false,
             skip_body: None,
             timeout_secs: 5,
             sort_key: String::new(),
@@ -298,6 +301,8 @@ fn compare_with_log(
     fixture.insert("CONF_USER_API_KEY".to_string(), "k".to_string());
     fixture.insert("CONF_ADMIN_API_KEY".to_string(), "k".to_string());
     let cfg = Config {
+        empty_users_reference: None,
+        empty_users_candidate: None,
         urls,
         fixture,
         rules: Rules::default(),
@@ -326,6 +331,8 @@ fn peer_run(sources: BTreeMap<String, PeerSource>) -> (RunOutput, Arc<Mutex<Stor
     fixture.insert("CONF_USER_API_KEY".to_string(), "k".to_string());
     fixture.insert("CONF_ADMIN_API_KEY".to_string(), "k".to_string());
     let cfg = Config {
+        empty_users_reference: None,
+        empty_users_candidate: None,
         urls,
         fixture,
         rules: Rules::default(),
