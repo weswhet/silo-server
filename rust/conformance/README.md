@@ -114,6 +114,7 @@ hashes, tokens). A write whose only success is an empty body that changed nothin
 `operational_logs` rows and live tail rows are batched, so they are compared at the end of each stage, counted by what
 names them. A difference is a `stage_effect_differs` regression, and it appears in `stage_effects` in `report.json`.
 The feed rules on the log routes stay, because a log's contents depend on timing between two Go servers.
+`front-compare.sh` waits out a local client's one-time sweep of each new listener before the first reset (`conf_wait_listener_sweep`), so those requests never reach the counts.
 
 `baseline/effects.json` lists the tables, events, fields, and log messages that differ between two Go servers, each
 with its evidence. An entry needs a Go vs Go run that shows it. `mutation-test.sh wrong_write` proves the check: the

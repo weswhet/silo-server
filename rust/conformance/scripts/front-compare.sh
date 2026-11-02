@@ -64,6 +64,8 @@ until curl -fsS -o /dev/null http://127.0.0.1:18080/api/v1/ready 2>/dev/null; do
   sleep 0.2
 done
 
+conf_wait_listener_sweep "$origin"
+
 # CONF_ACTIVITY_DIR saves each stage's activity rows for activity-diff.py.
 dump_a=""
 dump_b=""

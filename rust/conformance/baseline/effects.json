@@ -48,9 +48,7 @@
     "last_used_at": "Go vs Go: stamped by a per-process throttle, after the answer.",
     "match_code": "Random device pairing code."
   },
-  "ignored_log_messages": {
-    "jellycompat request": "No jellycompat row is native, so Go writes these on both sides. A local process probing a new listener adds lines on the front only (README, activity rows)."
-  },
+  "ignored_log_messages": {},
   "ignored_event_channels": {
     "jobs": "Go vs Go: background job progress, published on the worker clock.",
     "sessions": "Go vs Go: playback session changes, published on a timer.",

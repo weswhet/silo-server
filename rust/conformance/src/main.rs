@@ -347,6 +347,22 @@ fn run(args: RunArgs) -> Result<ExitCode> {
         let start = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
         runs.push(Runner::new(&cfg, &src.routes, start)?.run(&p.cases)?);
     }
+    // The report and cases.jsonl keep the last run; a flake seen in an earlier one needs its cases too.
+    if runs.len() > 1 {
+        fs::create_dir_all(&args.out)
+            .with_context(|| format!("creating {}", args.out.display()))?;
+        for (n, run) in runs.iter().enumerate() {
+            let cases: Vec<String> = run
+                .results
+                .iter()
+                .map(serde_json::to_string)
+                .collect::<std::result::Result<_, _>>()?;
+            fs::write(
+                args.out.join(format!("cases-run-{}.jsonl", n + 1)),
+                cases.join("\n") + "\n",
+            )?;
+        }
+    }
     let last = runs.last().expect("at least one run");
     let flakes = baseline::flake_set(&baselines);
     let reports: Vec<RouteReport> = report::route_reports(&src.routes, last, &flakes);

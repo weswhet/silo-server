@@ -124,7 +124,7 @@
         "ValueMismatch $[0].first_seen_at",
         "ValueMismatch $[0].last_seen_at"
       ],
-      "why": "Go's metadata worker writes this row with SQL NOW() on each stack (`StaleMediaIDRepository.Upsert`), and no Rust code writes the table, so both values are Go's clock. Whether the worker has run by this case depends on the run's pace: three front runs saw a row with values milliseconds apart, and the recorded Go vs Go run read the row before it was rewritten."
+      "why": "Go's metadata worker writes this row with SQL NOW() on each stack (`StaleMediaIDRepository.Upsert`), and no Rust code writes the table, so both values are Go's clock. Seen Go vs Go: the third run of the recorded self-compare read $.items[0].first_seen_at as .200Z against .199Z with no Rust in the path."
     },
     {
       "cases": [
@@ -154,7 +154,7 @@
         "ValueMismatch $.last_health_check",
         "ValueMismatch $[0].last_health_check"
       ],
-      "why": "Go's node health loop stamps a new node on its own tick, so a node created just before a tick has last_health_check set on one server and null on the other. The routes were relayed to Go on both sides: both values are Go's, read from two Go servers whose tickers run at different phases."
+      "why": "Go's node health loop stamps a new node on its own tick, so a node created just before a tick has last_health_check set on one server and null on the other. Seen Go vs Go: scripts/nodes-flake-repro.sh, with one stack restarted so the 30-second tickers run at different phases, read a stamp on one stack and null on the other in 4 of 15 rounds, in both directions."
     }
   ]
 }

@@ -309,8 +309,12 @@ impl<'a> Runner<'a> {
             return;
         };
         thread::sleep(std::time::Duration::from_millis(3500));
-        for diff in effects.stage_diffs() {
-            self.out.stage_effects.push(format!("{name}: {diff}"));
+        let diffs = effects.stage_diffs();
+        for diff in diffs {
+            let detail = format!("{name}: {diff}");
+            // The report keeps the last run only; this line keeps every run's, for recording.
+            self.event("stage_effect", detail.clone());
+            self.out.stage_effects.push(detail);
         }
     }
 

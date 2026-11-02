@@ -92,3 +92,16 @@ conf_wait_for_api() {
     sleep 1
   done
 }
+
+# A local Go HTTP client on the development hosts sweeps each new listener once, about 20 seconds after it
+# opens: GET / twice on every port, following redirects. The relayed requests land in Go's request log, on
+# the front's side only. Waiting for them keeps them out of the stage counts. Without such a client this
+# waits the full 45 seconds. conf_wait_listener_sweep <origin log>
+conf_wait_listener_sweep() {
+  local deadline=$((SECONDS + 45))
+  until grep -q '"listener":"jellycompat"' "$1" 2>/dev/null; do
+    [ "$SECONDS" -lt "$deadline" ] || return 0
+    sleep 0.5
+  done
+  sleep 3
+}

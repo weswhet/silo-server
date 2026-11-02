@@ -1,15 +1,15 @@
 {
   "schema_version": 2,
   "candidate_kind": "self_compare",
-  "runs": 1,
+  "runs": 3,
   "source_revision": "63ef34b236b88dc77acca1a9a3ed90235377691f",
   "surfaces": {
     "abs": {
       "total_routes": 187,
       "matched": 55,
-      "weak_evidence": 131,
-      "weak_refusals_only": 116,
-      "differs": 1,
+      "weak_evidence": 132,
+      "weak_refusals_only": 117,
+      "differs": 0,
       "known_flake": 0,
       "not_ported": 0,
       "not_ported_with_diffs": 0,
@@ -31,9 +31,9 @@
     "api_v1": {
       "total_routes": 682,
       "matched": 374,
-      "weak_evidence": 305,
+      "weak_evidence": 306,
       "weak_refusals_only": 101,
-      "differs": 3,
+      "differs": 2,
       "known_flake": 0,
       "not_ported": 0,
       "not_ported_with_diffs": 0,
@@ -43,9 +43,9 @@
     "api_v2": {
       "total_routes": 908,
       "matched": 471,
-      "weak_evidence": 431,
+      "weak_evidence": 433,
       "weak_refusals_only": 96,
-      "differs": 6,
+      "differs": 4,
       "known_flake": 0,
       "not_ported": 0,
       "not_ported_with_diffs": 0,
@@ -258,29 +258,41 @@
       ],
       "why": "The seed stage creates two collections moments apart, stored at one-second resolution, and ListUserCollections orders by created_at DESC with no tiebreak. A server whose two writes straddle a second lists the newer first; one whose writes share a second lists them in table order, so the two lists swap. Seen Go vs Go: the same two writes straddling a second on one Go server and not on the other invert the list with no front involved."
     },
-    "abs POST /abs/api/feeds/{id}/close#invalid_shape": {
-      "runs_with_difference": 1,
-      "runs": 1,
+    "api_v1 GET /api/v1/admin/nodes/#admin": {
+      "runs_with_difference": 0,
+      "runs": 0,
       "reference_status_varied": false,
       "signatures": [
-        "Effect effect.event.playback_sessions_changed"
-      ]
+        "TypeMismatch $.last_health_check",
+        "TypeMismatch $[0].last_health_check",
+        "ValueMismatch $.last_health_check",
+        "ValueMismatch $[0].last_health_check"
+      ],
+      "why": "Go's node health loop stamps a new node on its own tick, so a node created just before a tick has last_health_check set on one server and null on the other. The routes were relayed to Go on both sides: both values are Go's, read from two Go servers whose tickers run at different phases."
     },
-    "abs POST /abs/api/feeds/{id}/close#slash_variant": {
-      "runs_with_difference": 1,
-      "runs": 1,
+    "api_v1 GET /api/v1/admin/nodes/#invalid_query": {
+      "runs_with_difference": 0,
+      "runs": 0,
       "reference_status_varied": false,
       "signatures": [
-        "Effect effect.event.playback_sessions_changed"
-      ]
+        "TypeMismatch $.last_health_check",
+        "TypeMismatch $[0].last_health_check",
+        "ValueMismatch $.last_health_check",
+        "ValueMismatch $[0].last_health_check"
+      ],
+      "why": "Go's node health loop stamps a new node on its own tick, so a node created just before a tick has last_health_check set on one server and null on the other. The routes were relayed to Go on both sides: both values are Go's, read from two Go servers whose tickers run at different phases."
     },
-    "api_v1 DELETE /api/v1/admin/history-imports/sources/{id}/token#valid": {
-      "runs_with_difference": 1,
-      "runs": 1,
+    "api_v1 GET /api/v1/admin/nodes/#slash_variant": {
+      "runs_with_difference": 0,
+      "runs": 0,
       "reference_status_varied": false,
       "signatures": [
-        "Effect effect.event.events_notification"
-      ]
+        "TypeMismatch $.last_health_check",
+        "TypeMismatch $[0].last_health_check",
+        "ValueMismatch $.last_health_check",
+        "ValueMismatch $[0].last_health_check"
+      ],
+      "why": "Go's node health loop stamps a new node on its own tick, so a node created just before a tick has last_health_check set on one server and null on the other. The routes were relayed to Go on both sides: both values are Go's, read from two Go servers whose tickers run at different phases."
     },
     "api_v1 GET /api/v1/admin/policy/decisions#admin": {
       "runs_with_difference": 0,
@@ -312,6 +324,20 @@
       ],
       "why": "next_cursor is present only when the listing is full, and the decision count around that limit depends on when each server's log flushed."
     },
+    "api_v1 GET /api/v1/admin/policy/decisions/{id}#after_writes": {
+      "runs_with_difference": 0,
+      "runs": 0,
+      "reference_status_varied": false,
+      "signatures": [
+        "TypeMismatch $.allowed",
+        "TypeMismatch $.profile_id",
+        "ValueMismatch $.allowed",
+        "ValueMismatch $.decision_name",
+        "ValueMismatch $.policy_generation",
+        "ValueMismatch $.profile_id"
+      ],
+      "why": "This case reads decision row 1. With two processes writing decisions, row 1 belongs to whichever batch flushed first (review L4). Seen with Go alone: two Go servers on one database, a permission decision on one and a scope decision on the other in one flush window, gave row 1 as either kind across eight rounds."
+    },
     "api_v1 GET /api/v1/admin/stats/timeseries#admin": {
       "runs_with_difference": 0,
       "runs": 0,
@@ -330,6 +356,18 @@
       ],
       "why": "The bucket of a server's first dashboard sample after a reset, which it writes as it boots. Two Go servers restarted on either side of a minute boundary differ: a Go vs Go reset 21 seconds apart read 07:12:00 and 07:13:00."
     },
+    "api_v1 GET /api/v1/libraries/stale-ids#after_writes": {
+      "runs_with_difference": 0,
+      "runs": 0,
+      "reference_status_varied": false,
+      "signatures": [
+        "ValueMismatch $.items[0].first_seen_at",
+        "ValueMismatch $.items[0].last_seen_at",
+        "ValueMismatch $[0].first_seen_at",
+        "ValueMismatch $[0].last_seen_at"
+      ],
+      "why": "Go's metadata worker writes this row with SQL NOW() on each stack (`StaleMediaIDRepository.Upsert`), and no Rust code writes the table, so both values are Go's clock. Whether the worker has run by this case depends on the run's pace: three front runs saw a row with values milliseconds apart, and the recorded Go vs Go run read the row before it was rewritten."
+    },
     "api_v1 PATCH /api/v1/watch-together/rooms/{room_id}/policy#valid": {
       "runs_with_difference": 0,
       "runs": 0,
@@ -340,16 +378,16 @@
       "why": "A clock value with one-second resolution: the two servers can land on either side of a second. Seen Go vs Go."
     },
     "api_v1 POST /api/v1/admin/catalog/export#valid": {
-      "runs_with_difference": 1,
-      "runs": 1,
+      "runs_with_difference": 3,
+      "runs": 3,
       "reference_status_varied": false,
       "signatures": [
         "Bytes body"
       ]
     },
     "api_v1 POST /api/v1/admin/jellyfin-compat/web/remove#valid": {
-      "runs_with_difference": 1,
-      "runs": 1,
+      "runs_with_difference": 3,
+      "runs": 3,
       "reference_status_varied": false,
       "signatures": [
         "Effect effect.event.events_notification"
@@ -364,18 +402,19 @@
       ],
       "why": "A clock value with one-second resolution: the two servers can land on either side of a second. Seen Go vs Go."
     },
-    "api_v2 DELETE /api/v2/admin/users/{user_id}/login-sessions/{session_id}#valid": {
-      "runs_with_difference": 1,
-      "runs": 1,
+    "api_v2 GET /api/v2/admin/policy/decisions/{id}#after_writes": {
+      "runs_with_difference": 0,
+      "runs": 0,
       "reference_status_varied": false,
       "signatures": [
-        "Effect effect.event.events_notification",
-        "Effect effect.event.metadata_updated",
-        "Effect effect.item_people.DELETE",
-        "Effect effect.item_people.INSERT",
-        "Effect effect.media_item_provider_ids.DELETE",
-        "Effect effect.media_item_provider_ids.INSERT"
-      ]
+        "TypeMismatch $.allowed",
+        "TypeMismatch $.profile_id",
+        "ValueMismatch $.allowed",
+        "ValueMismatch $.decision_name",
+        "ValueMismatch $.policy_generation",
+        "ValueMismatch $.profile_id"
+      ],
+      "why": "This case reads decision row 1. With two processes writing decisions, row 1 belongs to whichever batch flushed first (review L4). Seen with Go alone: two Go servers on one database, a permission decision on one and a scope decision on the other in one flush window, gave row 1 as either kind across eight rounds."
     },
     "api_v2 GET /api/v2/admin/stats/timeseries#admin": {
       "runs_with_difference": 0,
@@ -394,6 +433,18 @@
         "ValueMismatch $.oldest_sample_at"
       ],
       "why": "The bucket of a server's first dashboard sample after a reset, which it writes as it boots. Two Go servers restarted on either side of a minute boundary differ: a Go vs Go reset 21 seconds apart read 07:12:00 and 07:13:00."
+    },
+    "api_v2 GET /api/v2/libraries/stale-ids#after_writes": {
+      "runs_with_difference": 1,
+      "runs": 3,
+      "reference_status_varied": false,
+      "signatures": [
+        "ValueMismatch $.items[0].first_seen_at",
+        "ValueMismatch $.items[0].last_seen_at",
+        "ValueMismatch $[0].first_seen_at",
+        "ValueMismatch $[0].last_seen_at"
+      ],
+      "why": "Go's metadata worker writes this row with SQL NOW() on each stack (`StaleMediaIDRepository.Upsert`), and no Rust code writes the table, so both values are Go's clock. Whether the worker has run by this case depends on the run's pace: three front runs saw a row with values milliseconds apart, and the recorded Go vs Go run read the row before it was rewritten."
     },
     "api_v2 GET /api/v2/not-interested/{item_id}#after_writes": {
       "runs_with_difference": 0,
@@ -432,20 +483,32 @@
       "why": "Seen once in three runs: the answer depends on how far a background write has got."
     },
     "api_v2 POST /api/v2/admin/catalog/export#valid": {
-      "runs_with_difference": 1,
-      "runs": 1,
+      "runs_with_difference": 3,
+      "runs": 3,
       "reference_status_varied": false,
       "signatures": [
         "Bytes body"
       ]
     },
     "api_v2 POST /api/v2/admin/jellyfin-compat/web/remove#valid": {
-      "runs_with_difference": 1,
-      "runs": 1,
+      "runs_with_difference": 3,
+      "runs": 3,
       "reference_status_varied": false,
       "signatures": [
         "Effect effect.event.events_notification"
       ]
+    },
+    "api_v2 POST /api/v2/admin/nodes#seed": {
+      "runs_with_difference": 0,
+      "runs": 0,
+      "reference_status_varied": false,
+      "signatures": [
+        "TypeMismatch $.last_health_check",
+        "TypeMismatch $[0].last_health_check",
+        "ValueMismatch $.last_health_check",
+        "ValueMismatch $[0].last_health_check"
+      ],
+      "why": "Go's node health loop stamps a new node on its own tick, so a node created just before a tick has last_health_check set on one server and null on the other. The routes were relayed to Go on both sides: both values are Go's, read from two Go servers whose tickers run at different phases."
     },
     "api_v2 POST /api/v2/catalog/items/{id}/trailers/refresh#fixture:refresh_catalog_item_trailers_unsupported_type": {
       "runs_with_difference": 0,
@@ -473,27 +536,9 @@
       ],
       "why": "The refresh cooldown is per item and carried across this run's earlier refresh, so one server can answer before the cooldown clears and the other after."
     },
-    "api_v2 POST /api/v2/libraries/{id}/refresh-metadata#valid": {
+    "api_v2 PUT /api/v2/notifications/preferences#fixture:notification_update_notification_preferences": {
       "runs_with_difference": 1,
-      "runs": 1,
-      "reference_status_varied": false,
-      "signatures": [
-        "Effect effect.event.events_notification"
-      ]
-    },
-    "api_v2 PUT /api/v2/libraries/{id}/providers#valid": {
-      "runs_with_difference": 1,
-      "runs": 1,
-      "reference_status_varied": false,
-      "signatures": [
-        "Effect effect.media_files.UPDATE",
-        "Effect effect.media_item_libraries.INSERT",
-        "Effect effect.media_items.INSERT"
-      ]
-    },
-    "api_v2 PUT /api/v2/notifications/preferences#valid": {
-      "runs_with_difference": 1,
-      "runs": 1,
+      "runs": 3,
       "reference_status_varied": false,
       "signatures": [
         "Effect effect.notification_email_verifications.UPDATE"
@@ -2268,7 +2313,7 @@
       }
     },
     "abs POST /abs/api/feeds/{id}/close": {
-      "state": "known_flake",
+      "state": "weak_evidence",
       "depth": "auth_rejected",
       "statuses": {
         "anon": 401,
@@ -3068,7 +3113,7 @@
       }
     },
     "api_v1 DELETE /api/v1/admin/history-imports/sources/{id}/token": {
-      "state": "known_flake",
+      "state": "matched",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -4489,7 +4534,7 @@
       }
     },
     "api_v1 GET /api/v1/admin/nodes/": {
-      "state": "matched",
+      "state": "known_flake",
       "depth": "success",
       "statuses": {
         "admin": 200,
@@ -4604,7 +4649,7 @@
       }
     },
     "api_v1 GET /api/v1/admin/policy/decisions/{id}": {
-      "state": "matched",
+      "state": "known_flake",
       "depth": "success",
       "statuses": {
         "admin": 200,
@@ -6349,7 +6394,7 @@
       }
     },
     "api_v1 GET /api/v1/libraries/stale-ids": {
-      "state": "matched",
+      "state": "known_flake",
       "depth": "success",
       "statuses": {
         "admin": 200,
@@ -10403,7 +10448,7 @@
       }
     },
     "api_v1 POST /api/v1/libraries/stale-ids/{contentID}/rematch": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -12776,7 +12821,7 @@
       }
     },
     "api_v2 DELETE /api/v2/admin/users/{user_id}/login-sessions/{session_id}": {
-      "state": "known_flake",
+      "state": "weak_evidence",
       "depth": "client_error",
       "statuses": {
         "anon": 401,
@@ -14927,7 +14972,7 @@
       }
     },
     "api_v2 GET /api/v2/admin/policy/decisions/{id}": {
-      "state": "matched",
+      "state": "known_flake",
       "depth": "success",
       "statuses": {
         "admin": 200,
@@ -17855,7 +17900,7 @@
       }
     },
     "api_v2 GET /api/v2/libraries/stale-ids": {
-      "state": "matched",
+      "state": "known_flake",
       "depth": "success",
       "statuses": {
         "admin": 200,
@@ -21772,7 +21817,7 @@
       }
     },
     "api_v2 POST /api/v2/admin/nodes": {
-      "state": "matched",
+      "state": "known_flake",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -23326,7 +23371,7 @@
       }
     },
     "api_v2 POST /api/v2/libraries/stale-ids/{content_id}/rematch": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -23394,7 +23439,7 @@
       }
     },
     "api_v2 POST /api/v2/libraries/{id}/refresh-metadata": {
-      "state": "known_flake",
+      "state": "matched",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -25018,7 +25063,7 @@
       }
     },
     "api_v2 PUT /api/v2/libraries/{id}/providers": {
-      "state": "known_flake",
+      "state": "matched",
       "depth": "success",
       "statuses": {
         "anon": 401,
