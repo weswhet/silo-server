@@ -92,6 +92,8 @@ rust/target/debug/silo-conformance run \
   --reset-candidate "sleep 3; $dump_b env ${b_env[*]} $CONF_SCRIPTS_DIR/reset.sh --fast >/dev/null" \
   --empty-users-reference "$CONF_SCRIPTS_DIR/empty-users.sh silo-conformance" \
   --empty-users-candidate "$CONF_SCRIPTS_DIR/empty-users.sh ${CONF_B_PROJECT:-silo-conformance-b}" \
+  --effects-reference "pg=postgres://silo:silo@127.0.0.1:$CONF_PG_PORT/silo?sslmode=disable,redis=127.0.0.1:$CONF_REDIS_PORT" \
+  --effects-candidate "pg=postgres://silo:silo@127.0.0.1:$(b_port CONF_PG_PORT)/silo?sslmode=disable,redis=127.0.0.1:$(b_port CONF_REDIS_PORT)" \
   --source-revision "$(conf_revision)" \
   --out "$out" \
   "$@" || rc=$?

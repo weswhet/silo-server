@@ -169,6 +169,9 @@ impl Engine {
                 .map_err(|e| EvalError::Compile(e.to_string()))?;
         }
         let mut inner = regorus::Engine::new();
+        // OPA's default: a builtin's error makes its expression undefined (`count(null)`), and the rule falls
+        // through, where regorus would fail the whole evaluation.
+        inner.set_strict_builtin_errors(false);
         for (path, source) in vendor::base_modules() {
             inner
                 .add_policy(path.to_owned(), source.to_owned())
@@ -296,13 +299,14 @@ pub struct PermissionInput {
     pub user_id: i64,
     pub role: String,
     pub user_enabled: bool,
-    pub assigned_permissions: Vec<String>,
+    /// Nil marshals to `null`: the acting-admin gate sets none, and a policy can tell.
+    pub assigned_permissions: Option<Vec<String>>,
     pub permission: String,
     pub declared_profile_id: String,
     pub acting_as_primary: bool,
     pub household_requires_profile: bool,
-    pub target_library_ids: Vec<i64>,
-    pub user_library_ids: Vec<i64>,
+    pub target_library_ids: Option<Vec<i64>>,
+    pub user_library_ids: Option<Vec<i64>>,
     pub user_libraries_restricted: bool,
     pub request_time: String,
     pub device_id: String,

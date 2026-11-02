@@ -539,10 +539,8 @@ pub fn mount_v1(stack: &Arc<Stack>, admin: &Mux) {
                 let Some(user_id) = parse_user_id(r) else {
                     return write_v1_error(w, 400, "bad_request", "Invalid user id").await;
                 };
-                let store = silo_store::userstore::pgstore::PostgresUserStore::new(
-                    s.pool.clone(),
-                    user_id as i32,
-                );
+                let store =
+                    silo_store::userstore::pgstore::PostgresUserStore::new(s.pool.clone(), user_id);
                 let Ok(values) = store.list_all_setting_values().await else {
                     return write_v1_error(w, 500, INTERNAL, "Failed to list settings").await;
                 };
@@ -816,7 +814,7 @@ pub fn mount_v2(stack: &Arc<Stack>, v2: &Mux) {
             return write_problem(w, r, Problem::new(silo_api_v2::problem::internal_error(), "An unexpected error occurred.")).await;
         };
         // Last use is a hint: a failed read leaves it unknown.
-        let id32 = id as i32;
+        let id32 = silo_pg::AnyInt(id);
         let seen = s.pool.query(
             "SELECT profile_id, max(last_seen_at) FROM user_devices WHERE user_id = $1 GROUP BY profile_id",
             &[&id32],
@@ -883,7 +881,7 @@ pub fn mount_v2(stack: &Arc<Stack>, v2: &Mux) {
                 }
                 let reader = Reader {
                     pool: &s.pool,
-                    user_id: id as i32,
+                    user_id: silo_pg::AnyInt(id),
                 };
                 let after_identity = SettingIdentity {
                     key: after.key,

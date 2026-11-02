@@ -1177,6 +1177,15 @@ fn mount_v2(stack: &Arc<Stack>, v2: &Mux) {
                     )
                     .await;
                 }
+                // `GetAdminAccount` reads an ID no row can hold as a missing account.
+                if i32::try_from(user_id).is_err() {
+                    return write_problem(
+                        w,
+                        r,
+                        Problem::new(problem_type("not_found"), "Account not found."),
+                    )
+                    .await;
+                }
                 let limit = limit_of(r);
                 let scope = CursorScope {
                     operation_id: "listAdminUserAPIKeys".to_owned(),

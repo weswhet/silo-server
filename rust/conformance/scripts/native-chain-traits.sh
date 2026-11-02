@@ -243,4 +243,27 @@ for spelled in '# METADATA\n# title: revoke\n' ''; do
   if [ "$b" = "200" ]; then echo "ok   custom_policy_disabled $b"; else echo "DIFF custom_policy_disabled $b"; fail=1; fi
 done
 
+# A policy can tell null from [], so the scope input has to send what Go sends. An expression on null is
+# undefined in OPA, where a strict builtin would fail the whole decision. Go answers first, on the same data.
+null_source() {
+  printf 'package silo_custom.scope\n\nimport rego.v1\n\noverride(_, i) := {"profile_verified": false} if {\n\ti.profile_id == "%s"\n\t%s\n}\n' "$CONF_USER_PROFILE_ID" "$1"
+}
+for condition in 'i.profile_allowed_library_ids == null' 'i.disabled_library_ids == null' 'i.account_library_ids == null' \
+  'count(i.disabled_library_ids) == 0' 'count(i.profile_allowed_library_ids) == 0' 'i.disabled_library_ids == []'; do
+  policy "$(null_source "$condition")" "nulls-$RANDOM"
+  sleep 3
+  for row in /api/v2/user/libraries /api/v1/user/libraries; do
+    a="$(status -H "$K" -H "$PROF" "$go_b$row")"
+    b="$(status -H "$K" -H "$PROF" "$cand$row")"
+    if [ "$a" = "$b" ]; then
+      echo "ok   null_policy [$condition] $row $b"
+    else
+      echo "DIFF null_policy [$condition] $row: go $a front $b"
+      fail=1
+    fi
+  done
+  unpolicy
+  sleep 3
+done
+
 exit "$fail"

@@ -3,7 +3,7 @@
 
 use silo_config::resolve::{SettingIdentity, SettingValue};
 use silo_gocompat::time::GoTime;
-use silo_pg::{Pool, Session, ToSql};
+use silo_pg::{AnyInt, Pool, Session, ToSql};
 
 use super::pgstore::{
     Error, SETTING_VALUE_COLUMNS, conflict_target, identity_clause, identity_params_boxed,
@@ -99,7 +99,8 @@ pub struct NewProfile {
 /// Reads outside a transaction, and `RegisterDevice`.
 pub struct Reader<'a> {
     pub pool: &'a Pool,
-    pub user_id: i32,
+    /// A Go `int`: a value past `int4` fails the bind, as pgx does.
+    pub user_id: AnyInt,
 }
 
 impl Reader<'_> {
@@ -295,7 +296,7 @@ const UPSERT_DEVICE_SETTING: &str = "INSERT INTO user_device_settings
 /// `preferenceSettingsTx` and `postgresSettingMutationWriter`: one account's preference transaction.
 pub struct Writer<'a> {
     pub tx: &'a mut Session,
-    pub user_id: i32,
+    pub user_id: AnyInt,
 }
 
 impl Writer<'_> {
@@ -314,7 +315,7 @@ impl Writer<'_> {
     /// The receipt lock, `fnv32a(userID \0 mutationID)`.
     pub async fn lock_mutation(&mut self, mutation_id: &str) -> Result<()> {
         let mut hash: u32 = 0x811c_9dc5;
-        let user = self.user_id.to_string();
+        let user = self.user_id.0.to_string();
         for byte in user
             .as_bytes()
             .iter()

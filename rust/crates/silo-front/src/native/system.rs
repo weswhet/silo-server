@@ -76,9 +76,12 @@ struct HealthStatus<'a> {
 }
 
 fn docs_asset(mux: &Mux, path: &str, media_type: &'static str, body: Arc<Vec<u8>>) {
+    let pattern = path.to_owned();
     let serve = handler_fn(move |w, r| {
         let body = body.clone();
+        let pattern = pattern.clone();
         Box::pin(async move {
+            super::chain::note_public_operation(r, &pattern);
             w.header()
                 .set_raw("X-Request-ID", vec![new_request_id().into_bytes()]);
             let h = w.header();

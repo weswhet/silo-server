@@ -315,8 +315,12 @@ fn compare_with_log(
         tag_cases: false,
         sources: BTreeMap::new(),
         pace: std::time::Duration::ZERO,
+        effects: None,
     };
-    let out = Runner::new(&cfg, &w.routes, 0).run(&w.cases).unwrap();
+    let out = Runner::new(&cfg, &w.routes, 0)
+        .unwrap()
+        .run(&w.cases)
+        .unwrap();
     (w, out, store_a, store_b)
 }
 
@@ -345,6 +349,7 @@ fn peer_run(sources: BTreeMap<String, PeerSource>) -> (RunOutput, Arc<Mutex<Stor
         tag_cases: false,
         sources,
         pace: std::time::Duration::ZERO,
+        effects: None,
     };
     let mut peer = w.cases[1].clone();
     peer.id = "api_v2 GET /api/v2/stable#peer:lab_client:plain".to_string();
@@ -353,7 +358,10 @@ fn peer_run(sources: BTreeMap<String, PeerSource>) -> (RunOutput, Arc<Mutex<Stor
     peer.source = Some("lab_client".to_string());
     let mut cases = w.cases.clone();
     cases.push(peer.clone());
-    let out = Runner::new(&cfg, &w.routes, 0).run(&cases).unwrap();
+    let out = Runner::new(&cfg, &w.routes, 0)
+        .unwrap()
+        .run(&cases)
+        .unwrap();
     (out, store_a, peer)
 }
 

@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use silo_config::resolve::{self, SettingIdentity, SettingResolutionQuery, SettingValue};
 use silo_config::settings::{ClientFamily, Scope};
-use silo_pg::{Error as PgError, Pool, Row};
+use silo_pg::{AnyInt, Error as PgError, Pool, Row};
 
 use super::{Error as UserstoreError, SettingMutationRecord, normalized, validate_identity};
 
@@ -54,12 +54,16 @@ fn library_id_i32(value: i64) -> Result<i32> {
 /// `pgstore.PostgresUserStore`.
 pub struct PostgresUserStore {
     pool: Arc<Pool>,
-    user_id: i32,
+    /// A Go `int`: a value past `int4` fails the bind, as pgx does, and never reaches another account.
+    user_id: AnyInt,
 }
 
 impl PostgresUserStore {
-    pub fn new(pool: Arc<Pool>, user_id: i32) -> Self {
-        Self { pool, user_id }
+    pub fn new(pool: Arc<Pool>, user_id: i64) -> Self {
+        Self {
+            pool,
+            user_id: AnyInt(user_id),
+        }
     }
 
     /// `PostgresUserStore.GetSettingValue`.
@@ -587,7 +591,7 @@ pub(super) fn identity_clause(start: usize, id: &SettingIdentity) -> String {
 /// constraint guarantees it is positive whenever this scope is reached, and `validate_identity`
 /// has already run by the time any caller builds these.
 pub(super) fn identity_params_boxed(
-    user_id: i32,
+    user_id: AnyInt,
     id: &SettingIdentity,
 ) -> Result<Vec<Box<dyn silo_pg::ToSql + Sync + Send>>> {
     let key = id.key.clone();

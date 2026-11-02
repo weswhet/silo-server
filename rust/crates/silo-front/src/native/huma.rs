@@ -125,6 +125,9 @@ fn validate(schema: &Value, path: &str, value: &Value, res: &mut Result_) {
                 );
                 return;
             };
+            if kind == "integer" && n != n.trunc() {
+                res.add(path, "expected integer");
+            }
             if let Some(min) = s["minimum"].as_f64()
                 && n < min
             {
@@ -244,6 +247,82 @@ fn validate_object(s: &Value, path: &str, map: &serde_json::Map<String, Value>, 
     }
 }
 
+/// `parseBodyInto`: `huma.Validate` passes `16.0` for an integer, then `encoding/json` refuses the literal for a Go
+/// `int`. A handler reads the body leniently, so without this the value is silently dropped. Only top-level
+/// members are read, because a nested integer would need the nested struct's Go name.
+fn integer_literal_error(schema: &Value, raw: &[u8]) -> Option<String> {
+    let struct_name = schema["$ref"].as_str()?.rsplit('/').next()?;
+    let s = deref(schema);
+    let properties = s["properties"].as_object()?;
+    for (key, literal) in top_level_numbers(raw) {
+        if !literal.contains(['.', 'e', 'E']) {
+            continue;
+        }
+        let Some((name, property)) = properties
+            .iter()
+            .find(|(name, _)| silo_gocompat::strings::equal_fold(name, &key))
+        else {
+            continue;
+        };
+        let is_integer = match &property["type"] {
+            Value::Array(types) => types.iter().any(|t| t == "integer"),
+            other => other == "integer",
+        };
+        if is_integer {
+            return Some(format!(
+                "json: cannot unmarshal number {literal} into Go struct field {struct_name}.{name} of type int"
+            ));
+        }
+    }
+    None
+}
+
+/// The number members of a JSON object, as written and in order. `raw` already parsed.
+fn top_level_numbers(raw: &[u8]) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut depth = 0;
+    let mut i = 0;
+    let mut key: Option<String> = None;
+    let string_end = |from: usize| {
+        let mut at = from + 1;
+        while at < raw.len() && raw[at] != b'"' {
+            at += if raw[at] == b'\\' { 2 } else { 1 };
+        }
+        at
+    };
+    while i < raw.len() {
+        match raw[i] {
+            b'{' | b'[' => depth += 1,
+            b'}' | b']' => depth -= 1,
+            b'"' => {
+                let end = string_end(i);
+                if depth == 1 && key.is_none() {
+                    let text = raw.get(i..=end).unwrap_or_default();
+                    key = silo_gocompat::json::unmarshal::<String>(text).ok();
+                } else if depth == 1 {
+                    key = None;
+                }
+                i = end;
+            }
+            b',' if depth == 1 => key = None,
+            b'-' | b'0'..=b'9' if depth == 1 => {
+                let start = i;
+                while i + 1 < raw.len()
+                    && matches!(raw[i + 1], b'-' | b'+' | b'.' | b'e' | b'E' | b'0'..=b'9')
+                {
+                    i += 1;
+                }
+                if let Some(name) = key.take() {
+                    out.push((name, String::from_utf8_lossy(&raw[start..=i]).into_owned()));
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    out
+}
+
 fn request_id(r: &Request) -> String {
     super::chain::request_id_of(r)
 }
@@ -347,7 +426,14 @@ pub async fn read_input(
                     status = 400;
                     res.add("body", e.to_string());
                 }
-                Ok(parsed) => validate(schema, "body", &parsed, &mut res),
+                Ok(parsed) => {
+                    validate(schema, "body", &parsed, &mut res);
+                    if res.errors.is_empty()
+                        && let Some(message) = integer_literal_error(schema, &bytes)
+                    {
+                        res.add("body", message);
+                    }
+                }
             }
         }
         r.extensions.insert(RawBody(bytes));

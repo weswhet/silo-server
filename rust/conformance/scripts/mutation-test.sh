@@ -117,6 +117,9 @@ for fault in "${faults[@]}"; do
     --reset-candidate "env ${b_env[*]} $CONF_SCRIPTS_DIR/reset.sh --fast >/dev/null" \
     --empty-users-reference "$CONF_SCRIPTS_DIR/empty-users.sh silo-conformance" \
     --empty-users-candidate "$CONF_SCRIPTS_DIR/empty-users.sh $B_PROJECT" \
+    --effects-reference "pg=postgres://silo:silo@127.0.0.1:$CONF_PG_PORT/silo?sslmode=disable,redis=127.0.0.1:$CONF_REDIS_PORT" \
+    --effects-candidate "pg=postgres://silo:silo@127.0.0.1:${CONF_B_PG_PORT:-35432}/silo?sslmode=disable,redis=127.0.0.1:${CONF_B_REDIS_PORT:-36379}" \
+    ${CONF_MUT_ONLY:+--only "$CONF_MUT_ONLY"} \
     --out "$dir/report" ${baseline[@]+"${baseline[@]}"} >"$dir/run.txt" 2>&1
   run_exit=$?
   set -e

@@ -16,3 +16,4 @@ pub mod idgen_lease;
 pub mod locks;
 pub mod logstream;
 pub mod mail;
+pub mod opslog;

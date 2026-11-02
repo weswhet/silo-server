@@ -50,8 +50,9 @@ Three things stay different, and the harness's peer cases show them
 
 `src/native/` holds the rows Rust answers. `rows_table.rs` lists every row and proxies it to Go unless a
 domain's `ROWS` names it; the build fails if a `ROWS` entry is not in the table. `Gate` routes a request to
-the native handler when its path has a native row, except a method the table gives Go at that path, a
-network access ingress request, which go to Go.
+the native handler when its path has a native row. These go to Go: a network access ingress request, a method when
+another method at that path is Go's (Go's 405 names it in `Allow`), and any method a native row does not list when a
+sibling template also matches the path (`PUT /api/v1/libraries/roots` is `PUT /api/v1/libraries/{id}`).
 
 Rows behind a credential go to Go when Rust could not answer for them:
 
@@ -59,6 +60,9 @@ Rows behind a credential go to Go when Rust could not answer for them:
   unreachable, and a native row would give a client a second budget. `SILO_FRONT_SPLIT_RATE_BUDGETS` overrides
   this for a comparison that asks one row at a time; `front-compare.sh` sets it, and
   `rust/conformance/scripts/native-chain-isolation.sh` covers the default.
+- `REDIS_URL` is unset, even with `ratelimit.enabled` false. Go's sign-in name, Quick Connect, and PIN budgets
+  apply whatever that setting says, and only Redis shares them across processes, so a native row would let one
+  account be guessed against twice.
 - `userdb.backend` is not `postgres`. Rust reads profiles from Postgres only.
 - An auth plugin binding or a linked identity exists. Password sign-in, refresh, and provider discovery
   (`auth::PROVIDER_PATHS`) need the plugin host then, so those rows go to Go until the last one is gone.
@@ -75,6 +79,10 @@ activity log), the gates as an ordered `Step` list, the v1 refusal body, the v2 
 `stack.v2` reads what those guards need, the declared query parameters and whether the operation declares an
 ETag, from `contracts/api/v2/openapi.json`. Scope and permission decisions are logged to `policy_decisions`
 (`silo_gate::pdp`), and activity rows reach the admin live tail on `silo:logs` (`silo_runtime::logstream`). The gates themselves are in `silo_gate::mw` and `silo_gate::limiter`.
+Tracing events from this workspace go to `operational_logs` and the live tail through `silo_runtime::opslog`, Go's
+`opslog.Handler` and `Consumer`, except the front's messages about itself (`component = "front"`). A v1 request logs
+`api request` and a v2 request logs `apiv2 request`, with Go's attributes. An account ID from a request binds as
+`silo_pg::AnyInt`, so a value past `int4` fails the bind as pgx does and cannot name another account.
 
 `src/native/huma.rs` is what Huma does between the middlewares and a handler: path and query parameters and
 the JSON body, validated against the contract's schemas with Huma's messages. A schema `pattern` the file does

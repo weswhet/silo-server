@@ -112,6 +112,49 @@
         "ValueMismatch $.oldest_sample_at"
       ],
       "why": "The bucket of a server's first dashboard sample after a reset, which it writes as it boots. Two Go servers restarted on either side of a minute boundary differ: a Go vs Go reset 21 seconds apart read 07:12:00 and 07:13:00."
+    },
+    {
+      "cases": [
+        "api_v2 GET /api/v2/libraries/stale-ids#after_writes",
+        "api_v1 GET /api/v1/libraries/stale-ids#after_writes"
+      ],
+      "signatures": [
+        "ValueMismatch $.items[0].first_seen_at",
+        "ValueMismatch $.items[0].last_seen_at",
+        "ValueMismatch $[0].first_seen_at",
+        "ValueMismatch $[0].last_seen_at"
+      ],
+      "why": "Go's metadata worker writes this row with SQL NOW() on each stack (`StaleMediaIDRepository.Upsert`), and no Rust code writes the table, so both values are Go's clock. Whether the worker has run by this case depends on the run's pace: three front runs saw a row with values milliseconds apart, and the recorded Go vs Go run read the row before it was rewritten."
+    },
+    {
+      "cases": [
+        "api_v2 GET /api/v2/admin/policy/decisions/{id}#after_writes",
+        "api_v1 GET /api/v1/admin/policy/decisions/{id}#after_writes"
+      ],
+      "signatures": [
+        "TypeMismatch $.allowed",
+        "ValueMismatch $.allowed",
+        "ValueMismatch $.decision_name",
+        "ValueMismatch $.profile_id",
+        "TypeMismatch $.profile_id",
+        "ValueMismatch $.policy_generation"
+      ],
+      "why": "This case reads decision row 1. With two processes writing decisions, row 1 belongs to whichever batch flushed first (review L4). Seen with Go alone: two Go servers on one database, a permission decision on one and a scope decision on the other in one flush window, gave row 1 as either kind across eight rounds."
+    },
+    {
+      "cases": [
+        "api_v2 POST /api/v2/admin/nodes#seed",
+        "api_v1 GET /api/v1/admin/nodes/#admin",
+        "api_v1 GET /api/v1/admin/nodes/#invalid_query",
+        "api_v1 GET /api/v1/admin/nodes/#slash_variant"
+      ],
+      "signatures": [
+        "TypeMismatch $.last_health_check",
+        "TypeMismatch $[0].last_health_check",
+        "ValueMismatch $.last_health_check",
+        "ValueMismatch $[0].last_health_check"
+      ],
+      "why": "Go's node health loop stamps a new node on its own tick, so a node created just before a tick has last_health_check set on one server and null on the other. The routes were relayed to Go on both sides: both values are Go's, read from two Go servers whose tickers run at different phases."
     }
   ]
 }

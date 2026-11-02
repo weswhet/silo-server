@@ -12,7 +12,8 @@ path = "src/main.rs"
 
 [dependencies]
 silo-front = { path = "../silo-front" }
+silo-runtime = { path = "../silo-runtime" }
 silo-gocompat = { path = "../silo-gocompat" }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "time"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi", "registry"] }

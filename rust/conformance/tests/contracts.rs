@@ -78,7 +78,20 @@ fn every_source_route_is_counted_and_gets_a_case() {
     let inventory: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(repo().join(sources::INVENTORY)).unwrap())
             .unwrap();
-    let in_listener = inventory["routes"].as_array().unwrap().len();
+    // Two wiring branches of one conditional route are one route to a client (M5).
+    let in_listener = inventory["routes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| {
+            (
+                r["listener"].as_str().unwrap().to_string(),
+                r["method"].as_str().unwrap().to_string(),
+                r["path"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect::<BTreeSet<_>>()
+        .len();
     let from_inventory: usize = [
         Surface::ApiV1,
         Surface::ApiDelegate,

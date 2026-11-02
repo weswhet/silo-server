@@ -320,6 +320,49 @@ fn verify_profile(
     Ok(true)
 }
 
+/// What `scope_input` reads.
+pub struct ScopeInputFacts<'a> {
+    pub user_id: i64,
+    pub access_policy_revision: i64,
+    pub effective: &'a EffectivePolicy,
+    pub profile: Option<&'a Profile>,
+    pub disabled: Option<Vec<i64>>,
+    pub profile_metadata_lang: &'a str,
+    pub profile_verified: bool,
+}
+
+/// The `ScopeInput` `ViewerResolver.ResolveFacts` builds. A policy tells `null` from `[]`, so each list keeps
+/// Go's nil: a profile's list is nil with no rows, because `AttachAllowedLibraries` only appends.
+pub fn scope_input(input: &ResolveInput, facts: ScopeInputFacts<'_>) -> ScopeInput {
+    let to_i64 = |ids: &[i32]| ids.iter().map(|id| i64::from(*id)).collect::<Vec<i64>>();
+    let mut out = ScopeInput {
+        schema_version: 1,
+        user_id: facts.user_id,
+        session_id: input.session_id.clone(),
+        profile_id: input.profile_id.clone(),
+        account_library_ids: facts.effective.library_ids.as_deref().map(to_i64),
+        account_restricted: facts.effective.library_ids.is_some(),
+        account_max_quality: facts.effective.max_playback_quality.clone(),
+        access_policy_revision: facts.access_policy_revision,
+        disabled_library_ids: facts.disabled,
+        profile_verified: facts.profile_verified,
+        request_time: now_rfc3339(),
+        ..ScopeInput::default()
+    };
+    if let Some(profile) = facts.profile {
+        out.profile_present = true;
+        out.profile_max_rating = profile.max_content_rating.clone();
+        out.profile_max_advisory_age = profile.max_advisory_age;
+        out.profile_max_quality = profile.max_playback_quality.clone();
+        out.profile_library_limited = profile.library_restrictions_enabled;
+        out.profile_library_ids =
+            (!profile.allowed_library_ids.is_empty()).then(|| to_i64(&profile.allowed_library_ids));
+        out.profile_has_pin = !profile.pin_hash.is_empty();
+        out.profile_metadata_lang = facts.profile_metadata_lang.to_owned();
+    }
+    out
+}
+
 /// `access.ProfileIsLimited`.
 pub fn profile_is_limited(profile: &Profile) -> bool {
     let maturity = MaturityLimits {
@@ -335,9 +378,12 @@ pub fn household_requires_profile(profiles: &[Profile]) -> bool {
     profiles.iter().any(profile_is_limited)
 }
 
-fn int_list(raw: &[u8]) -> Vec<i64> {
-    let ids: Vec<i64> = silo_gocompat::json::unmarshal(raw).unwrap_or_default();
-    ids.into_iter().filter(|id| *id > 0).collect()
+///
+/// `None` is Go's nil: an error or a JSON `null`. `[]`, and a list of only non-positive IDs, stay an empty
+/// list, because a policy can tell the two apart.
+pub fn parse_library_id_list(raw: &[u8]) -> Option<Vec<i64>> {
+    let ids: Option<Vec<i64>> = silo_gocompat::json::unmarshal(raw).ok()?;
+    Some(ids?.into_iter().filter(|id| *id > 0).collect())
 }
 
 /// `parseMetadataLanguageOverrides`: empty is Go's nil. Keys are read in sorted order, so when aliases
@@ -419,7 +465,7 @@ impl ViewerResolver {
         if profile_id.is_empty() {
             return Preferences::default();
         }
-        let store = PostgresUserStore::new(self.pool.clone(), user_id as i32);
+        let store = PostgresUserStore::new(self.pool.clone(), user_id);
         let contract = silo_config::settings::load::must_load();
         let mut resolver = resolve::Resolver::new(contract);
         if let Some(defaults) = &self.defaults {
@@ -454,7 +500,7 @@ impl ViewerResolver {
         for value in values {
             let raw = value.value.as_bytes().unwrap_or_default();
             match value.key.as_str() {
-                "ui.disabled_library_ids" => out.disabled_library_ids = Some(int_list(raw)),
+                "ui.disabled_library_ids" => out.disabled_library_ids = parse_library_id_list(raw),
                 "catalog.metadata_language" => {
                     if let Ok(language) = silo_gocompat::json::unmarshal::<String>(raw) {
                         out.preferred_metadata_language =
@@ -516,31 +562,18 @@ impl ViewerResolver {
         } else {
             preferences.disabled_library_ids.clone()
         };
-        let to_i64 = |ids: &[i32]| ids.iter().map(|id| i64::from(*id)).collect::<Vec<i64>>();
-        let mut policy_input = ScopeInput {
-            schema_version: 1,
-            user_id: user.id,
-            session_id: input.session_id.clone(),
-            profile_id: input.profile_id.clone(),
-            account_library_ids: effective.library_ids.as_deref().map(to_i64),
-            account_restricted: effective.library_ids.is_some(),
-            account_max_quality: effective.max_playback_quality.clone(),
-            access_policy_revision: user.access_policy_revision,
-            disabled_library_ids: disabled,
-            profile_verified,
-            request_time: now_rfc3339(),
-            ..ScopeInput::default()
-        };
-        if let Some(profile) = &profile {
-            policy_input.profile_present = true;
-            policy_input.profile_max_rating = profile.max_content_rating.clone();
-            policy_input.profile_max_advisory_age = profile.max_advisory_age;
-            policy_input.profile_max_quality = profile.max_playback_quality.clone();
-            policy_input.profile_library_limited = profile.library_restrictions_enabled;
-            policy_input.profile_library_ids = Some(to_i64(&profile.allowed_library_ids));
-            policy_input.profile_has_pin = !profile.pin_hash.is_empty();
-            policy_input.profile_metadata_lang = preferences.preferred_metadata_language.clone();
-        }
+        let policy_input = scope_input(
+            input,
+            ScopeInputFacts {
+                user_id: user.id,
+                access_policy_revision: user.access_policy_revision,
+                effective: &effective,
+                profile: profile.as_ref(),
+                disabled,
+                profile_metadata_lang: &preferences.preferred_metadata_language,
+                profile_verified,
+            },
+        );
         let decision = self.decide(&policy_input, request_id).await?;
         if profile_verified && !decision.profile_verified {
             return Err(ResolveError::ProfileUnverified(
@@ -754,6 +787,89 @@ pub async fn household_profile_gate(resolver: &ViewerResolver, r: &Request) -> R
         return Err(Denial::profile_header_required());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod scope_nil_tests {
+    use super::*;
+
+    /// The `ScopeInput` Go's `ResolveFacts` gave the decision logger, for each list nil and empty.
+    #[test]
+    fn scope_input_nil_lists_match_go() {
+        let raw = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../conformance/vectors/access/access.json"
+        ))
+        .unwrap();
+        let data: serde_json::Value = silo_gocompat::json::unmarshal(&raw).unwrap();
+        let cases = data["scope_input_nil"].as_array().unwrap();
+        assert!(cases.len() >= 12);
+        for case in cases {
+            let name = case["name"].as_str().unwrap();
+            let ints = |v: &serde_json::Value| -> Option<Vec<i32>> {
+                v.as_array().map(|a| {
+                    a.iter()
+                        .map(|n| i32::try_from(n.as_i64().unwrap()).unwrap())
+                        .collect()
+                })
+            };
+            let user = User {
+                id: 2,
+                role: "user".to_owned(),
+                enabled: true,
+                library_ids: ints(&case["user_library_ids"]),
+                ..User::default()
+            };
+            let group = case.get("group_library_ids").map(|ids| GroupPolicy {
+                library_ids: ints(ids),
+                ..GroupPolicy::default()
+            });
+            let effective = apply_group_policy(&user, group.as_ref());
+            let profile = case["profile_rows"].as_array().map(|rows| Profile {
+                id: "p".to_owned(),
+                allowed_library_ids: rows
+                    .iter()
+                    .map(|n| i32::try_from(n.as_i64().unwrap()).unwrap())
+                    .collect(),
+                ..Profile::default()
+            });
+            let content_only = case["content_access_only"].as_bool().unwrap();
+            let input = ResolveInput {
+                user_id: 2,
+                profile_id: if profile.is_some() {
+                    "p".to_owned()
+                } else {
+                    String::new()
+                },
+                skip_pin_verification: true,
+                content_access_only: content_only,
+                ..ResolveInput::default()
+            };
+            let disabled = parse_library_id_list(case["disabled_raw"].as_str().unwrap().as_bytes());
+            let got = scope_input(
+                &input,
+                ScopeInputFacts {
+                    user_id: 2,
+                    access_policy_revision: 0,
+                    effective: &effective,
+                    profile: profile.as_ref(),
+                    disabled: if content_only { None } else { disabled },
+                    profile_metadata_lang: "",
+                    profile_verified: true,
+                },
+            );
+            let got = serde_json::to_value(&got).unwrap();
+            for field in [
+                "account_library_ids",
+                "account_restricted",
+                "disabled_library_ids",
+                "profile_allowed_library_ids",
+                "profile_present",
+            ] {
+                assert_eq!(got[field], case["input"][field], "{name}: {field}");
+            }
+        }
+    }
 }
 
 #[cfg(test)]

@@ -261,7 +261,7 @@ async fn resolve_preferences(
     if ids.is_empty() {
         return out;
     }
-    let store = PostgresUserStore::new(s.pool.clone(), user_id as i32);
+    let store = PostgresUserStore::new(s.pool.clone(), user_id);
     let keys: Vec<String> = PREFERENCE_KEYS.iter().map(|k| (*k).to_owned()).collect();
     match silo_config::resolve::Resolver::new(contract())
         .resolve_profiles(&store, ids, &keys, &Constraints::new())
@@ -472,7 +472,7 @@ struct CreateRequest {
     auto_play_next_preview: bool,
     show_forced_subtitles: Option<bool>,
     library_restrictions_enabled: bool,
-    allowed_library_ids: Vec<i32>,
+    allowed_library_ids: Vec<i64>,
     max_playback_quality: String,
 }
 
@@ -500,7 +500,7 @@ struct UpdateRequest {
     auto_play_next_preview: Option<bool>,
     show_forced_subtitles: Option<bool>,
     library_restrictions_enabled: Option<bool>,
-    allowed_library_ids: Option<Vec<i32>>,
+    allowed_library_ids: Option<Vec<i64>>,
     max_playback_quality: Option<String>,
 }
 
@@ -838,7 +838,7 @@ async fn create_profile(
         auto_skip_recap: req.auto_skip_recap,
         auto_play_next_preview: req.auto_play_next_preview,
         library_restrictions_enabled: req.library_restrictions_enabled,
-        allowed_library_ids: req.allowed_library_ids.clone(),
+        allowed_library_ids: int4_ids(&req.allowed_library_ids)?,
         max_playback_quality: quality,
     };
     let result = create_tx(
@@ -877,7 +877,7 @@ async fn create_profile(
         let mut conn = s.pool.acquire().await.map_err(|_| failed())?;
         let mut writer = Writer {
             tx: &mut conn,
-            user_id: user_id as i32,
+            user_id: silo_pg::AnyInt(user_id),
         };
         writer
             .update_profile(&id, &input)
@@ -918,7 +918,7 @@ async fn create_tx(
     let changed = {
         let mut writer = Writer {
             tx: &mut tx,
-            user_id: user_id as i32,
+            user_id: silo_pg::AnyInt(user_id),
         };
         writer.lock_preferences().await?;
         if recording {
@@ -1100,7 +1100,11 @@ async fn update_profile(
         auto_play_next_preview: req.auto_play_next_preview,
         show_forced_subtitles: req.show_forced_subtitles,
         library_restrictions_enabled: req.library_restrictions_enabled,
-        allowed_library_ids: req.allowed_library_ids.clone(),
+        allowed_library_ids: req
+            .allowed_library_ids
+            .as_deref()
+            .map(int4_ids)
+            .transpose()?,
         max_playback_quality: quality,
     };
     let changed = update_tx(
@@ -1166,7 +1170,7 @@ async fn update_tx(
     let changed = {
         let mut writer = Writer {
             tx: &mut tx,
-            user_id: user_id as i32,
+            user_id: silo_pg::AnyInt(user_id),
         };
         writer.lock_preferences().await?;
         if recording {
@@ -1523,6 +1527,14 @@ struct V2Create {
     max_playback_quality: Option<String>,
 }
 
+/// A v1 body keeps Go's `int`, and the row insert is what refuses a value `int4` cannot hold.
+fn int4_ids(ids: &[i64]) -> Result<Vec<i32>, ApiError> {
+    ids.iter()
+        .map(|id| i32::try_from(*id))
+        .collect::<Result<_, _>>()
+        .map_err(|_| api(500, INTERNAL, "Failed to store profile preferences"))
+}
+
 fn invalid_at(location: &str, code: &str, detail: &str) -> Problem {
     Problem::new(
         validation_failed(),
@@ -1543,7 +1555,14 @@ fn library_ids_of(raw: &[String]) -> Result<Vec<i32>, Problem> {
         let Some(n) = int_of_id(id) else {
             return Err(invalid_at(AT, "invalid", "expected library identifiers"));
         };
-        let n = n as i32;
+        // Go keeps an `int` here, and no library has this ID. Truncating would name another library.
+        let Ok(n) = i32::try_from(n) else {
+            return Err(invalid_at(
+                AT,
+                "invalid",
+                &format!("unknown library identifier: {n}"),
+            ));
+        };
         if out.contains(&n) {
             return Err(invalid_at(AT, "invalid", "duplicate library identifier"));
         }
@@ -1708,7 +1727,7 @@ fn mount_v2(stack: &Arc<Stack>, v2: &Mux) {
                     library_restrictions_enabled: body
                         .library_restrictions_enabled
                         .unwrap_or(false),
-                    allowed_library_ids: libraries,
+                    allowed_library_ids: libraries.iter().copied().map(i64::from).collect(),
                     max_playback_quality: body.max_playback_quality.unwrap_or_default(),
                 };
                 let verify = Verifier::v2(r);
@@ -1787,7 +1806,9 @@ fn mount_v2(stack: &Arc<Stack>, v2: &Mux) {
                     auto_play_next_preview: body.auto_play_next_preview,
                     show_forced_subtitles: body.show_forced_subtitles,
                     library_restrictions_enabled: body.library_restrictions_enabled,
-                    allowed_library_ids: libraries,
+                    allowed_library_ids: libraries
+                        .as_ref()
+                        .map(|ids| ids.iter().copied().map(i64::from).collect()),
                     max_playback_quality: clear(body.max_playback_quality),
                 };
                 let id = r.url_param("id").to_owned();

@@ -30,7 +30,7 @@ start_front() {
   : >"$out/origin.jsonl"
   DATABASE_URL="postgres://silo:silo@127.0.0.1:${CONF_B_PG_PORT:-35432}/silo?sslmode=disable" \
     SECRET_KEY="$CONF_SECRET_KEY" \
-    REDIS_URL="redis://127.0.0.1:${CONF_B_REDIS_PORT:-36379}" \
+    REDIS_URL="${REDIS_FOR_FRONT-redis://127.0.0.1:${CONF_B_REDIS_PORT:-36379}}" \
     SILO_FRONT_ORIGIN_LOG="$out/origin.jsonl" \
     rust/target/debug/silo --front "main=127.0.0.1:18180,$go_b" >"$out/front.log" 2>&1 &
   pid=$!
@@ -87,6 +87,15 @@ start_front
 expect memory_origin go "$(curl -s -o /dev/null -H "$K" "$front/api/v2/images/capabilities"; origin_of /api/v2/images/capabilities)"
 expect memory_public native "$(curl -s -o /dev/null "$front/api/v2/auth/device/capability"; origin_of /api/v2/auth/device/capability)"
 one_budget memory
+
+# The request limiter off and no Redis: Go's sign-in name, Quick Connect, and PIN budgets still apply, and a
+# second process could not share them, so one account would get two budgets.
+setting ratelimit.enabled false
+restart_go
+REDIS_FOR_FRONT="" start_front
+expect limiter_off_no_redis_origin go "$(curl -s -o /dev/null -X POST -H 'Content-Type: application/json' -d '{"username":"nobody","password":"x"}' "$front/api/v1/auth/login"; origin_of /api/v1/auth/login)"
+unset_setting ratelimit.enabled
+restart_go
 
 # A SQLite user store: Rust reads only Postgres, so viewer rows stay on Go.
 setting userdb.backend sqlite

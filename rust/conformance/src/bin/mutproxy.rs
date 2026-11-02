@@ -124,6 +124,7 @@ fn serve(
         .iter()
         .chain(mutate::RULE_PROBES)
         .chain(mutate::CONTROLS)
+        .chain(mutate::REQUEST_FAULTS)
         .any(|m| *m == mutation)
         || mutation == "all";
     if !known {
@@ -295,6 +296,17 @@ fn exchange(
     case_id: Option<&str>,
     shared: &Shared,
 ) -> std::io::Result<bool> {
+    // A fault in what is written is decided before the upstream sees the request.
+    let faulted = match case_id {
+        Some(case) if shared.mutation == "wrong_write" => {
+            mutate::apply_request_fault(case, method, body)
+        }
+        _ => None,
+    };
+    let body: &[u8] = match &faulted {
+        Some((changed, _)) => changed,
+        None => body,
+    };
     let up = TcpStream::connect(upstream)?;
     up.set_read_timeout(Some(HEAD_WAIT))?;
     let mut request = format!("{method} {target} HTTP/1.1\r\n");
@@ -390,9 +402,17 @@ fn exchange(
         ..Resp::default()
     };
     let mut applied: Vec<Applied> = Vec::new();
+    // A refused write stored nothing, so the fault only counts when the server took it.
+    if let Some((_, fault)) = &faulted {
+        if (200..300).contains(&status) {
+            applied.push(fault.clone());
+        }
+    }
     if let Some(id) = case_id {
         if let Some(req) = Req::parse(id, method, target, seen) {
-            if header(seen, "if-none-match").is_none() {
+            if shared.mutation == "wrong_write" {
+                // Applied to the request above.
+            } else if header(seen, "if-none-match").is_none() {
                 applied = mutate::apply(
                     &shared.mutation,
                     &req,

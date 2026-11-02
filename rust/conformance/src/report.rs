@@ -127,6 +127,8 @@ pub struct Report {
     pub surfaces: BTreeMap<String, SurfaceCounts>,
     pub overall: SurfaceCounts,
     pub regressions: Vec<Regression>,
+    /// What each stage logged differently, compared with `--effects-*`.
+    pub stage_effects: Vec<String>,
     pub improvements: Vec<String>,
     pub normalizers: Vec<NormalizerUse>,
     pub routes: Vec<RouteReport>,
@@ -187,12 +189,20 @@ pub fn route_reports(routes: &[Route], out: &RunOutput, flakes: &FlakeSet) -> Ve
             // A success counts only if its answer was compared in full.
             let (mut compared_success, mut uncompared_success, mut feed_success) =
                 (false, false, false);
+            let mut no_effect_success = false;
             for c in &exercised {
                 if !probes_only_routing(&c.name) {
                     let depth = depth_of(c.reference_status);
                     report.depth = report.depth.max(depth);
                     if depth == Depth::Success {
                         match (c.body_compared, c.feed_relaxed) {
+                            // An empty answer says nothing: the write's effect has to be the evidence.
+                            (true, false)
+                                if c.empty_body
+                                    && c.effect.is_some_and(|e| e.rows + e.events == 0) =>
+                            {
+                                no_effect_success = true
+                            }
                             (true, false) => compared_success = true,
                             (true, true) => feed_success = true,
                             (false, _) => uncompared_success = true,
@@ -201,7 +211,9 @@ pub fn route_reports(routes: &[Route], out: &RunOutput, flakes: &FlakeSet) -> Ve
                 }
                 report.statuses.insert(c.name.clone(), c.reference_status);
                 any_body |= c.body_compared;
-                if c.proxied {
+                // A preflight or slash probe of a native row goes to Go when a sibling route also takes the path,
+                // and that says nothing about who answers the row. A difference on it still counts below.
+                if c.proxied && !probes_only_routing(&c.name) {
                     report.proxied_cases += 1;
                 }
                 if c.diffs.is_empty() {
@@ -214,7 +226,14 @@ pub fn route_reports(routes: &[Route], out: &RunOutput, flakes: &FlakeSet) -> Ve
                     report.flake_cases += 1;
                 } else {
                     unexplained += 1;
-                    if c.proxied {
+                    // Behind the relay Go's workers still race the case's clock, and the relay cannot change
+                    // what Go writes. A row's effects count once it answers natively.
+                    if c.proxied
+                        && !c
+                            .diffs
+                            .iter()
+                            .all(|d| d.kind == crate::diff::DiffKind::Effect)
+                    {
                         report.proxied_diff_cases += 1;
                     }
                 }
@@ -236,7 +255,9 @@ pub fn route_reports(routes: &[Route], out: &RunOutput, flakes: &FlakeSet) -> Ve
                 RouteState::Matched
             } else {
                 report.weak_reason = Some(
-                    if feed_success {
+                    if no_effect_success {
+                        "only success was an empty body from a write that changed nothing"
+                    } else if feed_success {
                         "only success was a feed, whose contents are not compared"
                     } else if uncompared_success {
                         "only success had a body that could not be compared"

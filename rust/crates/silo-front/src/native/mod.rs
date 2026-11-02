@@ -174,6 +174,7 @@ pub fn main_handler(inputs: &NativeInputs) -> BoxHandler {
     ]);
     v2.not_found(handler_fn(|w, r| {
         let id = chain::request_id_of(r);
+        chain::note_problem(r, "not_found");
         Box::pin(write_problem(
             w,
             "not_found",
@@ -187,6 +188,7 @@ pub fn main_handler(inputs: &NativeInputs) -> BoxHandler {
     v2.method_not_allowed(handler_fn(|w, r| {
         let allow = v2_methods(&String::from_utf8_lossy(&r.url.path)).join(", ");
         let id = chain::request_id_of(r);
+        chain::note_problem(r, "method_not_allowed");
         Box::pin(write_problem(
             w,
             "method_not_allowed",
@@ -355,15 +357,22 @@ impl Gate {
             {
                 return false;
             }
-            // A Go-owned method at this path stays on Go.
+            // A method this path does not answer natively stays on Go when Go's answer is not a plain 405 of the
+            // native rows: another method at the path is Go's, so its `Allow` names that method, or the method is
+            // at a sibling template that takes this path as a parameter (`PUT /libraries/{id}`), whose methods chi also names.
             let spelled_exactly = bare == path_text || row.path.ends_with('/');
-            if spelled_exactly
-                && !is_native(row.surface, method, row.path)
-                && ROWS
-                    .iter()
-                    .any(|r| r.surface == row.surface && r.path == row.path && r.method == method)
-            {
-                return false;
+            if spelled_exactly && !is_native(row.surface, method, row.path) {
+                let same_path_go = ROWS.iter().any(|r| {
+                    r.surface == row.surface
+                        && r.path == row.path
+                        && !is_native(r.surface, r.method, r.path)
+                });
+                let sibling = ROWS.iter().any(|r| {
+                    r.surface == row.surface && r.path != row.path && matches_template(r.path, bare)
+                });
+                if same_path_go || sibling {
+                    return false;
+                }
             }
             return true;
         }

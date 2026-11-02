@@ -1,15 +1,15 @@
 {
   "schema_version": 2,
   "candidate_kind": "self_compare",
-  "runs": 3,
+  "runs": 1,
   "source_revision": "63ef34b236b88dc77acca1a9a3ed90235377691f",
   "surfaces": {
     "abs": {
       "total_routes": 187,
       "matched": 55,
-      "weak_evidence": 132,
-      "weak_refusals_only": 117,
-      "differs": 0,
+      "weak_evidence": 131,
+      "weak_refusals_only": 116,
+      "differs": 1,
       "known_flake": 0,
       "not_ported": 0,
       "not_ported_with_diffs": 0,
@@ -29,40 +29,40 @@
       "parity_percent": 0.0
     },
     "api_v1": {
-      "total_routes": 694,
-      "matched": 399,
-      "weak_evidence": 294,
-      "weak_refusals_only": 103,
-      "differs": 1,
+      "total_routes": 682,
+      "matched": 374,
+      "weak_evidence": 305,
+      "weak_refusals_only": 101,
+      "differs": 3,
       "known_flake": 0,
       "not_ported": 0,
       "not_ported_with_diffs": 0,
       "not_exercised": 0,
-      "parity_percent": 57.49
+      "parity_percent": 54.84
     },
     "api_v2": {
       "total_routes": 908,
-      "matched": 496,
-      "weak_evidence": 410,
+      "matched": 471,
+      "weak_evidence": 431,
       "weak_refusals_only": 96,
-      "differs": 2,
+      "differs": 6,
       "known_flake": 0,
       "not_ported": 0,
       "not_ported_with_diffs": 0,
       "not_exercised": 0,
-      "parity_percent": 54.63
+      "parity_percent": 51.87
     },
     "api_v2_walked": {
       "total_routes": 22,
-      "matched": 9,
-      "weak_evidence": 13,
+      "matched": 3,
+      "weak_evidence": 19,
       "weak_refusals_only": 4,
       "differs": 0,
       "known_flake": 0,
       "not_ported": 0,
       "not_ported_with_diffs": 0,
       "not_exercised": 0,
-      "parity_percent": 40.91
+      "parity_percent": 13.64
     },
     "debug": {
       "total_routes": 90,
@@ -78,15 +78,15 @@
     },
     "jellycompat": {
       "total_routes": 171,
-      "matched": 98,
-      "weak_evidence": 73,
+      "matched": 96,
+      "weak_evidence": 75,
       "weak_refusals_only": 62,
       "differs": 0,
       "known_flake": 0,
       "not_ported": 0,
       "not_ported_with_diffs": 0,
       "not_exercised": 0,
-      "parity_percent": 57.31
+      "parity_percent": 56.14
     },
     "metrics": {
       "total_routes": 10,
@@ -258,6 +258,30 @@
       ],
       "why": "The seed stage creates two collections moments apart, stored at one-second resolution, and ListUserCollections orders by created_at DESC with no tiebreak. A server whose two writes straddle a second lists the newer first; one whose writes share a second lists them in table order, so the two lists swap. Seen Go vs Go: the same two writes straddling a second on one Go server and not on the other invert the list with no front involved."
     },
+    "abs POST /abs/api/feeds/{id}/close#invalid_shape": {
+      "runs_with_difference": 1,
+      "runs": 1,
+      "reference_status_varied": false,
+      "signatures": [
+        "Effect effect.event.playback_sessions_changed"
+      ]
+    },
+    "abs POST /abs/api/feeds/{id}/close#slash_variant": {
+      "runs_with_difference": 1,
+      "runs": 1,
+      "reference_status_varied": false,
+      "signatures": [
+        "Effect effect.event.playback_sessions_changed"
+      ]
+    },
+    "api_v1 DELETE /api/v1/admin/history-imports/sources/{id}/token#valid": {
+      "runs_with_difference": 1,
+      "runs": 1,
+      "reference_status_varied": false,
+      "signatures": [
+        "Effect effect.event.events_notification"
+      ]
+    },
     "api_v1 GET /api/v1/admin/policy/decisions#admin": {
       "runs_with_difference": 0,
       "runs": 0,
@@ -288,6 +312,24 @@
       ],
       "why": "next_cursor is present only when the listing is full, and the decision count around that limit depends on when each server's log flushed."
     },
+    "api_v1 GET /api/v1/admin/stats/timeseries#admin": {
+      "runs_with_difference": 0,
+      "runs": 0,
+      "reference_status_varied": false,
+      "signatures": [
+        "ValueMismatch $.oldest_sample_at"
+      ],
+      "why": "The bucket of a server's first dashboard sample after a reset, which it writes as it boots. Two Go servers restarted on either side of a minute boundary differ: a Go vs Go reset 21 seconds apart read 07:12:00 and 07:13:00."
+    },
+    "api_v1 GET /api/v1/admin/stats/timeseries#after_writes": {
+      "runs_with_difference": 0,
+      "runs": 0,
+      "reference_status_varied": false,
+      "signatures": [
+        "ValueMismatch $.oldest_sample_at"
+      ],
+      "why": "The bucket of a server's first dashboard sample after a reset, which it writes as it boots. Two Go servers restarted on either side of a minute boundary differ: a Go vs Go reset 21 seconds apart read 07:12:00 and 07:13:00."
+    },
     "api_v1 PATCH /api/v1/watch-together/rooms/{room_id}/policy#valid": {
       "runs_with_difference": 0,
       "runs": 0,
@@ -298,11 +340,19 @@
       "why": "A clock value with one-second resolution: the two servers can land on either side of a second. Seen Go vs Go."
     },
     "api_v1 POST /api/v1/admin/catalog/export#valid": {
-      "runs_with_difference": 3,
-      "runs": 3,
+      "runs_with_difference": 1,
+      "runs": 1,
       "reference_status_varied": false,
       "signatures": [
         "Bytes body"
+      ]
+    },
+    "api_v1 POST /api/v1/admin/jellyfin-compat/web/remove#valid": {
+      "runs_with_difference": 1,
+      "runs": 1,
+      "reference_status_varied": false,
+      "signatures": [
+        "Effect effect.event.events_notification"
       ]
     },
     "api_v1 PUT /api/v1/watch-together/rooms/{room_id}/selection#valid": {
@@ -314,13 +364,36 @@
       ],
       "why": "A clock value with one-second resolution: the two servers can land on either side of a second. Seen Go vs Go."
     },
-    "api_v2 GET /api/v2/libraries/stale-ids#after_writes": {
-      "runs_with_difference": 2,
-      "runs": 3,
+    "api_v2 DELETE /api/v2/admin/users/{user_id}/login-sessions/{session_id}#valid": {
+      "runs_with_difference": 1,
+      "runs": 1,
       "reference_status_varied": false,
       "signatures": [
-        "ValueMismatch $.items[0].first_seen_at"
+        "Effect effect.event.events_notification",
+        "Effect effect.event.metadata_updated",
+        "Effect effect.item_people.DELETE",
+        "Effect effect.item_people.INSERT",
+        "Effect effect.media_item_provider_ids.DELETE",
+        "Effect effect.media_item_provider_ids.INSERT"
       ]
+    },
+    "api_v2 GET /api/v2/admin/stats/timeseries#admin": {
+      "runs_with_difference": 0,
+      "runs": 0,
+      "reference_status_varied": false,
+      "signatures": [
+        "ValueMismatch $.oldest_sample_at"
+      ],
+      "why": "The bucket of a server's first dashboard sample after a reset, which it writes as it boots. Two Go servers restarted on either side of a minute boundary differ: a Go vs Go reset 21 seconds apart read 07:12:00 and 07:13:00."
+    },
+    "api_v2 GET /api/v2/admin/stats/timeseries#after_writes": {
+      "runs_with_difference": 0,
+      "runs": 0,
+      "reference_status_varied": false,
+      "signatures": [
+        "ValueMismatch $.oldest_sample_at"
+      ],
+      "why": "The bucket of a server's first dashboard sample after a reset, which it writes as it boots. Two Go servers restarted on either side of a minute boundary differ: a Go vs Go reset 21 seconds apart read 07:12:00 and 07:13:00."
     },
     "api_v2 GET /api/v2/not-interested/{item_id}#after_writes": {
       "runs_with_difference": 0,
@@ -341,8 +414,8 @@
       "why": "These are the viewer's first capability read after a stage's restart. sourceBitratePercentile answers one with no bandwidth_probe_target_kbps and starts the read in the background, so the ETag changes once that read lands, and the replay gets 304 or 200 depending on which came first. Seen Go vs Go in both directions: the peer case in a lab run, and #user as 200 against 304 in 1 of 10 resets of both Go stacks."
     },
     "api_v2 GET /api/v2/playback/capabilities#user": {
-      "runs_with_difference": 1,
-      "runs": 3,
+      "runs_with_difference": 0,
+      "runs": 0,
       "reference_status_varied": false,
       "signatures": [
         "EtagBehaviour revalidation status"
@@ -359,11 +432,19 @@
       "why": "Seen once in three runs: the answer depends on how far a background write has got."
     },
     "api_v2 POST /api/v2/admin/catalog/export#valid": {
-      "runs_with_difference": 3,
-      "runs": 3,
+      "runs_with_difference": 1,
+      "runs": 1,
       "reference_status_varied": false,
       "signatures": [
         "Bytes body"
+      ]
+    },
+    "api_v2 POST /api/v2/admin/jellyfin-compat/web/remove#valid": {
+      "runs_with_difference": 1,
+      "runs": 1,
+      "reference_status_varied": false,
+      "signatures": [
+        "Effect effect.event.events_notification"
       ]
     },
     "api_v2 POST /api/v2/catalog/items/{id}/trailers/refresh#fixture:refresh_catalog_item_trailers_unsupported_type": {
@@ -391,6 +472,32 @@
         "ValueMismatch $.type"
       ],
       "why": "The refresh cooldown is per item and carried across this run's earlier refresh, so one server can answer before the cooldown clears and the other after."
+    },
+    "api_v2 POST /api/v2/libraries/{id}/refresh-metadata#valid": {
+      "runs_with_difference": 1,
+      "runs": 1,
+      "reference_status_varied": false,
+      "signatures": [
+        "Effect effect.event.events_notification"
+      ]
+    },
+    "api_v2 PUT /api/v2/libraries/{id}/providers#valid": {
+      "runs_with_difference": 1,
+      "runs": 1,
+      "reference_status_varied": false,
+      "signatures": [
+        "Effect effect.media_files.UPDATE",
+        "Effect effect.media_item_libraries.INSERT",
+        "Effect effect.media_items.INSERT"
+      ]
+    },
+    "api_v2 PUT /api/v2/notifications/preferences#valid": {
+      "runs_with_difference": 1,
+      "runs": 1,
+      "reference_status_varied": false,
+      "signatures": [
+        "Effect effect.notification_email_verifications.UPDATE"
+      ]
     }
   },
   "routes": {
@@ -2161,7 +2268,7 @@
       }
     },
     "abs POST /abs/api/feeds/{id}/close": {
-      "state": "weak_evidence",
+      "state": "known_flake",
       "depth": "auth_rejected",
       "statuses": {
         "anon": 401,
@@ -2961,7 +3068,7 @@
       }
     },
     "api_v1 DELETE /api/v1/admin/history-imports/sources/{id}/token": {
-      "state": "matched",
+      "state": "known_flake",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -2973,7 +3080,7 @@
       }
     },
     "api_v1 DELETE /api/v1/admin/invitations/{id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -3003,7 +3110,7 @@
       }
     },
     "api_v1 DELETE /api/v1/admin/literary-works/{work_id}/items/{content_id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -3038,7 +3145,7 @@
       }
     },
     "api_v1 DELETE /api/v1/admin/notifications/server-channels/{id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -3074,7 +3181,7 @@
       }
     },
     "api_v1 DELETE /api/v1/admin/plugins/uploads/chunked/{upload_id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -3285,7 +3392,7 @@
       }
     },
     "api_v1 DELETE /api/v1/diagnostics/reports/uploads/{upload_id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -3318,7 +3425,7 @@
       }
     },
     "api_v1 DELETE /api/v1/ebooks/{content_id}/annotations/{annotation_id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -3440,7 +3547,7 @@
       }
     },
     "api_v1 DELETE /api/v1/notifications/web-push/subscriptions/{id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -3451,7 +3558,7 @@
       }
     },
     "api_v1 DELETE /api/v1/notifications/webhooks/{id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -3492,7 +3599,7 @@
       }
     },
     "api_v1 DELETE /api/v1/profile/sections/reset": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -3630,7 +3737,7 @@
       }
     },
     "api_v1 DELETE /api/v1/watch-providers/{provider}/connection": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -4826,7 +4933,7 @@
       }
     },
     "api_v1 GET /api/v1/admin/stats/timeseries": {
-      "state": "matched",
+      "state": "known_flake",
       "depth": "success",
       "statuses": {
         "admin": 200,
@@ -8858,7 +8965,7 @@
       }
     },
     "api_v1 POST /api/v1/admin/jellyfin-compat/web/remove": {
-      "state": "weak_evidence",
+      "state": "known_flake",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -10428,7 +10535,7 @@
       }
     },
     "api_v1 POST /api/v1/notifications/web-push/unsubscribe": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -11193,7 +11300,7 @@
       }
     },
     "api_v1 PUT /api/v1/admin/invite-codes/{id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -11417,7 +11524,7 @@
       }
     },
     "api_v1 PUT /api/v1/admin/sections/reorder": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -11712,7 +11819,7 @@
       }
     },
     "api_v1 PUT /api/v1/libraries/reorder": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -11780,7 +11887,7 @@
       }
     },
     "api_v1 PUT /api/v1/library-playback-prefs/{library_id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -12368,7 +12475,7 @@
       }
     },
     "api_v2 DELETE /api/v2/admin/diagnostics/reports/{id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -12404,7 +12511,7 @@
       }
     },
     "api_v2 DELETE /api/v2/admin/history-imports/sources/{id}/token": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -12417,7 +12524,7 @@
       }
     },
     "api_v2 DELETE /api/v2/admin/invitations/{id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -12442,7 +12549,7 @@
       }
     },
     "api_v2 DELETE /api/v2/admin/literary-works/{work_id}/items/{content_id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -12479,7 +12586,7 @@
       }
     },
     "api_v2 DELETE /api/v2/admin/notifications/server-channels/{id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -12515,7 +12622,7 @@
       }
     },
     "api_v2 DELETE /api/v2/admin/plugins/uploads/chunked/{upload_id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -12669,7 +12776,7 @@
       }
     },
     "api_v2 DELETE /api/v2/admin/users/{user_id}/login-sessions/{session_id}": {
-      "state": "weak_evidence",
+      "state": "known_flake",
       "depth": "client_error",
       "statuses": {
         "anon": 401,
@@ -12801,7 +12908,7 @@
       }
     },
     "api_v2 DELETE /api/v2/diagnostics/reports/uploads/{upload_id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -12885,7 +12992,7 @@
       }
     },
     "api_v2 DELETE /api/v2/libraries/unmatched-items/{content_id}/ignore": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -12963,7 +13070,7 @@
       }
     },
     "api_v2 DELETE /api/v2/notifications/discord-link": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -13006,7 +13113,7 @@
       }
     },
     "api_v2 DELETE /api/v2/notifications/web-push/subscriptions/{id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -13028,7 +13135,7 @@
       }
     },
     "api_v2 DELETE /api/v2/playback/connection/learned-limit": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -13051,7 +13158,7 @@
       }
     },
     "api_v2 DELETE /api/v2/profile/sections": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -13088,7 +13195,7 @@
       }
     },
     "api_v2 DELETE /api/v2/progress/{media_item_id}/position": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -13114,7 +13221,7 @@
       }
     },
     "api_v2 DELETE /api/v2/requests/follows/{media_type}/{tmdb_id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -13159,7 +13266,7 @@
       }
     },
     "api_v2 DELETE /api/v2/shuffles/{shuffle_id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -13193,7 +13300,7 @@
       }
     },
     "api_v2 DELETE /api/v2/watch-providers/{provider}/connection": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -13262,7 +13369,7 @@
       }
     },
     "api_v2 DELETE /api/v2/watchlist/{item_id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -15450,7 +15557,7 @@
       }
     },
     "api_v2 GET /api/v2/admin/stats/timeseries": {
-      "state": "matched",
+      "state": "known_flake",
       "depth": "success",
       "statuses": {
         "admin": 200,
@@ -17748,7 +17855,7 @@
       }
     },
     "api_v2 GET /api/v2/libraries/stale-ids": {
-      "state": "known_flake",
+      "state": "matched",
       "depth": "success",
       "statuses": {
         "admin": 200,
@@ -20876,7 +20983,7 @@
       "statuses": {
         "anon": 401,
         "cors_preflight": 405,
-        "fixture:admin_catalog_export_queued": 409,
+        "fixture:admin_catalog_export_queued": 202,
         "invalid_json": 400,
         "invalid_shape": 422,
         "seed": 202,
@@ -21505,7 +21612,7 @@
       }
     },
     "api_v2 POST /api/v2/admin/jellyfin-compat/web/remove": {
-      "state": "weak_evidence",
+      "state": "known_flake",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -22699,7 +22806,7 @@
       }
     },
     "api_v2 POST /api/v2/auth/oauth/{install_id}/init": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 302,
@@ -23205,7 +23312,7 @@
       }
     },
     "api_v2 POST /api/v2/libraries/reorder": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -23287,7 +23394,7 @@
       }
     },
     "api_v2 POST /api/v2/libraries/{id}/refresh-metadata": {
-      "state": "matched",
+      "state": "known_flake",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -23387,7 +23494,7 @@
       }
     },
     "api_v2 POST /api/v2/notifications/web-push/unsubscribe": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -23476,7 +23583,7 @@
       }
     },
     "api_v2 POST /api/v2/playback/bandwidth-probe/results": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -24287,7 +24394,7 @@
       }
     },
     "api_v2 PUT /api/v2/admin/invite-codes/{id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -24911,7 +25018,7 @@
       }
     },
     "api_v2 PUT /api/v2/libraries/{id}/providers": {
-      "state": "matched",
+      "state": "known_flake",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -25008,7 +25115,7 @@
       }
     },
     "api_v2 PUT /api/v2/notifications/preferences": {
-      "state": "matched",
+      "state": "known_flake",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -25059,7 +25166,7 @@
       }
     },
     "api_v2 PUT /api/v2/profile/sections": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -25314,7 +25421,7 @@
       }
     },
     "api_v2_walked CONNECT /api/v2/plugin-content/plugins/{installation_id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 308,
@@ -25331,7 +25438,7 @@
       }
     },
     "api_v2_walked DELETE /api/v2/plugin-content/plugins/{installation_id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 308,
@@ -25474,7 +25581,7 @@
       }
     },
     "api_v2_walked PATCH /api/v2/plugin-content/plugins/{installation_id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 308,
@@ -25495,7 +25602,7 @@
       }
     },
     "api_v2_walked POST /api/v2/plugin-content/plugins/{installation_id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 308,
@@ -25516,7 +25623,7 @@
       }
     },
     "api_v2_walked PUT /api/v2/plugin-content/plugins/{installation_id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 308,
@@ -25537,7 +25644,7 @@
       }
     },
     "api_v2_walked TRACE /api/v2/plugin-content/plugins/{installation_id}": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 308,
@@ -27878,7 +27985,7 @@
       }
     },
     "jellycompat POST /Sessions/Capabilities": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -27890,7 +27997,7 @@
       }
     },
     "jellycompat POST /Sessions/Capabilities/Full": {
-      "state": "matched",
+      "state": "weak_evidence",
       "depth": "success",
       "statuses": {
         "anon": 401,

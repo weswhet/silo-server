@@ -4,6 +4,7 @@
 pub mod auth_flows;
 pub mod baseline;
 pub mod diff;
+pub mod effects;
 pub mod http;
 pub mod model;
 pub mod mutate;

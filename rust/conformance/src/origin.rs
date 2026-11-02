@@ -62,7 +62,39 @@ impl OriginLog {
 }
 
 /// A case counts as served by the candidate only if lines exist for it and every one says native. No
-/// line at all means the log cannot vouch for the answer, so it counts against the route.
-pub fn proxied(entries: &[OriginEntry]) -> bool {
-    entries.is_empty() || entries.iter().any(|e| e.origin != "native")
+/// line at all means the log cannot vouch for the answer, so it counts against the route. Only lines for
+/// the case's own method and path count: a stray request from another process (a host probing new
+/// listeners, a health check) says nothing about this case.
+pub fn proxied(entries: &[OriginEntry], method: &str, path_and_query: &str) -> bool {
+    let path = |target: &str| target.split('?').next().unwrap_or_default().to_string();
+    let wanted = path(path_and_query);
+    let mine: Vec<&OriginEntry> = entries
+        .iter()
+        .filter(|e| e.method == method && path(&e.target) == wanted)
+        .collect();
+    mine.is_empty() || mine.iter().any(|e| e.origin != "native")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_stray_line_is_not_the_case() {
+        let line = |origin: &str, method: &str, target: &str| OriginEntry {
+            origin: origin.to_string(),
+            method: method.to_string(),
+            target: target.to_string(),
+        };
+        let native = line("native", "GET", "/a?x=1");
+        let go = line("go", "GET", "/");
+        assert!(!proxied(&[native.clone(), go.clone()], "GET", "/a?x=1"));
+        assert!(proxied(std::slice::from_ref(&go), "GET", "/a"));
+        assert!(proxied(&[], "GET", "/a"));
+        assert!(proxied(
+            &[native, line("go", "GET", "/a?y=2")],
+            "GET",
+            "/a?x=1"
+        ));
+    }
 }

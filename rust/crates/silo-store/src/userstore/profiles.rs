@@ -61,8 +61,16 @@ pub(super) fn scan(row: &Row) -> Result<Profile, silo_pg::DriverError> {
     })
 }
 
+/// The statements cast to `bigint`, which accepts what pgx refuses to bind to Go's `int4` column.
+fn int4(user_id: i64) -> Result<(), String> {
+    i32::try_from(user_id)
+        .map(|_| ())
+        .map_err(|_| format!("{user_id} is greater than maximum value for int4"))
+}
+
 /// `GetProfile`: `None` when the account has no such profile.
 pub async fn get_profile(pool: &Pool, user_id: i64, id: &str) -> Result<Option<Profile>, String> {
+    int4(user_id)?;
     let sql = format!("SELECT {COLUMNS} FROM user_profiles WHERE user_id = $1::bigint AND id = $2");
     let rows = pool
         .query(&sql, &[&user_id, &id])
@@ -89,6 +97,7 @@ pub async fn get_profile(pool: &Pool, user_id: i64, id: &str) -> Result<Option<P
 
 /// `ListProfiles`, without the library lists the household check does not read.
 pub async fn list_profiles(pool: &Pool, user_id: i64) -> Result<Vec<Profile>, String> {
+    int4(user_id)?;
     let sql = format!(
         "SELECT {COLUMNS} FROM user_profiles WHERE user_id = $1::bigint ORDER BY created_at ASC"
     );

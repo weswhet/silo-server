@@ -21,6 +21,8 @@ pub enum DiffKind {
     BodyKind,
     Bytes,
     Transport,
+    /// A row changed or an event published differs, though the answers may match.
+    Effect,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -350,6 +352,24 @@ fn compare_body(
         return;
     }
     if looks_json(r) || looks_json(c) {
+        // JSON compares by value, so whitespace never differs there. An encoder's final newline is the one
+        // whitespace a server chooses, and it changes `Content-Length`.
+        let ends_line = |body: &[u8]| body.last() == Some(&b'\n');
+        if ends_line(&r.body) != ends_line(&c.body) {
+            let says = |yes: bool| {
+                if yes {
+                    "ends in a newline"
+                } else {
+                    "no final newline"
+                }
+            };
+            out.diffs.push(Diff {
+                kind: DiffKind::BodyKind,
+                at: "body final newline".to_string(),
+                reference: says(ends_line(&r.body)).to_string(),
+                candidate: says(ends_line(&c.body)).to_string(),
+            });
+        }
         let (a, b) = (
             serde_json::from_slice::<Value>(&r.body),
             serde_json::from_slice::<Value>(&c.body),

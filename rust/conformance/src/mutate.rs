@@ -62,6 +62,43 @@ pub const RULE_PROBES: &[&str] = &["rule_out_of_format", "rule_in_format"];
 /// Changes that must not be reported, to prove the proxy itself is transparent.
 pub const CONTROLS: &[&str] = &["none", "reserialize"];
 
+/// Faults in the request the candidate receives: the answer stays right, and the write is wrong.
+pub const REQUEST_FAULTS: &[&str] = &["wrong_write"];
+
+/// `wrong_write`: changes one written value, so an empty 204 can only show the fault in the row it stored.
+pub fn apply_request_fault(case: &str, method: &str, body: &[u8]) -> Option<(Vec<u8>, Applied)> {
+    if !matches!(method, "PUT" | "PATCH" | "POST") {
+        return None;
+    }
+    let mut doc: Value = serde_json::from_slice(body).ok()?;
+    let object = doc.as_object_mut()?;
+    let (field, before, after) = if let Some(flag) = object.get("value").and_then(Value::as_bool) {
+        object.insert("value".to_string(), Value::Bool(!flag));
+        ("value", flag.to_string(), (!flag).to_string())
+    } else {
+        let field = ["name", "label", "title"]
+            .into_iter()
+            .find(|k| object.get(*k).is_some_and(Value::is_string))?;
+        let text = object[field].as_str()?.to_string();
+        let changed = format!("{text}x");
+        object.insert(field.to_string(), Value::String(changed.clone()));
+        (field, text, changed)
+    };
+    Some((
+        serde_json::to_vec(&doc).ok()?,
+        Applied {
+            case: case.to_string(),
+            mutation: "wrong_write".to_string(),
+            at: "effect".to_string(),
+            before: format!("{field}: {before}"),
+            after: format!("{field}: {after}"),
+            by_design: false,
+            rule: None,
+            feed_fault: None,
+        },
+    ))
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Applied {
     pub case: String,
@@ -1305,7 +1342,11 @@ pub fn apply(name: &str, req: &Req, resp: &mut Resp, rules: &Rules, salt: u64) -
         "reserialize" => {
             if resp.is_json() {
                 if let Ok(doc) = serde_json::from_slice::<Value>(&resp.body) {
+                    let newline = resp.body.last() == Some(&b'\n');
                     resp.body = serde_json::to_vec_pretty(&doc).unwrap_or_default();
+                    if newline {
+                        resp.body.push(b'\n');
+                    }
                 }
             }
             Vec::new()

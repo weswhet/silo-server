@@ -165,6 +165,8 @@ pub struct Stack {
     pub profile_tokens: ProfileTokens,
     pub cursors: silo_api_v2::cursor::Cursors,
     pub hub: Arc<Hub>,
+    /// `cfg.Recommendations.Enabled`, read at startup as Go reads it.
+    pub recommendations_enabled: bool,
     pub bus: Option<Arc<dyn EventBus>>,
     /// `config.NewAdminDefaults`.
     pub admin_defaults: Option<Arc<dyn silo_config::resolve::ServerSettings>>,
@@ -210,11 +212,7 @@ async fn local_operational_store(settings: &ServerSettingsRepo) -> bool {
     let backend = values
         .get("artwork.storage_backend")
         .map_or("", |v| v.trim());
-    let env_bucket = ["S3_BUCKET", "S3_PUBLIC_BUCKET", "S3_PRIVATE_BUCKET"]
-        .iter()
-        .any(|name| std::env::var(name).is_ok_and(|v| !v.is_empty()));
-    !env_bucket
-        && !set("s3.private_bucket")
+    !set("s3.private_bucket")
         && !set("s3.public_bucket")
         && !set("s3.operational_bucket")
         && !silo_gocompat::strings::equal_fold(backend, "s3")
@@ -252,7 +250,7 @@ async fn external_sign_in_configured(pool: &Pool) -> Result<bool, String> {
     }
 }
 
-/// `cfg.UserDB.Backend`, `cfg.RateLimit.Backend` and what the front does with them: Rust reads profiles
+/// `cfg.UserDB.Backend`, `cfg.RateLimit.Backend`, `REDIS_URL`, and what the front does with them: Rust reads profiles
 /// from Postgres only, and native rows need the rate limit counters Go has. Each reason a stack cannot
 /// answer for Go keeps every row behind a credential on Go.
 fn why_not_native(
@@ -272,8 +270,16 @@ fn why_not_native(
             "userdb.backend is {userdb}, and native rows read profiles from Postgres only"
         ));
     }
-    if split_budgets || !config_from_settings(all).enabled {
+    if split_budgets {
         return None;
+    }
+    if !config_from_settings(all).enabled {
+        // The request limiter is off, but Go's sign-in name, Quick Connect, and PIN budgets are not, and
+        // those are shared only through Redis.
+        return (!redis).then(|| {
+            "REDIS_URL is not set, so native rows would add a second sign-in, Quick Connect, and PIN budget"
+                .to_owned()
+        });
     }
     let backend = setting("ratelimit.backend", "memory");
     if backend != "redis" {
@@ -289,6 +295,9 @@ fn why_not_native(
     }
     None
 }
+
+/// `DefaultConfig().Recommendations.Enabled`.
+const RECOMMENDATIONS_DEFAULT: bool = false;
 
 /// What [`build`] takes from the process's environment.
 pub struct BuildOptions<'a> {
@@ -522,7 +531,16 @@ pub async fn build(
         });
 
     let hub = Arc::new(Hub::new(hub_source(&node_id), options.bus.clone()));
+    silo_runtime::opslog::start(
+        pool.clone(),
+        hub.clone(),
+        node_id.clone(),
+        all.get("opslog.capture_level")
+            .map_or("info", String::as_str),
+    );
+    let recommendations_enabled = setting_true("recommendations.enabled", RECOMMENDATIONS_DEFAULT);
     let stack = Arc::new(Stack {
+        recommendations_enabled,
         activity: ActivityWriter::start(pool.clone(), hub.clone()),
         jwt,
         sign_in,
@@ -803,6 +821,7 @@ struct StatusWriter<'a> {
     inner: &'a mut dyn ResponseWriter,
     status: u16,
     wrote: bool,
+    bytes: u64,
 }
 
 impl ResponseWriter for StatusWriter<'_> {
@@ -818,10 +837,12 @@ impl ResponseWriter for StatusWriter<'_> {
     }
     fn write<'a>(&'a mut self, data: &'a [u8]) -> BoxFuture<'a, Result<usize, WriteError>> {
         self.wrote = true;
+        self.bytes += data.len() as u64;
         self.inner.write(data)
     }
     fn write_string<'a>(&'a mut self, data: &'a str) -> BoxFuture<'a, Result<usize, WriteError>> {
         self.wrote = true;
+        self.bytes += data.len() as u64;
         self.inner.write_string(data)
     }
     fn flush(&mut self) -> BoxFuture<'_, Result<(), WriteError>> {
@@ -879,6 +900,100 @@ fn resolve_client(resolver: &Resolver, r: &Request) -> RequestContext {
     })
 }
 
+/// `clampLabel`.
+fn clamp_label(value: &[u8], limit: usize) -> String {
+    let text = String::from_utf8_lossy(value);
+    let mut out: String = silo_gocompat::strings::trim_space(&text)
+        .chars()
+        .filter(|c| *c >= '\u{20}' && *c != '\u{7f}')
+        .collect();
+    if out.len() > limit {
+        let mut end = limit;
+        while !out.is_char_boundary(end) {
+            end -= 1;
+        }
+        out.truncate(end);
+    }
+    out
+}
+
+/// `report`'s log line: a v2 request is logged once, by operation, and never by its raw path.
+#[allow(clippy::too_many_arguments)]
+fn v2_request_line(
+    r: &Request,
+    id: &str,
+    method: &str,
+    status: u16,
+    duration_ms: u64,
+    body_bytes: u64,
+    client_ip: &str,
+    fields: &silo_gate::mw::auth::LogFields,
+) {
+    let or = |value: &'_ str, other: &'static str| -> String {
+        if value.is_empty() {
+            other.to_owned()
+        } else {
+            value.to_owned()
+        }
+    };
+    let method_label = if METHOD_LABELS.contains(&method) {
+        method
+    } else {
+        "other"
+    };
+    let class = match status {
+        0 => "abandoned".to_owned(),
+        _ => format!("{}xx", status / 100),
+    };
+    let name = clamp_label(r.header.get("X-Silo-Client"), 64);
+    let version = clamp_label(r.header.get("X-Silo-Client-Version"), 32);
+    tracing::info!(
+        component = "apiv2",
+        request_id = %id,
+        api_major = 2,
+        operation_id = %or(&fields.v2_operation_id, "none"),
+        method = %method_label,
+        path_pattern = %fields.v2_path_pattern,
+        status,
+        status_class = %class,
+        error_code = %or(&fields.v2_error_code, "none"),
+        auth_class = %or(&fields.v2_auth_class, "anonymous"),
+        duration_ms,
+        body_bytes,
+        client_ip = %client_ip,
+        client_name = (!name.is_empty()).then_some(name.as_str()),
+        client_version = (!version.is_empty()).then_some(version.as_str()),
+        user_id = fields.user_id,
+        "apiv2 request"
+    );
+}
+
+/// `methodLabel`'s standard set.
+const METHOD_LABELS: [&str; 7] = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
+
+/// `observeOperation` for a raw public operation, which has no `v2_wrap`.
+pub fn note_public_operation(r: &Request, pattern: &str) {
+    let Some(log) = r.extensions.get::<LogContext>() else {
+        return;
+    };
+    let mut log = log.0.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(meta) = operations().get(pattern).and_then(|m| m.get(&r.method)) {
+        log.v2_operation_id.clone_from(&meta.operation_id);
+    }
+    pattern.clone_into(&mut log.v2_path_pattern);
+    "public".clone_into(&mut log.v2_auth_class);
+}
+
+/// `noteProblem`.
+pub fn note_problem(r: &Request, slug: &str) {
+    if let Some(log) = r.extensions.get::<LogContext>() {
+        log.0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .v2_error_code = slug.to_owned();
+    }
+}
+
 impl Stack {
     /// The first half of `useBaseMiddleware`: request ID, client IP, request logger. [`recoverer`] and
     /// [`Self::observe_middleware`] follow it, so the logger sees a recovered panic's 500 and the other
@@ -908,14 +1023,29 @@ impl Stack {
                         inner: w,
                         status: 200,
                         wrote: false,
+                        bytes: 0,
                     };
                     next.serve_http(&mut wrapped, r).await;
                     let status = wrapped.status;
+                    let body_bytes = wrapped.bytes;
 
                     let pattern = pattern_of(r);
                     let fields = log.0.lock().unwrap_or_else(|e| e.into_inner()).clone();
                     let is_v2 = path.starts_with(silo_gate::mw::API_V2_PREFIX);
-                    if !request_logger_skips(&path) || is_v2 {
+                    let session_id =
+                        (!fields.session_id.is_empty()).then_some(fields.session_id.as_str());
+                    if is_v2 {
+                        v2_request_line(
+                            r,
+                            &id,
+                            &method,
+                            status,
+                            started.elapsed().as_millis() as u64,
+                            body_bytes,
+                            &client_ip,
+                            &fields,
+                        );
+                    } else if !request_logger_skips(&path) {
                         tracing::info!(
                             component = "api",
                             request_id = %id,
@@ -927,8 +1057,8 @@ impl Stack {
                             client_ip = %client_ip,
                             user_agent = %user_agent,
                             node_id = %stack.node_id,
-                            user_id = ?fields.user_id,
-                            session_id = %fields.session_id,
+                            user_id = fields.user_id,
+                            session_id,
                             "api request"
                         );
                     }
@@ -956,6 +1086,7 @@ impl Stack {
                         inner: w,
                         status: 200,
                         wrote: false,
+                        bytes: 0,
                     };
                     next.serve_http(&mut wrapped, r).await;
                     let status = wrapped.status;
@@ -1340,6 +1471,9 @@ fn find(id: &str) -> p::ProblemType {
 /// `writeProblem`. The encoder does not escape HTML.
 pub async fn write_problem(w: &mut dyn ResponseWriter, r: &Request, mut problem: Problem) {
     problem.instance = p::request_instance(&request_id_of(r));
+    if let Some(slug) = problem.r#type.strip_prefix(p::PROBLEM_TYPE_ORIGIN) {
+        note_problem(r, slug);
+    }
     let mut body = Vec::new();
     {
         let mut enc = silo_gocompat::json::Encoder::new(&mut body);
@@ -1388,6 +1522,7 @@ fn accepts_json(accept: &str) -> bool {
 /// What the contract declares about one v2 operation.
 #[derive(Clone, Debug, Default)]
 pub struct OperationMeta {
+    operation_id: String,
     /// `metaIdentityOnly`: its output declares an ETag, or it is a guarded write answering a receipt.
     identity_only: bool,
     /// `queryParams`, name to whether it is an array and whether it is a boolean.
@@ -1462,6 +1597,7 @@ fn operation_meta(method: &str, op: &serde_json::Value) -> OperationMeta {
     }
     let body = op["requestBody"]["content"]["application/json"]["schema"].clone();
     OperationMeta {
+        operation_id: op["operationId"].as_str().unwrap_or_default().to_owned(),
         identity_only: declares_etag || receipt,
         query,
         params,
@@ -1580,6 +1716,16 @@ fn v2_wrap(
         let handler = handler.clone();
         let pattern = pattern.clone();
         Box::pin(async move {
+            let meta_early = methods.get(&r.method);
+            if let (Some(meta), Some(log)) = (meta_early, r.extensions.get::<LogContext>()) {
+                let mut log = log.0.lock().unwrap_or_else(|e| e.into_inner());
+                log.v2_operation_id.clone_from(&meta.operation_id);
+                log.v2_path_pattern.clone_from(&pattern);
+                // `observeOperation`.
+                if steps.is_empty() {
+                    "public".clone_into(&mut log.v2_auth_class);
+                }
+            }
             r.extensions.insert(RowPattern(pattern));
             // `bufferResponse`.
             let mut buffered = BufferedWriter {
@@ -1626,6 +1772,21 @@ async fn v2_operation(
         if let Err(denial) = stack.run_steps(steps, &mut sink, r).await {
             write_problem(w, r, denial_problem(&denial)).await;
             return;
+        }
+        // `observeIdentity`.
+        if let (Some(claims), Some(log)) = (
+            silo_gate::mw::auth::get_claims(r),
+            r.extensions.get::<LogContext>(),
+        ) {
+            let class = match claims.token_type.as_str() {
+                silo_auth::claims::token_type::API_KEY => "api_key",
+                silo_auth::claims::token_type::PLUGIN_ACCESS => "plugin",
+                silo_auth::claims::token_type::ACCESS => "session",
+                _ => "other",
+            };
+            let mut log = log.0.lock().unwrap_or_else(|e| e.into_inner());
+            class.clone_into(&mut log.v2_auth_class);
+            log.user_id = Some(claims.user_id);
         }
     }
     let accept = String::from_utf8_lossy(r.header.get("Accept")).into_owned();
@@ -1926,6 +2087,9 @@ pub async fn write_capability(
     let h = w.header();
     h.set("Content-Type", "application/json");
     w.write_header(200).await;
+    // The hash covers `json.Marshal`'s output, and the answer is `json.Encoder`'s, which ends in a newline.
+    let mut body = body;
+    body.push(b'\n');
     let _ = w.write(&body).await;
 }
 
@@ -2070,6 +2234,7 @@ mod tests {
 
     fn meta() -> OperationMeta {
         OperationMeta {
+            operation_id: String::new(),
             identity_only: false,
             params: Vec::new(),
             body: None,
@@ -2163,7 +2328,9 @@ mod tests {
         };
         assert!(why_not_native(&set(&[]), true, false).is_some());
         assert!(why_not_native(&set(&[]), true, true).is_none());
-        assert!(why_not_native(&set(&[("ratelimit.enabled", "false")]), false, false).is_none());
+        let off = set(&[("ratelimit.enabled", "false")]);
+        assert!(why_not_native(&off, false, false).is_some());
+        assert!(why_not_native(&off, true, false).is_none());
         let redis = set(&[("ratelimit.backend", "redis")]);
         assert!(why_not_native(&redis, true, false).is_none());
         assert!(why_not_native(&redis, false, false).is_some());

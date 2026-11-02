@@ -164,6 +164,7 @@ fn inventory_routes(
             v1_to_v2.insert((method.to_string(), path.to_string()), op.to_string());
         }
     }
+    let mut seen = std::collections::BTreeSet::new();
     for r in inventory["routes"].as_array().into_iter().flatten() {
         let listener = r["listener"].as_str().unwrap_or_default();
         let namespace = r["namespace"].as_str().unwrap_or_default();
@@ -179,6 +180,11 @@ fn inventory_routes(
         };
         let method = r["method"].as_str().unwrap_or_default().to_string();
         let path = r["path"].as_str().unwrap_or_default().to_string();
+        // The inventory lists both wiring branches of a conditional route, such as with and without the
+        // rate limiter. A deployment has one, and a client sees one route, so it counts once.
+        if !seen.insert((surface, method.clone(), path.clone())) {
+            continue;
+        }
         let op = v1_to_v2
             .get(&(method.clone(), path.clone()))
             .and_then(|id| ops.get(id))

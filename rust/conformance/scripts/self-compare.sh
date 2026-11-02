@@ -35,7 +35,7 @@ fi
 
 b_port() { env "${b_env[@]}" sh -c "echo \$$1"; }
 cd "$CONF_REPO" || exit 1
-cargo build --quiet --manifest-path rust/Cargo.toml
+cargo build --quiet --manifest-path rust/Cargo.toml -j 3
 exec rust/target/debug/silo-conformance run \
   --reference "http://127.0.0.1:$CONF_API_PORT" \
   --candidate "http://127.0.0.1:$(b_port CONF_API_PORT)" \
@@ -46,5 +46,7 @@ exec rust/target/debug/silo-conformance run \
   --reset-candidate "env ${b_env[*]} $CONF_SCRIPTS_DIR/reset.sh --fast >/dev/null" \
   --empty-users-reference "$CONF_SCRIPTS_DIR/empty-users.sh silo-conformance" \
   --empty-users-candidate "$CONF_SCRIPTS_DIR/empty-users.sh $B_PROJECT" \
+  --effects-reference "pg=postgres://silo:silo@127.0.0.1:$CONF_PG_PORT/silo?sslmode=disable,redis=127.0.0.1:$CONF_REDIS_PORT" \
+  --effects-candidate "pg=postgres://silo:silo@127.0.0.1:$(b_port CONF_PG_PORT)/silo?sslmode=disable,redis=127.0.0.1:$(b_port CONF_REDIS_PORT)" \
   --source-revision "$(conf_revision)" \
   "$@"

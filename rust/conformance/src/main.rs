@@ -63,6 +63,12 @@ struct RunArgs {
     /// Shell command that resets the candidate database and waits until it is ready.
     #[arg(long)]
     reset_candidate: Option<String>,
+    /// Compare what each write case did: `pg=URL,redis=HOST:PORT` for the reference.
+    #[arg(long)]
+    effects_reference: Option<String>,
+    /// The same for the candidate.
+    #[arg(long)]
+    effects_candidate: Option<String>,
     /// Shell command that deletes every account on the reference, for the first-run setup cases.
     #[arg(long)]
     empty_users_reference: Option<String>,
@@ -292,9 +298,27 @@ fn run(args: RunArgs) -> Result<ExitCode> {
         rules.for_peer_lab()
     };
 
+    let effects = match (&args.effects_reference, &args.effects_candidate) {
+        (Some(reference), Some(candidate)) => {
+            let path = repo.join("rust/conformance/baseline/effects.json");
+            let config: silo_conformance::effects::EffectConfig = serde_json::from_str(
+                &fs::read_to_string(&path)
+                    .with_context(|| format!("reading {}", path.display()))?,
+            )
+            .with_context(|| format!("parsing {}", path.display()))?;
+            Some((
+                silo_conformance::effects::parse_spec(reference)?,
+                silo_conformance::effects::parse_spec(candidate)?,
+                config,
+            ))
+        }
+        (None, None) => None,
+        _ => bail!("--effects-reference and --effects-candidate go together"),
+    };
     let src = sources::load(&repo)?;
     let p = plan::build(&src);
     let cfg = Config {
+        effects,
         urls,
         fixture,
         rules,
@@ -321,7 +345,7 @@ fn run(args: RunArgs) -> Result<ExitCode> {
             );
         }
         let start = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
-        runs.push(Runner::new(&cfg, &src.routes, start).run(&p.cases)?);
+        runs.push(Runner::new(&cfg, &src.routes, start)?.run(&p.cases)?);
     }
     let last = runs.last().expect("at least one run");
     let flakes = baseline::flake_set(&baselines);
@@ -356,11 +380,19 @@ fn run(args: RunArgs) -> Result<ExitCode> {
             recorded.known_flakes.len()
         );
     }
+    for detail in &last.stage_effects {
+        regressions.push(report::Regression {
+            kind: "stage_effect_differs".to_string(),
+            target: "operational_logs and the live tail".to_string(),
+            detail: detail.clone(),
+        });
+    }
     let report_doc = Report {
         schema_version: 1,
         partial,
         surfaces,
         overall,
+        stage_effects: last.stage_effects.clone(),
         regressions,
         improvements,
         normalizers: cfg

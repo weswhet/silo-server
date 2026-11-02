@@ -2861,6 +2861,8 @@ dependencies = [
  "sha2 0.10.9",
  "silo-front",
  "time",
+ "tokio",
+ "tokio-postgres",
 ]
 
 [[package]]
@@ -3056,6 +3058,7 @@ dependencies = [
  "tokio-postgres",
  "tokio-rustls",
  "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 
@@ -3065,6 +3068,7 @@ version = "0.1.0"
 dependencies = [
  "silo-front",
  "silo-gocompat",
+ "silo-runtime",
  "tokio",
  "tracing",
  "tracing-subscriber",

@@ -1056,16 +1056,8 @@ async fn reference_a_gated_native_row_goes_to_go_and_matches() {
         return;
     };
     let requests: Vec<String> = [
-        req("GET", "/api/v2/openapi.json?x=1", &[]),
-        req("GET", "/api/v2/openapi.json", &["Accept: text/html"]),
-        req("GET", "/api/v2/openapi.json", &["Accept-Encoding: identity;q=0"]),
-        req("GET", "/api/v2/openapi.json", &["X-Silo-Device-Id: bad value"]),
-        req("GET", "/api/v2/docs", &["X-Silo-Device-Id: bad value"]),
         req("GET", "/api/v1/health", &["X-Silo-Ingress-Token: nope"]),
         req("GET", "/api/v1/ready", &[]),
-        req("GET", "/api/v2/openapi.json/", &["X-Silo-Device-Id: bad value"]),
-        req("POST", "/api/v2/docs", &["X-Silo-Device-Id: bad value"]),
-        "POST /api/v1/health HTTP/1.1\r\nHost: conformance.test\r\nConnection: close\r\nContent-Length: 2\r\n\r\nhi".to_owned(),
         req("CONNECT", "/", &[]),
         req("CONNECT", "/metrics", &[]),
         req("CONNECT", "/some/app/route", &[]),
@@ -1079,6 +1071,20 @@ async fn reference_a_gated_native_row_goes_to_go_and_matches() {
     ]
     .to_vec();
     compare(r.main, r.front.addrs["main"], &r.front, "go", &requests).await;
+
+    // These were Go's until the row went native. They still have to answer as Go does.
+    let native: Vec<String> = [
+        req("GET", "/api/v2/openapi.json?x=1", &[]),
+        req("GET", "/api/v2/openapi.json", &["Accept: text/html"]),
+        req("GET", "/api/v2/openapi.json", &["Accept-Encoding: identity;q=0"]),
+        req("GET", "/api/v2/openapi.json", &["X-Silo-Device-Id: bad value"]),
+        req("GET", "/api/v2/docs", &["X-Silo-Device-Id: bad value"]),
+        req("GET", "/api/v2/openapi.json/", &["X-Silo-Device-Id: bad value"]),
+        req("POST", "/api/v2/docs", &["X-Silo-Device-Id: bad value"]),
+        "POST /api/v1/health HTTP/1.1\r\nHost: conformance.test\r\nConnection: close\r\nContent-Length: 2\r\n\r\nhi".to_owned(),
+    ]
+    .to_vec();
+    compare(r.main, r.front.addrs["main"], &r.front, "native", &native).await;
 }
 
 #[tokio::test]

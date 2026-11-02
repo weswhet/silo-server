@@ -47,6 +47,12 @@ pub struct Config {
     /// Wait this long before each case. Some Go state depends on how fast requests arrive, so a
     /// slower candidate can show a difference that only a Go vs Go run at the same pace can explain.
     pub pace: std::time::Duration,
+    /// Each side's database and Redis, to compare what a write did.
+    pub effects: Option<(
+        crate::effects::Spec,
+        crate::effects::Spec,
+        crate::effects::EffectConfig,
+    )>,
 }
 
 /// One peer-lab client: an address, and the reference and candidate as reached from it.
@@ -109,6 +115,12 @@ pub struct CaseResult {
     /// The start of an error answer from the reference, to explain a shallow route.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reference_error: Option<String>,
+    /// What a write changed on the reference. `None` when effects were not compared.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect: Option<crate::effects::EffectCounts>,
+    /// The reference answered with no body.
+    #[serde(default)]
+    pub empty_body: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -123,6 +135,8 @@ pub struct RunOutput {
     pub rule_hits: BTreeMap<String, u64>,
     pub events: Vec<Event>,
     pub not_run: BTreeMap<String, String>,
+    /// What a stage logged differently: request log rows and live tail rows, by what names them.
+    pub stage_effects: Vec<String>,
 }
 
 pub struct Runner<'a> {
@@ -135,6 +149,7 @@ pub struct Runner<'a> {
     run_start: i64,
     out: RunOutput,
     origin_log: Option<OriginLog>,
+    effects: Option<crate::effects::Pair>,
 }
 
 const SETTLE_POLLS: u32 = 100;
@@ -266,8 +281,16 @@ fn static_facts(env: &BTreeMap<String, String>) -> BTreeMap<String, String> {
 }
 
 impl<'a> Runner<'a> {
-    pub fn new(cfg: &'a Config, routes: &'a [Route], run_start: i64) -> Self {
-        Runner {
+    pub fn new(cfg: &'a Config, routes: &'a [Route], run_start: i64) -> Result<Self> {
+        let effects = match &cfg.effects {
+            Some((reference, candidate, config)) => Some(crate::effects::Pair {
+                reference: crate::effects::Side::new(reference.clone(), config.clone())?,
+                candidate: crate::effects::Side::new(candidate.clone(), config.clone())?,
+            }),
+            None => None,
+        };
+        Ok(Runner {
+            effects,
             origin_log: cfg.origin_log.as_deref().map(OriginLog::new),
             cfg,
             routes,
@@ -277,6 +300,17 @@ impl<'a> Runner<'a> {
             aliases: Aliases::default(),
             run_start,
             out: RunOutput::default(),
+        })
+    }
+
+    /// Compares what the stage logged, which batches and flushes on a timer.
+    fn finish_stage(&mut self, name: &str) {
+        let Some(effects) = &mut self.effects else {
+            return;
+        };
+        thread::sleep(std::time::Duration::from_millis(3500));
+        for diff in effects.stage_diffs() {
+            self.out.stage_effects.push(format!("{name}: {diff}"));
         }
     }
 
@@ -302,6 +336,9 @@ impl<'a> Runner<'a> {
             return Ok(());
         };
         self.event("reset", why.to_string());
+        if let Some(effects) = &mut self.effects {
+            effects.disconnect();
+        }
         let shell = |cmd: &str| -> Result<String, String> {
             let out = Command::new("sh")
                 .arg("-c")
@@ -330,6 +367,9 @@ impl<'a> Runner<'a> {
         }
         self.reference.created.clear();
         self.candidate.created.clear();
+        if let Some(effects) = &mut self.effects {
+            effects.install()?;
+        }
         Ok(())
     }
 
@@ -388,6 +428,7 @@ impl<'a> Runner<'a> {
                     self.run_case(c, true)?;
                 }
             }
+            self.finish_stage(name);
         }
         let peers: Vec<&Case> = cases.iter().filter(|c| c.phase == Phase::Peers).collect();
         if self.cfg.sources.is_empty() {
@@ -604,6 +645,11 @@ impl<'a> Runner<'a> {
             self.settle(path, &base_r, &base_c);
         }
         if case.needs_empty_users {
+            // `TRUNCATE users CASCADE` takes the log rows with it. Let the batch writers flush first, so it takes
+            // the same rows on both sides.
+            if self.effects.is_some() {
+                thread::sleep(std::time::Duration::from_millis(2500));
+            }
             let (Some(a), Some(b)) = (
                 &self.cfg.empty_users_reference,
                 &self.cfg.empty_users_candidate,
@@ -638,7 +684,22 @@ impl<'a> Runner<'a> {
         if let Some(log) = &mut self.origin_log {
             log.drain()?;
         }
+        let compare_effects = record
+            && self.effects.is_some()
+            && !matches!(case.method.as_str(), "GET" | "HEAD" | "OPTIONS");
+        if compare_effects {
+            if let Some(effects) = &mut self.effects {
+                effects.clear();
+            }
+        }
         let (r, c, path, candidate_path) = self.send_pair(case, &base_r, &base_c, &tag);
+        let (effect_diffs, effect) = match &mut self.effects {
+            Some(effects) if compare_effects => {
+                let (diffs, counts) = effects.collect();
+                (diffs, Some(counts))
+            }
+            _ => (Vec::new(), None),
+        };
 
         if let Some(prefix) = &case.capture_as {
             self.capture_created(prefix, &r, &c);
@@ -672,6 +733,7 @@ impl<'a> Runner<'a> {
         for (id, n) in std::mem::take(&mut outcome.rule_hits) {
             *self.out.rule_hits.entry(id).or_default() += n;
         }
+        outcome.diffs.extend(effect_diffs);
         let marked_proxied = c.header(&self.cfg.proxy_header).is_some();
         if case.method == "GET" && r.status == 200 && c.status == 200 {
             if let (Some(tag_r), Some(tag_c)) = (r.header("etag"), c.header("etag")) {
@@ -693,7 +755,7 @@ impl<'a> Runner<'a> {
         }
         let proxied = marked_proxied
             || match &mut self.origin_log {
-                Some(log) => origin::proxied(&log.drain()?),
+                Some(log) => origin::proxied(&log.drain()?, &case.method, &candidate_path),
                 None => false,
             };
         if record {
@@ -718,6 +780,8 @@ impl<'a> Runner<'a> {
                     let text = String::from_utf8_lossy(&r.body);
                     text.chars().take(200).collect()
                 }),
+                effect,
+                empty_body: r.body.is_empty(),
             });
         }
         let write_landed =

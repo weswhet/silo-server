@@ -1445,7 +1445,7 @@ const PLAYBACK_KEYS: [&str; 4] = [
 
 /// `ListLibraryPlaybackPreferencesCanonical`, then `libraryPlaybackPreferenceOf`.
 async fn canonical_prefs(s: &Stack, user_id: i32, profile: &str) -> Result<Vec<V2Pref>, Problem> {
-    let store = PostgresUserStore::new(s.pool.clone(), user_id);
+    let store = PostgresUserStore::new(s.pool.clone(), i64::from(user_id));
     let keys_owned: Vec<String> = PLAYBACK_KEYS.iter().map(|k| (*k).to_owned()).collect();
     let values = store
         .list_setting_values_by_scope(

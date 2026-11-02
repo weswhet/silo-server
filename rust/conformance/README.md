@@ -102,6 +102,23 @@ differ reads those rows only as feeds, so this is what shows a wrong route patte
 differences here are not the front's: rows dropped with a batch when a first-run setup case removes the users they
 name, which Go's batch writer does too, and `GET /` rows from a local process on the host that probes new listeners.
 
+## Effects
+
+`--effects-reference` and `--effects-candidate` take `pg=URL,redis=HOST:PORT` for each side, and `self-compare.sh`,
+`front-compare.sh`, and `mutation-test.sh` pass them. After each reset the harness puts a trigger on every table, which
+records row changes in the separate schema `conformance_fx`, and it subscribes to `silo:*` on Redis. After each write
+case it compares the rows touched and the events published, so a difference is reported at `effect.<table>.<op>` or
+`effect.event.<type>`, and it lowers the route like any other difference. Values are masked by format (IDs, clocks,
+hashes, tokens). A write whose only success is an empty body that changed nothing is `weak_evidence`, not `matched`.
+
+`operational_logs` rows and live tail rows are batched, so they are compared at the end of each stage, counted by what
+names them. A difference is a `stage_effect_differs` regression, and it appears in `stage_effects` in `report.json`.
+The feed rules on the log routes stay, because a log's contents depend on timing between two Go servers.
+
+`baseline/effects.json` lists the tables, events, fields, and log messages that differ between two Go servers, each
+with its evidence. An entry needs a Go vs Go run that shows it. `mutation-test.sh wrong_write` proves the check: the
+proxy changes one value in each candidate write, so a 204 with the wrong row stored has to be reported.
+
 ## Peer lab
 
 The baseline's socat edge makes every client one private, trusted address, on both sides. A run through

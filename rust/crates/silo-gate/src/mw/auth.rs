@@ -30,6 +30,11 @@ pub struct LogFields {
     pub session_id: String,
     /// The status of each audited mutation this request committed (`LogContext.Committed`).
     pub committed_statuses: Vec<i32>,
+    /// `observation`: what the v2 request line names. Empty reads as Go's `none` and `anonymous`.
+    pub v2_operation_id: String,
+    pub v2_path_pattern: String,
+    pub v2_error_code: String,
+    pub v2_auth_class: String,
 }
 
 /// The shared cell the outermost logging middleware reads back.

@@ -67,13 +67,22 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .with_writer(std::io::stderr)
-        .init();
+    {
+        use tracing_subscriber::Layer;
+        use tracing_subscriber::layer::SubscriberExt;
+        use tracing_subscriber::util::SubscriberInitExt;
+        tracing_subscriber::registry()
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(std::io::stderr)
+                    .with_filter(
+                        tracing_subscriber::EnvFilter::try_from_default_env()
+                            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+                    ),
+            )
+            .with(silo_runtime::opslog::CaptureLayer)
+            .init();
+    }
 
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         // Tokio's 2 MiB default overflows on a JSON value at Go's 10,000-level limit, a 60 KB body.

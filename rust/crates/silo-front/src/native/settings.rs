@@ -221,7 +221,7 @@ pub(super) async fn record_sighting(s: &Stack, claims: &Claims, profile_id: &str
     }
     let reader = Reader {
         pool: &s.pool,
-        user_id: claims.user_id as i32,
+        user_id: silo_pg::AnyInt(claims.user_id),
     };
     if let Err(e) = reader
         .register_device(&profile_id, &device.id, &device.name, &device.platform)
@@ -359,10 +359,11 @@ pub(super) async fn publish_user_settings(
 /// `Worker.NotifySignalsChanged`, the part any server does: the stale sweep picks the mark up. Go's
 /// refresh queue is per process, and the sweep is what covers a refresh queued on another server.
 pub(super) async fn mark_profile_stale(s: &Stack, user_id: i64, profile_id: &str) {
-    if user_id <= 0 || profile_id.is_empty() {
+    // No worker when recommendations are off, and then nothing marks a profile.
+    if user_id <= 0 || profile_id.is_empty() || !s.recommendations_enabled {
         return;
     }
-    let user_id = user_id as i32;
+    let user_id = silo_pg::AnyInt(user_id);
     if let Err(e) = s
         .pool
         .execute(
@@ -373,7 +374,7 @@ pub(super) async fn mark_profile_stale(s: &Stack, user_id: i64, profile_id: &str
         )
         .await
     {
-        tracing::warn!(component = "recommendations", user_id, profile_id, error = %e, "marking taste profile stale failed");
+        tracing::warn!(component = "recommendations", user_id = user_id.0, profile_id, error = %e, "marking taste profile stale failed");
     }
 }
 
@@ -614,7 +615,7 @@ async fn device_belongs(
 ) -> Result<(), ApiError> {
     let reader = Reader {
         pool: &s.pool,
-        user_id: user_id as i32,
+        user_id: silo_pg::AnyInt(user_id),
     };
     match reader.device_exists(profile, device).await {
         Err(_) => Err(api(500, INTERNAL, "Failed to look up device")),
@@ -1112,7 +1113,7 @@ pub(super) fn resolver_for(s: &Stack) -> resolve::Resolver {
 }
 
 fn store_for(s: &Stack, user_id: i64) -> PostgresUserStore {
-    PostgresUserStore::new(s.pool.clone(), user_id as i32)
+    PostgresUserStore::new(s.pool.clone(), user_id)
 }
 
 /// `hashMutationRequest`.
@@ -1425,7 +1426,7 @@ async fn run_mutation(
         .map_err(pg("beginning setting mutation transaction"))?;
     let mut writer = Writer {
         tx: &mut tx,
-        user_id: user_id as i32,
+        user_id: silo_pg::AnyInt(user_id),
     };
     writer.lock_preferences().await?;
     if !mutation_id.is_empty() {
@@ -1490,7 +1491,7 @@ pub(super) async fn clear_setting_value(
     let (removed, mirror_removed) = {
         let mut writer = Writer {
             tx: &mut tx,
-            user_id: event_user as i32,
+            user_id: silo_pg::AnyInt(event_user),
         };
         writer.lock_preferences().await.map_err(|e| failed(&e))?;
         let removed = writer
@@ -1707,7 +1708,7 @@ async fn set_navigation_shortcut(
                     .map_err(pg("reading navigation shortcuts"))?;
                 let mut writer = Writer {
                     tx: &mut conn,
-                    user_id: user_id as i32,
+                    user_id: silo_pg::AnyInt(user_id),
                 };
                 mutate_in_tx(&mut writer, def, &identity, &item, present).await
             }
@@ -2645,7 +2646,7 @@ async fn sync_legacy_user(
     {
         let mut writer = Writer {
             tx: &mut tx,
-            user_id: user_id as i32,
+            user_id: silo_pg::AnyInt(user_id),
         };
         writer.lock_preferences().await.map_err(|e| e.to_string())?;
         match value {
@@ -2697,7 +2698,7 @@ async fn sync_legacy_device(
     let changed = {
         let mut writer = Writer {
             tx: &mut tx,
-            user_id: user_id as i32,
+            user_id: silo_pg::AnyInt(user_id),
         };
         writer.lock_preferences().await.map_err(|e| e.to_string())?;
         let legacy = legacy_device_key(&entry.key);
@@ -2893,7 +2894,7 @@ async fn effective_subtitle(
     record_sighting(s, claims, profile, device).await;
     let reader = Reader {
         pool: &s.pool,
-        user_id: claims.user_id as i32,
+        user_id: silo_pg::AnyInt(claims.user_id),
     };
     let resolved = resolve_legacy_effective(&reader, profile, device, SUBTITLE_APPEARANCE)
         .await
@@ -3207,7 +3208,7 @@ fn mount_v1(stack: &Arc<Stack>, api_mux: &Mux) {
                 let claims = claims!(r);
                 let reader = Reader {
                     pool: &s.pool,
-                    user_id: claims.user_id as i32,
+                    user_id: silo_pg::AnyInt(claims.user_id),
                 };
                 let Ok(entries) = reader.list_settings().await else {
                     return write_v1_error(w, 500, INTERNAL, "Failed to list settings").await;
@@ -3272,7 +3273,7 @@ fn mount_v1(stack: &Arc<Stack>, api_mux: &Mux) {
                 record_sighting(&s, &claims, &profile, &device).await;
                 let reader = Reader {
                     pool: &s.pool,
-                    user_id: claims.user_id as i32,
+                    user_id: silo_pg::AnyInt(claims.user_id),
                 };
                 let mut settings = Vec::new();
                 for key in parse_setting_keys(&keys_param) {
@@ -3412,7 +3413,7 @@ fn mount_v1(stack: &Arc<Stack>, api_mux: &Mux) {
                 record_sighting(&s, &claims, &profile, &device).await;
                 let reader = Reader {
                     pool: &s.pool,
-                    user_id: claims.user_id as i32,
+                    user_id: silo_pg::AnyInt(claims.user_id),
                 };
                 match device_setting_fallback(&reader, &profile, &device.id, &key).await {
                     Err(_) => {
@@ -3792,7 +3793,7 @@ fn mount_v1(stack: &Arc<Stack>, api_mux: &Mux) {
                 }
                 let reader = Reader {
                     pool: &s.pool,
-                    user_id: claims.user_id as i32,
+                    user_id: silo_pg::AnyInt(claims.user_id),
                 };
                 match reader.get_setting(&key).await {
                     Err(_) => write_v1_error(w, 500, INTERNAL, "Failed to get setting").await,

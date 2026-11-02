@@ -1,0 +1,59 @@
+{
+  "ignored_tables": {
+    "activity_log": "Go vs Go: written from a batch or a timer, so a row lands in a later case.",
+    "operational_logs": "Go vs Go: written from a batch or a timer, so a row lands in a later case.",
+    "policy_decisions": "Go vs Go: written from a batch or a timer, so a row lands in a later case.",
+    "user_last_activity": "Go vs Go: written from a batch or a timer, so a row lands in a later case.",
+    "idgen_machine_leases": "Go vs Go: written from a batch or a timer, so a row lands in a later case.",
+    "node_heartbeats": "Go vs Go: written from a batch or a timer, so a row lands in a later case.",
+    "stream_nodes": "Go vs Go: written from a batch or a timer, so a row lands in a later case.",
+    "playback_sessions_sync": "Go vs Go: written from a batch or a timer, so a row lands in a later case.",
+    "dashboard_metric_samples": "Go vs Go: written from a batch or a timer, so a row lands in a later case.",
+    "library_monitor_status": "Go vs Go: written from a batch or a timer, so a row lands in a later case.",
+    "admin_jobs": "Go vs Go: written from a batch or a timer, so a row lands in a later case.",
+    "catalog_item_change_events": "Go vs Go: written from a batch or a timer, so a row lands in a later case.",
+    "catalog_item_change_drain": "Go vs Go: written from a batch or a timer, so a row lands in a later case.",
+    "artwork_revision_gc_candidates": "Go vs Go: written by a background worker after the answer.",
+    "user_personal_collection_poster_variants": "Go vs Go: written by a background worker after the answer.",
+    "movie_match_queue": "Go vs Go: the matcher worker writes these after the answer.",
+    "metadata_refresh_debt": "Go vs Go: the matcher worker writes these after the answer.",
+    "scan_runs": "Go vs Go: the scanner and matcher rewrite these after a scan an earlier case started (self-compare runs: scan_runs, item_people; baseline flake on PUT /libraries/{id}/providers: media_files, media_item_libraries). Take these out, and make the case wait for the scan, when catalog write rows go native.",
+    "item_people": "Go vs Go: the scanner and matcher rewrite these after a scan an earlier case started (self-compare runs: scan_runs, item_people; baseline flake on PUT /libraries/{id}/providers: media_files, media_item_libraries). Take these out, and make the case wait for the scan, when catalog write rows go native.",
+    "people": "Go vs Go: the scanner and matcher rewrite these after a scan an earlier case started (self-compare runs: scan_runs, item_people; baseline flake on PUT /libraries/{id}/providers: media_files, media_item_libraries). Take these out, and make the case wait for the scan, when catalog write rows go native.",
+    "media_files": "Go vs Go: the scanner and matcher rewrite these after a scan an earlier case started (self-compare runs: scan_runs, item_people; baseline flake on PUT /libraries/{id}/providers: media_files, media_item_libraries). Take these out, and make the case wait for the scan, when catalog write rows go native.",
+    "media_items": "Go vs Go: the scanner and matcher rewrite these after a scan an earlier case started (self-compare runs: scan_runs, item_people; baseline flake on PUT /libraries/{id}/providers: media_files, media_item_libraries). Take these out, and make the case wait for the scan, when catalog write rows go native.",
+    "media_group_locations": "Go vs Go: the scanner and matcher rewrite these after a scan an earlier case started (self-compare runs: scan_runs, item_people; baseline flake on PUT /libraries/{id}/providers: media_files, media_item_libraries). Take these out, and make the case wait for the scan, when catalog write rows go native.",
+    "media_item_provider_ids": "Go vs Go: the scanner and matcher rewrite these after a scan an earlier case started (self-compare runs: scan_runs, item_people; baseline flake on PUT /libraries/{id}/providers: media_files, media_item_libraries). Take these out, and make the case wait for the scan, when catalog write rows go native.",
+    "media_item_libraries": "Go vs Go: the scanner and matcher rewrite these after a scan an earlier case started (self-compare runs: scan_runs, item_people; baseline flake on PUT /libraries/{id}/providers: media_files, media_item_libraries). Take these out, and make the case wait for the scan, when catalog write rows go native.",
+    "observed_media_locations": "Go vs Go: the scanner and matcher rewrite these after a scan an earlier case started (self-compare runs: scan_runs, item_people; baseline flake on PUT /libraries/{id}/providers: media_files, media_item_libraries). Take these out, and make the case wait for the scan, when catalog write rows go native.",
+    "scanned_media_groups": "Go vs Go: the scanner and matcher rewrite these after a scan an earlier case started (self-compare runs: scan_runs, item_people; baseline flake on PUT /libraries/{id}/providers: media_files, media_item_libraries). Take these out, and make the case wait for the scan, when catalog write rows go native."
+  },
+  "ignored_events": {
+    "playback_sessions_changed": "Go vs Go: published on a timer or by a background scan (baseline flakes on abs feeds and login-sessions).",
+    "catalog_item_changed": "Go vs Go: published on a timer or by a background scan (baseline flakes on abs feeds and login-sessions).",
+    "metadata_updated": "Go vs Go: published on a timer or by a background scan (baseline flakes on abs feeds and login-sessions).",
+    "scan_complete": "Go vs Go: published on a timer or by a background scan (baseline flakes on abs feeds and login-sessions)."
+  },
+  "volatile_fields": {
+    "client_ip": "Go vs Go: each stack has its own edge address.",
+    "ip_address": "Go vs Go: each stack has its own edge address.",
+    "duration_ms": "A clock.",
+    "last_seen_at": "Go vs Go: touched after the answer, in a batch.",
+    "code": "Random invite and room code.",
+    "join_token": "Random room token.",
+    "event_id": "Random event ID.",
+    "ClientIP": "Go vs Go: each stack has its own edge address.",
+    "ClientPeer": "Go vs Go: each stack has its own edge address.",
+    "user_code": "Random device code.",
+    "last_used_at": "Go vs Go: stamped by a per-process throttle, after the answer.",
+    "match_code": "Random device pairing code."
+  },
+  "ignored_log_messages": {
+    "jellycompat request": "No jellycompat row is native, so Go writes these on both sides. A local process probing a new listener adds lines on the front only (README, activity rows)."
+  },
+  "ignored_event_channels": {
+    "jobs": "Go vs Go: background job progress, published on the worker clock.",
+    "sessions": "Go vs Go: playback session changes, published on a timer.",
+    "catalog": "Go vs Go: published on a timer or by a background scan (baseline flakes on abs feeds and login-sessions)."
+  }
+}

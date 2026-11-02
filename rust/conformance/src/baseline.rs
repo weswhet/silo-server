@@ -373,6 +373,8 @@ mod tests {
             feed_reference: Default::default(),
             exercised: true,
             reference_error: None,
+            effect: None,
+            empty_body: false,
         }
     }
 
