@@ -24,6 +24,7 @@ pub use error::Error;
 pub use pool::{Pool, PoolStatus};
 pub use session::{ExecMode, Session, Tx};
 pub use setup::JIT_OFF;
+pub use tokio_postgres::Error as DriverError;
 pub use tokio_postgres::types as pg_types;
 pub use tokio_postgres::types::ToSql;
 pub use tokio_postgres::{Row, SimpleQueryMessage};

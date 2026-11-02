@@ -38,6 +38,8 @@ pub struct PoolConfig {
     pub description_cache_capacity: usize,
     /// The parsed `sslmode`.
     pub ssl_mode: SslMode,
+    /// `sslnegotiation=direct`. pgx compares against this one value and ignores any other.
+    pub direct_tls: bool,
 }
 
 const NOT_RUNTIME_PARAMS: &[&str] = &[
@@ -346,6 +348,7 @@ fn build(mut settings: BTreeMap<String, String>) -> Result<PoolConfig, Error> {
         Some("verify-full") => SslMode::VerifyFull,
         Some(_) => return Err(cfg_err("sslmode is invalid")),
     };
+    let direct_tls = settings.get("sslnegotiation").map(String::as_str) == Some("direct");
     // pgx loads `sslrootcert`/`sslcert`/`sslkey` into the TLS config it builds for every mode but
     // `disable` (which never looks at them). This crate does not load certificate files yet (see
     // `Pool::new`), so refuse to start rather than silently connect without the CA pin or client
@@ -452,6 +455,7 @@ fn build(mut settings: BTreeMap<String, String>) -> Result<PoolConfig, Error> {
         statement_cache_capacity,
         description_cache_capacity,
         ssl_mode,
+        direct_tls,
     })
 }
 

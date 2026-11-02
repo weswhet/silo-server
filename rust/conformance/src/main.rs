@@ -6,7 +6,7 @@ use silo_conformance::model::{Surface, PROXY_MARKER_HEADER};
 use silo_conformance::normalize::Rules;
 use silo_conformance::report::{self, NormalizerUse, Report, RouteReport};
 use silo_conformance::runner::{self, Config, RunOutput, Runner};
-use silo_conformance::{plan, sources};
+use silo_conformance::{http, plan, sources};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -24,6 +24,7 @@ struct Cli {
 }
 
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)] // parsed once at startup
 enum Cmd {
     /// Print the route universe and the request plan without sending anything.
     List {
@@ -85,6 +86,11 @@ struct RunArgs {
     /// run.
     #[arg(long)]
     sources: Option<PathBuf>,
+    /// Send the reference `X-Forwarded-For: ADDR` on every request, as a front on loopback does for
+    /// the candidate's Go server, so both Go servers see one client address without a front on the
+    /// reference. It also drops the `client-address` normalizer, which only excuses two addresses.
+    #[arg(long, value_name = "ADDR")]
+    reference_forwarded_for: Option<String>,
     /// Milliseconds to wait before each case, to run Go vs Go at a slower candidate's pace.
     #[arg(long, default_value_t = 0)]
     pace_ms: u64,
@@ -169,6 +175,7 @@ fn parse_surfaces(args: &RunArgs) -> Result<BTreeMap<Surface, (String, String)>>
     let mut urls = BTreeMap::new();
     for s in [
         Surface::ApiV2,
+        Surface::ApiV2Walked,
         Surface::ApiV1,
         Surface::ApiDelegate,
         Surface::Root,
@@ -265,7 +272,15 @@ fn run(args: RunArgs) -> Result<ExitCode> {
         None => BTreeMap::new(),
     };
 
-    let rules = if peer_sources.is_empty() {
+    if let Some(addr) = &args.reference_forwarded_for {
+        http::set_reference_headers(
+            urls.values()
+                .map(|(reference, _)| reference.clone())
+                .collect(),
+            vec![("X-Forwarded-For".to_string(), addr.clone())],
+        );
+    }
+    let rules = if peer_sources.is_empty() && args.reference_forwarded_for.is_none() {
         rules
     } else {
         rules.for_peer_lab()

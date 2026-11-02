@@ -17,7 +17,7 @@
 set -eu
 
 here=rust/conformance/vectors/generators/core
-export GOTOOLCHAIN=go1.26.7 CGO_ENABLED=0 TZ=UTC
+export GOTOOLCHAIN=go1.26.10 CGO_ENABLED=0 TZ=UTC
 root=$(pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT

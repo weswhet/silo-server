@@ -7,6 +7,8 @@ use std::sync::Arc;
 #[serde(rename_all = "snake_case")]
 pub enum Surface {
     ApiV2,
+    /// `/api/v2` rows `internal/api/testdata/media_routes.txt` walks that `openapi.json` does not list.
+    ApiV2Walked,
     ApiV1,
     ApiDelegate,
     Root,
@@ -19,8 +21,9 @@ pub enum Surface {
 }
 
 impl Surface {
-    pub const ALL: [Surface; 10] = [
+    pub const ALL: [Surface; 11] = [
         Surface::ApiV2,
+        Surface::ApiV2Walked,
         Surface::ApiV1,
         Surface::ApiDelegate,
         Surface::Root,
@@ -35,6 +38,7 @@ impl Surface {
     pub fn name(self) -> &'static str {
         match self {
             Surface::ApiV2 => "api_v2",
+            Surface::ApiV2Walked => "api_v2_walked",
             Surface::ApiV1 => "api_v1",
             Surface::ApiDelegate => "api_delegate",
             Surface::Root => "root",
@@ -55,7 +59,11 @@ impl Surface {
     pub fn on_main_listener(self) -> bool {
         matches!(
             self,
-            Surface::ApiV2 | Surface::ApiV1 | Surface::ApiDelegate | Surface::Root
+            Surface::ApiV2
+                | Surface::ApiV2Walked
+                | Surface::ApiV1
+                | Surface::ApiDelegate
+                | Surface::Root
         )
     }
 }
@@ -196,6 +204,9 @@ pub struct Case {
     /// Before sending, poll this admin read on both sides until its `items` is not empty, for a
     /// write the server batches.
     pub settle_on: Option<String>,
+    /// Before sending, wait this long for a batched write. For a read of what requests themselves
+    /// add up to, where polling would change the answer.
+    pub wait_ms: u64,
 }
 
 pub const PROXY_MARKER_HEADER: &str = "X-Silo-Strangler-Upstream";

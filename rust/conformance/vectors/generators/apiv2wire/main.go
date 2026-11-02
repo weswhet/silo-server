@@ -41,13 +41,13 @@ func write(name string, v any) {
 // problemOut is the JSON shape a *apiv2.Problem is recorded in: its exported envelope fields
 // plus the headers GetHeaders() exposes (the struct's own `headers` field is unexported).
 type problemOut struct {
-	Type     string              `json:"type"`
-	Title    string              `json:"title"`
-	Status   int                 `json:"status"`
-	Detail   string              `json:"detail"`
-	Instance string              `json:"instance"`
+	Type     string               `json:"type"`
+	Title    string               `json:"title"`
+	Status   int                  `json:"status"`
+	Detail   string               `json:"detail"`
+	Instance string               `json:"instance"`
 	Errors   []apiv2.ProblemError `json:"errors,omitempty"`
-	Headers  map[string][]string `json:"headers,omitempty"`
+	Headers  map[string][]string  `json:"headers,omitempty"`
 }
 
 func ofProblem(p *apiv2.Problem) *problemOut {
@@ -105,15 +105,15 @@ func genCatalog() {
 // --- precondition.go: fully exported, called directly. ---
 
 type etagParseCase struct {
-	Input string            `json:"input"`
-	OK    bool              `json:"ok"`
-	Tag   *apiv2.EntityTag  `json:"tag,omitempty"`
+	Input string           `json:"input"`
+	OK    bool             `json:"ok"`
+	Tag   *apiv2.EntityTag `json:"tag,omitempty"`
 }
 
 type etagListCase struct {
-	Input string           `json:"input"`
-	OK    bool             `json:"ok"`
-	Star  bool             `json:"star"`
+	Input string            `json:"input"`
+	OK    bool              `json:"ok"`
+	Star  bool              `json:"star"`
 	Tags  []apiv2.EntityTag `json:"tags,omitempty"`
 }
 
@@ -189,9 +189,9 @@ func genPrecondition() {
 	other := apiv2.EntityTag{Opaque: "cur2"}
 
 	type ifMatchCase struct {
-		IfMatch string            `json:"if_match"`
-		Current apiv2.EntityTag   `json:"current"`
-		Problem *problemOut       `json:"problem,omitempty"`
+		IfMatch string          `json:"if_match"`
+		Current apiv2.EntityTag `json:"current"`
+		Problem *problemOut     `json:"problem,omitempty"`
 	}
 	var ifMatches []ifMatchCase
 	for _, im := range []string{``, `*`, `"cur1"`, `W/"cur1"`, `"cur2"`, `not-a-tag`} {
@@ -437,11 +437,44 @@ func genWire() {
 	}
 	write("patch", patches)
 
+	// The cases a Patch decoded through an intermediate generic value gets wrong.
+	type patchSub struct {
+		A int `json:"a"`
+		B int `json:"b"`
+	}
+	type withPatches struct {
+		Big  apiv2.Patch[int64]    `json:"big,omitzero"`
+		Sub  apiv2.Patch[patchSub] `json:"sub,omitzero"`
+		IDs  apiv2.Patch[[]int]    `json:"ids,omitzero"`
+		Name apiv2.Patch[string]   `json:"name,omitzero"`
+		Flag apiv2.Patch[bool]     `json:"flag,omitzero"`
+	}
+	type patchValueCase struct {
+		Input string `json:"input"`
+		OK    bool   `json:"ok"`
+		Out   string `json:"out"`
+		State string `json:"state"`
+	}
+	var patchValues []patchValueCase
+	for _, in := range []string{
+		`{}`, `{"big":9007199254740993}`, `{"big":-9223372036854775808}`, `{"big":null}`, `{"big":1.5}`, `{"big":"1"}`,
+		`{"sub":{"a":1}}`, `{"sub":{"A":1,"B":2}}`, `{"SUB":{"a":1}}`, `{"sub":null}`, `{"sub":{}}`, `{"sub":[]}`, `{"sub":{"a":1},"sub":{"b":2}}`,
+		`{"sub":{"a":1},"sub":null}`, `{"sub":null,"sub":{"a":1}}`, `{"ids":[1,2]}`, `{"ids":[]}`, `{"ids":null}`, `{"ids":[1,2],"ids":[null]}`, `{"ids":[null,2]}`,
+		`{"ids":"x"}`, `{"name":"a","name":"b"}`, `{"name":1}`, `{"name":"a","name":null}`, `{"flag":true}`, `{"flag":0}`, `null`,
+	} {
+		var w withPatches
+		err := json.Unmarshal([]byte(in), &w)
+		out, _ := json.Marshal(w)
+		state := fmt.Sprintf("%v %v|%v %v|%v %v %v|%v %v|%v %v", w.Big.Present, w.Big.Null, w.Sub.Present, w.Sub.Null, w.IDs.Present, w.IDs.Null, w.IDs.Value == nil, w.Name.Present, w.Name.Null, w.Flag.Present, w.Flag.Null)
+		patchValues = append(patchValues, patchValueCase{Input: in, OK: err == nil, Out: string(out), State: state})
+	}
+	write("patch_values", patchValues)
+
 	type sortCase struct {
-		Raw     string      `json:"raw"`
-		Allowed []string    `json:"allowed"`
+		Raw     string            `json:"raw"`
+		Allowed []string          `json:"allowed"`
 		Fields  []apiv2.SortField `json:"fields,omitempty"`
-		Problem *problemOut `json:"problem,omitempty"`
+		Problem *problemOut       `json:"problem,omitempty"`
 	}
 	var sorts []sortCase
 	allowed := []string{"name", "added_at"}

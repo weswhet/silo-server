@@ -1,20 +1,20 @@
 {
   "schema_version": 2,
   "candidate_kind": "self_compare",
-  "runs": 8,
+  "runs": 3,
   "source_revision": "63ef34b236b88dc77acca1a9a3ed90235377691f",
   "surfaces": {
     "abs": {
-      "total_routes": 183,
+      "total_routes": 187,
       "matched": 55,
-      "weak_evidence": 128,
-      "weak_refusals_only": 115,
+      "weak_evidence": 132,
+      "weak_refusals_only": 117,
       "differs": 0,
       "known_flake": 0,
       "not_ported": 0,
       "not_ported_with_diffs": 0,
       "not_exercised": 0,
-      "parity_percent": 30.05
+      "parity_percent": 29.41
     },
     "api_delegate": {
       "total_routes": 10,
@@ -30,15 +30,15 @@
     },
     "api_v1": {
       "total_routes": 694,
-      "matched": 364,
+      "matched": 365,
       "weak_evidence": 328,
       "weak_refusals_only": 113,
-      "differs": 2,
+      "differs": 1,
       "known_flake": 0,
       "not_ported": 0,
       "not_ported_with_diffs": 0,
       "not_exercised": 0,
-      "parity_percent": 52.45
+      "parity_percent": 52.59
     },
     "api_v2": {
       "total_routes": 908,
@@ -51,6 +51,18 @@
       "not_ported_with_diffs": 0,
       "not_exercised": 0,
       "parity_percent": 51.21
+    },
+    "api_v2_walked": {
+      "total_routes": 22,
+      "matched": 9,
+      "weak_evidence": 13,
+      "weak_refusals_only": 4,
+      "differs": 0,
+      "known_flake": 0,
+      "not_ported": 0,
+      "not_ported_with_diffs": 0,
+      "not_exercised": 0,
+      "parity_percent": 40.91
     },
     "debug": {
       "total_routes": 90,
@@ -65,16 +77,16 @@
       "parity_percent": 0.0
     },
     "jellycompat": {
-      "total_routes": 178,
-      "matched": 102,
-      "weak_evidence": 76,
-      "weak_refusals_only": 65,
+      "total_routes": 171,
+      "matched": 98,
+      "weak_evidence": 73,
+      "weak_refusals_only": 62,
       "differs": 0,
       "known_flake": 0,
       "not_ported": 0,
       "not_ported_with_diffs": 0,
       "not_exercised": 0,
-      "parity_percent": 57.3
+      "parity_percent": 57.31
     },
     "metrics": {
       "total_routes": 10,
@@ -126,6 +138,126 @@
     }
   },
   "known_flakes": {
+    "abs GET /abs/api/collections#user": {
+      "runs_with_difference": 0,
+      "runs": 0,
+      "reference_status_varied": false,
+      "signatures": [
+        "ValueMismatch $.collections[0].createdAt",
+        "ValueMismatch $.collections[0].id",
+        "ValueMismatch $.collections[0].lastUpdate",
+        "ValueMismatch $.collections[1].createdAt",
+        "ValueMismatch $.collections[1].id",
+        "ValueMismatch $.collections[1].lastUpdate",
+        "ValueMismatch $.results[0].createdAt",
+        "ValueMismatch $.results[0].id",
+        "ValueMismatch $.results[0].lastUpdate",
+        "ValueMismatch $.results[1].createdAt",
+        "ValueMismatch $.results[1].id",
+        "ValueMismatch $.results[1].lastUpdate"
+      ],
+      "why": "The seed stage creates two collections moments apart, stored at one-second resolution, and ListUserCollections orders by created_at DESC with no tiebreak. A server whose two writes straddle a second lists the newer first; one whose writes share a second lists them in table order, so the two lists swap. Seen Go vs Go: the same two writes straddling a second on one Go server and not on the other invert the list with no front involved."
+    },
+    "abs GET /abs/api/libraries/{libraryId}/collections#invalid_path": {
+      "runs_with_difference": 0,
+      "runs": 0,
+      "reference_status_varied": false,
+      "signatures": [
+        "ValueMismatch $.collections[0].createdAt",
+        "ValueMismatch $.collections[0].id",
+        "ValueMismatch $.collections[0].lastUpdate",
+        "ValueMismatch $.collections[1].createdAt",
+        "ValueMismatch $.collections[1].id",
+        "ValueMismatch $.collections[1].lastUpdate",
+        "ValueMismatch $.results[0].createdAt",
+        "ValueMismatch $.results[0].id",
+        "ValueMismatch $.results[0].lastUpdate",
+        "ValueMismatch $.results[1].createdAt",
+        "ValueMismatch $.results[1].id",
+        "ValueMismatch $.results[1].lastUpdate"
+      ],
+      "why": "The seed stage creates two collections moments apart, stored at one-second resolution, and ListUserCollections orders by created_at DESC with no tiebreak. A server whose two writes straddle a second lists the newer first; one whose writes share a second lists them in table order, so the two lists swap. Seen Go vs Go: the same two writes straddling a second on one Go server and not on the other invert the list with no front involved."
+    },
+    "abs GET /abs/api/libraries/{libraryId}/collections#user": {
+      "runs_with_difference": 0,
+      "runs": 0,
+      "reference_status_varied": false,
+      "signatures": [
+        "ValueMismatch $.collections[0].createdAt",
+        "ValueMismatch $.collections[0].id",
+        "ValueMismatch $.collections[0].lastUpdate",
+        "ValueMismatch $.collections[1].createdAt",
+        "ValueMismatch $.collections[1].id",
+        "ValueMismatch $.collections[1].lastUpdate",
+        "ValueMismatch $.results[0].createdAt",
+        "ValueMismatch $.results[0].id",
+        "ValueMismatch $.results[0].lastUpdate",
+        "ValueMismatch $.results[1].createdAt",
+        "ValueMismatch $.results[1].id",
+        "ValueMismatch $.results[1].lastUpdate"
+      ],
+      "why": "The seed stage creates two collections moments apart, stored at one-second resolution, and ListUserCollections orders by created_at DESC with no tiebreak. A server whose two writes straddle a second lists the newer first; one whose writes share a second lists them in table order, so the two lists swap. Seen Go vs Go: the same two writes straddling a second on one Go server and not on the other invert the list with no front involved."
+    },
+    "abs GET /api/collections#user": {
+      "runs_with_difference": 0,
+      "runs": 0,
+      "reference_status_varied": false,
+      "signatures": [
+        "ValueMismatch $.collections[0].createdAt",
+        "ValueMismatch $.collections[0].id",
+        "ValueMismatch $.collections[0].lastUpdate",
+        "ValueMismatch $.collections[1].createdAt",
+        "ValueMismatch $.collections[1].id",
+        "ValueMismatch $.collections[1].lastUpdate",
+        "ValueMismatch $.results[0].createdAt",
+        "ValueMismatch $.results[0].id",
+        "ValueMismatch $.results[0].lastUpdate",
+        "ValueMismatch $.results[1].createdAt",
+        "ValueMismatch $.results[1].id",
+        "ValueMismatch $.results[1].lastUpdate"
+      ],
+      "why": "The seed stage creates two collections moments apart, stored at one-second resolution, and ListUserCollections orders by created_at DESC with no tiebreak. A server whose two writes straddle a second lists the newer first; one whose writes share a second lists them in table order, so the two lists swap. Seen Go vs Go: the same two writes straddling a second on one Go server and not on the other invert the list with no front involved."
+    },
+    "abs GET /api/libraries/{libraryId}/collections#invalid_path": {
+      "runs_with_difference": 0,
+      "runs": 0,
+      "reference_status_varied": false,
+      "signatures": [
+        "ValueMismatch $.collections[0].createdAt",
+        "ValueMismatch $.collections[0].id",
+        "ValueMismatch $.collections[0].lastUpdate",
+        "ValueMismatch $.collections[1].createdAt",
+        "ValueMismatch $.collections[1].id",
+        "ValueMismatch $.collections[1].lastUpdate",
+        "ValueMismatch $.results[0].createdAt",
+        "ValueMismatch $.results[0].id",
+        "ValueMismatch $.results[0].lastUpdate",
+        "ValueMismatch $.results[1].createdAt",
+        "ValueMismatch $.results[1].id",
+        "ValueMismatch $.results[1].lastUpdate"
+      ],
+      "why": "The seed stage creates two collections moments apart, stored at one-second resolution, and ListUserCollections orders by created_at DESC with no tiebreak. A server whose two writes straddle a second lists the newer first; one whose writes share a second lists them in table order, so the two lists swap. Seen Go vs Go: the same two writes straddling a second on one Go server and not on the other invert the list with no front involved."
+    },
+    "abs GET /api/libraries/{libraryId}/collections#user": {
+      "runs_with_difference": 0,
+      "runs": 0,
+      "reference_status_varied": false,
+      "signatures": [
+        "ValueMismatch $.collections[0].createdAt",
+        "ValueMismatch $.collections[0].id",
+        "ValueMismatch $.collections[0].lastUpdate",
+        "ValueMismatch $.collections[1].createdAt",
+        "ValueMismatch $.collections[1].id",
+        "ValueMismatch $.collections[1].lastUpdate",
+        "ValueMismatch $.results[0].createdAt",
+        "ValueMismatch $.results[0].id",
+        "ValueMismatch $.results[0].lastUpdate",
+        "ValueMismatch $.results[1].createdAt",
+        "ValueMismatch $.results[1].id",
+        "ValueMismatch $.results[1].lastUpdate"
+      ],
+      "why": "The seed stage creates two collections moments apart, stored at one-second resolution, and ListUserCollections orders by created_at DESC with no tiebreak. A server whose two writes straddle a second lists the newer first; one whose writes share a second lists them in table order, so the two lists swap. Seen Go vs Go: the same two writes straddling a second on one Go server and not on the other invert the list with no front involved."
+    },
     "api_v1 GET /api/v1/admin/policy/decisions#admin": {
       "runs_with_difference": 0,
       "runs": 0,
@@ -156,21 +288,58 @@
       ],
       "why": "next_cursor is present only when the listing is full, and the decision count around that limit depends on when each server's log flushed."
     },
-    "api_v1 GET /api/v1/admin/system/resources#admin": {
-      "runs_with_difference": 1,
-      "runs": 8,
+    "api_v1 PATCH /api/v1/watch-together/rooms/{room_id}/policy#valid": {
+      "runs_with_difference": 0,
+      "runs": 0,
       "reference_status_varied": false,
       "signatures": [
-        "ValueMismatch $.system.load1"
-      ]
+        "ValueMismatch $.room.anchor_updated_at"
+      ],
+      "why": "A clock value with one-second resolution: the two servers can land on either side of a second. Seen Go vs Go."
     },
     "api_v1 POST /api/v1/admin/catalog/export#valid": {
-      "runs_with_difference": 8,
-      "runs": 8,
+      "runs_with_difference": 3,
+      "runs": 3,
       "reference_status_varied": false,
       "signatures": [
         "Bytes body"
       ]
+    },
+    "api_v1 PUT /api/v1/watch-together/rooms/{room_id}/selection#valid": {
+      "runs_with_difference": 0,
+      "runs": 0,
+      "reference_status_varied": false,
+      "signatures": [
+        "ValueMismatch $.room.anchor_updated_at"
+      ],
+      "why": "A clock value with one-second resolution: the two servers can land on either side of a second. Seen Go vs Go."
+    },
+    "api_v2 GET /api/v2/not-interested/{item_id}#after_writes": {
+      "runs_with_difference": 0,
+      "runs": 0,
+      "reference_status_varied": false,
+      "signatures": [
+        "ValueMismatch $.marked_at"
+      ],
+      "why": "A clock value with one-second resolution: the two servers can land on either side of a second. Seen Go vs Go."
+    },
+    "api_v2 GET /api/v2/playback/capabilities#peer:untrusted_a:base_url:name": {
+      "runs_with_difference": 0,
+      "runs": 0,
+      "reference_status_varied": false,
+      "signatures": [
+        "EtagBehaviour revalidation status"
+      ],
+      "why": "These are the viewer's first capability read after a stage's restart. sourceBitratePercentile answers one with no bandwidth_probe_target_kbps and starts the read in the background, so the ETag changes once that read lands, and the replay gets 304 or 200 depending on which came first. Seen Go vs Go in both directions: the peer case in a lab run, and #user as 200 against 304 in 1 of 10 resets of both Go stacks."
+    },
+    "api_v2 GET /api/v2/playback/capabilities#user": {
+      "runs_with_difference": 0,
+      "runs": 0,
+      "reference_status_varied": false,
+      "signatures": [
+        "EtagBehaviour revalidation status"
+      ],
+      "why": "These are the viewer's first capability read after a stage's restart. sourceBitratePercentile answers one with no bandwidth_probe_target_kbps and starts the read in the background, so the ETag changes once that read lands, and the replay gets 304 or 200 depending on which came first. Seen Go vs Go in both directions: the peer case in a lab run, and #user as 200 against 304 in 1 of 10 resets of both Go stacks."
     },
     "api_v2 GET /api/v2/watch/{id}/trickplay#after_writes": {
       "runs_with_difference": 0,
@@ -182,8 +351,8 @@
       "why": "Seen once in three runs: the answer depends on how far a background write has got."
     },
     "api_v2 POST /api/v2/admin/catalog/export#valid": {
-      "runs_with_difference": 8,
-      "runs": 8,
+      "runs_with_difference": 3,
+      "runs": 3,
       "reference_status_varied": false,
       "signatures": [
         "Bytes body"
@@ -217,6 +386,22 @@
     }
   },
   "routes": {
+    "abs ALL /abs/socket.io": {
+      "state": "weak_evidence",
+      "depth": "client_error",
+      "statuses": {
+        "anon": 400,
+        "cors_preflight": 400
+      }
+    },
+    "abs ALL /socket.io": {
+      "state": "weak_evidence",
+      "depth": "client_error",
+      "statuses": {
+        "anon": 400,
+        "cors_preflight": 400
+      }
+    },
     "abs DELETE /abs/api/collections/{id}": {
       "state": "weak_evidence",
       "depth": "auth_rejected",
@@ -420,7 +605,7 @@
       }
     },
     "abs GET /abs/api/collections": {
-      "state": "matched",
+      "state": "known_flake",
       "depth": "success",
       "statuses": {
         "admin": 200,
@@ -591,7 +776,7 @@
       }
     },
     "abs GET /abs/api/libraries/{libraryId}/collections": {
-      "state": "matched",
+      "state": "known_flake",
       "depth": "success",
       "statuses": {
         "admin": 200,
@@ -1030,7 +1215,7 @@
       }
     },
     "abs GET /api/collections": {
-      "state": "matched",
+      "state": "known_flake",
       "depth": "success",
       "statuses": {
         "admin": 200,
@@ -1201,7 +1386,7 @@
       }
     },
     "abs GET /api/libraries/{libraryId}/collections": {
-      "state": "matched",
+      "state": "known_flake",
       "depth": "success",
       "statuses": {
         "admin": 200,
@@ -1530,6 +1715,18 @@
         "user": 404
       }
     },
+    "abs GET /api/v2/artwork/*": {
+      "state": "weak_evidence",
+      "depth": "not_found",
+      "statuses": {
+        "admin": 404,
+        "after_writes": 404,
+        "anon": 404,
+        "cors_preflight": 405,
+        "invalid_path": 404,
+        "user": 404
+      }
+    },
     "abs GET /feed/{slug}": {
       "state": "weak_evidence",
       "depth": "not_found",
@@ -1635,6 +1832,18 @@
         "cors_preflight": 405,
         "invalid_path": 400,
         "user": 400
+      }
+    },
+    "abs HEAD /api/v2/artwork/*": {
+      "state": "weak_evidence",
+      "depth": "not_found",
+      "statuses": {
+        "admin": 404,
+        "after_writes": 404,
+        "anon": 404,
+        "cors_preflight": 405,
+        "invalid_path": 404,
+        "user": 404
       }
     },
     "abs HEAD /public/session/{sid}/track/{idx}": {
@@ -4672,7 +4881,7 @@
       }
     },
     "api_v1 GET /api/v1/admin/system/resources": {
-      "state": "known_flake",
+      "state": "matched",
       "depth": "success",
       "statuses": {
         "admin": 200,
@@ -7606,7 +7815,7 @@
       }
     },
     "api_v1 PATCH /api/v1/watch-together/rooms/{room_id}/policy": {
-      "state": "matched",
+      "state": "known_flake",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -11404,7 +11613,7 @@
       }
     },
     "api_v1 PUT /api/v1/watch-together/rooms/{room_id}/selection": {
-      "state": "matched",
+      "state": "known_flake",
       "depth": "success",
       "statuses": {
         "anon": 401,
@@ -16757,7 +16966,7 @@
       }
     },
     "api_v2 GET /api/v2/not-interested/{item_id}": {
-      "state": "matched",
+      "state": "known_flake",
       "depth": "success",
       "statuses": {
         "admin": 404,
@@ -17067,7 +17276,7 @@
       }
     },
     "api_v2 GET /api/v2/playback/capabilities": {
-      "state": "matched",
+      "state": "known_flake",
       "depth": "success",
       "statuses": {
         "admin": 200,
@@ -23613,6 +23822,246 @@
         "valid": 422
       }
     },
+    "api_v2_walked CONNECT /api/v2/plugin-content/plugins/{installation_id}": {
+      "state": "matched",
+      "depth": "success",
+      "statuses": {
+        "anon": 308,
+        "cors_preflight": 308,
+        "slash_variant": 404
+      }
+    },
+    "api_v2_walked CONNECT /api/v2/plugin-content/plugins/{installation_id}/*": {
+      "state": "weak_evidence",
+      "depth": "not_found",
+      "statuses": {
+        "anon": 404,
+        "cors_preflight": 404
+      }
+    },
+    "api_v2_walked DELETE /api/v2/plugin-content/plugins/{installation_id}": {
+      "state": "matched",
+      "depth": "success",
+      "statuses": {
+        "anon": 308,
+        "cors_preflight": 308,
+        "invalid_path": 400,
+        "slash_variant": 404,
+        "valid": 308
+      }
+    },
+    "api_v2_walked DELETE /api/v2/plugin-content/plugins/{installation_id}/*": {
+      "state": "weak_evidence",
+      "depth": "client_error",
+      "statuses": {
+        "anon": 404,
+        "cors_preflight": 404,
+        "invalid_path": 400,
+        "valid": 404
+      }
+    },
+    "api_v2_walked GET /api/v2/artwork/*": {
+      "state": "weak_evidence",
+      "depth": "not_found",
+      "statuses": {
+        "admin": 404,
+        "after_writes": 404,
+        "anon": 404,
+        "cors_preflight": 405,
+        "invalid_path": 404,
+        "user": 404
+      }
+    },
+    "api_v2_walked GET /api/v2/plugin-content/plugin-assets/{installation_id}": {
+      "state": "weak_evidence",
+      "depth": "client_error",
+      "statuses": {
+        "admin": 404,
+        "after_writes": 404,
+        "anon": 404,
+        "cors_preflight": 405,
+        "invalid_path": 400,
+        "slash_variant": 404,
+        "user": 404
+      }
+    },
+    "api_v2_walked GET /api/v2/plugin-content/plugin-assets/{installation_id}/*": {
+      "state": "weak_evidence",
+      "depth": "client_error",
+      "statuses": {
+        "admin": 404,
+        "after_writes": 404,
+        "anon": 404,
+        "cors_preflight": 405,
+        "invalid_path": 400,
+        "user": 404
+      }
+    },
+    "api_v2_walked GET /api/v2/plugin-content/plugins/{installation_id}": {
+      "state": "matched",
+      "depth": "success",
+      "statuses": {
+        "admin": 308,
+        "after_writes": 308,
+        "anon": 308,
+        "cors_preflight": 308,
+        "invalid_path": 400,
+        "slash_variant": 404,
+        "user": 308
+      }
+    },
+    "api_v2_walked GET /api/v2/plugin-content/plugins/{installation_id}/*": {
+      "state": "weak_evidence",
+      "depth": "client_error",
+      "statuses": {
+        "admin": 404,
+        "after_writes": 404,
+        "anon": 404,
+        "cors_preflight": 404,
+        "invalid_path": 400,
+        "user": 404
+      }
+    },
+    "api_v2_walked HEAD /api/v2/artwork/*": {
+      "state": "weak_evidence",
+      "depth": "not_found",
+      "statuses": {
+        "admin": 404,
+        "after_writes": 404,
+        "anon": 404,
+        "cors_preflight": 405,
+        "invalid_path": 404,
+        "user": 404
+      }
+    },
+    "api_v2_walked HEAD /api/v2/plugin-content/plugins/{installation_id}": {
+      "state": "matched",
+      "depth": "success",
+      "statuses": {
+        "admin": 308,
+        "after_writes": 308,
+        "anon": 308,
+        "cors_preflight": 308,
+        "invalid_path": 400,
+        "slash_variant": 404,
+        "user": 308
+      }
+    },
+    "api_v2_walked HEAD /api/v2/plugin-content/plugins/{installation_id}/*": {
+      "state": "weak_evidence",
+      "depth": "client_error",
+      "statuses": {
+        "admin": 404,
+        "after_writes": 404,
+        "anon": 404,
+        "cors_preflight": 404,
+        "invalid_path": 400,
+        "user": 404
+      }
+    },
+    "api_v2_walked OPTIONS /api/v2/plugin-content/plugins/{installation_id}": {
+      "state": "matched",
+      "depth": "success",
+      "statuses": {
+        "admin": 308,
+        "after_writes": 308,
+        "anon": 308,
+        "invalid_path": 400,
+        "slash_variant": 404,
+        "user": 308
+      }
+    },
+    "api_v2_walked OPTIONS /api/v2/plugin-content/plugins/{installation_id}/*": {
+      "state": "weak_evidence",
+      "depth": "client_error",
+      "statuses": {
+        "admin": 404,
+        "after_writes": 404,
+        "anon": 404,
+        "invalid_path": 400,
+        "user": 404
+      }
+    },
+    "api_v2_walked PATCH /api/v2/plugin-content/plugins/{installation_id}": {
+      "state": "matched",
+      "depth": "success",
+      "statuses": {
+        "anon": 308,
+        "cors_preflight": 308,
+        "invalid_path": 400,
+        "slash_variant": 404,
+        "valid": 308
+      }
+    },
+    "api_v2_walked PATCH /api/v2/plugin-content/plugins/{installation_id}/*": {
+      "state": "weak_evidence",
+      "depth": "client_error",
+      "statuses": {
+        "anon": 404,
+        "cors_preflight": 404,
+        "invalid_path": 400,
+        "valid": 404
+      }
+    },
+    "api_v2_walked POST /api/v2/plugin-content/plugins/{installation_id}": {
+      "state": "matched",
+      "depth": "success",
+      "statuses": {
+        "anon": 308,
+        "cors_preflight": 308,
+        "invalid_path": 400,
+        "slash_variant": 404,
+        "valid": 308
+      }
+    },
+    "api_v2_walked POST /api/v2/plugin-content/plugins/{installation_id}/*": {
+      "state": "weak_evidence",
+      "depth": "client_error",
+      "statuses": {
+        "anon": 404,
+        "cors_preflight": 404,
+        "invalid_path": 400,
+        "valid": 404
+      }
+    },
+    "api_v2_walked PUT /api/v2/plugin-content/plugins/{installation_id}": {
+      "state": "matched",
+      "depth": "success",
+      "statuses": {
+        "anon": 308,
+        "cors_preflight": 308,
+        "invalid_path": 400,
+        "slash_variant": 404,
+        "valid": 308
+      }
+    },
+    "api_v2_walked PUT /api/v2/plugin-content/plugins/{installation_id}/*": {
+      "state": "weak_evidence",
+      "depth": "client_error",
+      "statuses": {
+        "anon": 404,
+        "cors_preflight": 404,
+        "invalid_path": 400,
+        "valid": 404
+      }
+    },
+    "api_v2_walked TRACE /api/v2/plugin-content/plugins/{installation_id}": {
+      "state": "matched",
+      "depth": "success",
+      "statuses": {
+        "anon": 308,
+        "cors_preflight": 308,
+        "slash_variant": 404
+      }
+    },
+    "api_v2_walked TRACE /api/v2/plugin-content/plugins/{installation_id}/*": {
+      "state": "weak_evidence",
+      "depth": "not_found",
+      "statuses": {
+        "anon": 404,
+        "cors_preflight": 404
+      }
+    },
     "debug CONNECT /debug/pprof/": {
       "state": "not_exercised",
       "depth": "none",
@@ -24379,20 +24828,6 @@
         "user": 200
       }
     },
-    "jellycompat GET /Items/{boxSetId}/Images/Primary": {
-      "state": "matched",
-      "depth": "success",
-      "statuses": {
-        "admin": 302,
-        "after_writes": 302,
-        "anon": 302,
-        "auth_variant:authorization_mediabrowser": 302,
-        "cors_preflight": 200,
-        "invalid_path": 404,
-        "slash_variant": 302,
-        "user": 302
-      }
-    },
     "jellycompat GET /Items/{id}": {
       "state": "matched",
       "depth": "success",
@@ -24460,76 +24895,6 @@
         "user": 200
       }
     },
-    "jellycompat GET /Items/{id}/Images/Art": {
-      "state": "weak_evidence",
-      "depth": "not_found",
-      "statuses": {
-        "admin": 404,
-        "after_writes": 404,
-        "anon": 404,
-        "auth_variant:lowercase_scheme_and_key": 404,
-        "cors_preflight": 200,
-        "invalid_path": 404,
-        "slash_variant": 404,
-        "user": 404
-      }
-    },
-    "jellycompat GET /Items/{id}/Images/Backdrop/{index}": {
-      "state": "matched",
-      "depth": "success",
-      "statuses": {
-        "admin": 302,
-        "after_writes": 302,
-        "anon": 302,
-        "auth_variant:uppercase_unquoted_token": 302,
-        "cors_preflight": 200,
-        "invalid_path": 404,
-        "slash_variant": 302,
-        "user": 302
-      }
-    },
-    "jellycompat GET /Items/{id}/Images/Banner": {
-      "state": "weak_evidence",
-      "depth": "not_found",
-      "statuses": {
-        "admin": 404,
-        "after_writes": 404,
-        "anon": 404,
-        "auth_variant:lowercase_bearer": 404,
-        "cors_preflight": 200,
-        "invalid_path": 404,
-        "slash_variant": 404,
-        "user": 404
-      }
-    },
-    "jellycompat GET /Items/{id}/Images/Disc": {
-      "state": "weak_evidence",
-      "depth": "not_found",
-      "statuses": {
-        "admin": 404,
-        "after_writes": 404,
-        "anon": 404,
-        "auth_variant:uppercase_bearer": 404,
-        "cors_preflight": 200,
-        "invalid_path": 404,
-        "slash_variant": 404,
-        "user": 404
-      }
-    },
-    "jellycompat GET /Items/{id}/Images/Thumb": {
-      "state": "matched",
-      "depth": "success",
-      "statuses": {
-        "admin": 302,
-        "after_writes": 302,
-        "anon": 302,
-        "auth_variant:x_emby_token": 302,
-        "cors_preflight": 200,
-        "invalid_path": 404,
-        "slash_variant": 302,
-        "user": 302
-      }
-    },
     "jellycompat GET /Items/{id}/Images/{imageType}": {
       "state": "matched",
       "depth": "success",
@@ -24539,6 +24904,12 @@
         "anon": 302,
         "auth_variant:query_uppercase_api_key": 302,
         "cors_preflight": 200,
+        "doc_example:/Items/{boxSetId}/Images/Primary": 302,
+        "doc_example:/Items/{id}/Images/Art": 404,
+        "doc_example:/Items/{id}/Images/Banner": 404,
+        "doc_example:/Items/{id}/Images/Disc": 404,
+        "doc_example:/Items/{id}/Images/Thumb": 302,
+        "doc_example:/Items/{personId}/Images/Primary": 404,
         "invalid_path": 404,
         "slash_variant": 302,
         "user": 302
@@ -24553,6 +24924,7 @@
         "anon": 302,
         "auth_variant:bad_token": 302,
         "cors_preflight": 200,
+        "doc_example:/Items/{id}/Images/Backdrop/{index}": 302,
         "invalid_path": 404,
         "slash_variant": 302,
         "user": 302
@@ -24770,7 +25142,7 @@
         "admin": 200,
         "after_writes": 401,
         "anon": 401,
-        "auth_variant:x_mediabrowser_token": 200,
+        "auth_variant:authorization_mediabrowser": 200,
         "cors_preflight": 200,
         "invalid_path": 404,
         "slash_variant": 200,
@@ -24946,19 +25318,6 @@
         "user": 200
       }
     },
-    "jellycompat GET /System/Configuration/encoding": {
-      "state": "matched",
-      "depth": "success",
-      "statuses": {
-        "admin": 200,
-        "after_writes": 401,
-        "anon": 401,
-        "auth_variant:query_api_key": 200,
-        "cors_preflight": 200,
-        "slash_variant": 200,
-        "user": 200
-      }
-    },
     "jellycompat GET /System/Configuration/{key}": {
       "state": "matched",
       "depth": "success",
@@ -24968,6 +25327,7 @@
         "anon": 401,
         "auth_variant:uppercase_unquoted_token": 200,
         "cors_preflight": 200,
+        "doc_example:/System/Configuration/encoding": 200,
         "invalid_path": 404,
         "slash_variant": 200,
         "user": 200
@@ -25023,19 +25383,6 @@
         "cors_preflight": 200,
         "slash_variant": 200,
         "user": 200
-      }
-    },
-    "jellycompat GET /ThemeVideos": {
-      "state": "weak_evidence",
-      "depth": "not_found",
-      "statuses": {
-        "admin": 404,
-        "after_writes": 404,
-        "anon": 404,
-        "auth_variant:query_apikey": 404,
-        "cors_preflight": 200,
-        "slash_variant": 404,
-        "user": 404
       }
     },
     "jellycompat GET /UserImage": {
@@ -26001,6 +26348,18 @@
         "invalid_shape": 400,
         "slash_variant": 401,
         "valid": 200
+      }
+    },
+    "jellycompat POST /Library/Media/Updated": {
+      "state": "weak_evidence",
+      "depth": "auth_rejected",
+      "statuses": {
+        "anon": 401,
+        "cors_preflight": 200,
+        "invalid_json": 401,
+        "invalid_shape": 401,
+        "slash_variant": 401,
+        "valid": 401
       }
     },
     "jellycompat POST /QuickConnect/Authorize": {

@@ -1,0 +1,164 @@
+[
+  {
+    "input": "{}",
+    "ok": true,
+    "out": "{}",
+    "state": "false false|false false|false false true|false false|false false"
+  },
+  {
+    "input": "{\"big\":9007199254740993}",
+    "ok": true,
+    "out": "{\"big\":9007199254740993}",
+    "state": "true false|false false|false false true|false false|false false"
+  },
+  {
+    "input": "{\"big\":-9223372036854775808}",
+    "ok": true,
+    "out": "{\"big\":-9223372036854775808}",
+    "state": "true false|false false|false false true|false false|false false"
+  },
+  {
+    "input": "{\"big\":null}",
+    "ok": true,
+    "out": "{\"big\":null}",
+    "state": "true true|false false|false false true|false false|false false"
+  },
+  {
+    "input": "{\"big\":1.5}",
+    "ok": false,
+    "out": "{\"big\":0}",
+    "state": "true false|false false|false false true|false false|false false"
+  },
+  {
+    "input": "{\"big\":\"1\"}",
+    "ok": false,
+    "out": "{\"big\":0}",
+    "state": "true false|false false|false false true|false false|false false"
+  },
+  {
+    "input": "{\"sub\":{\"a\":1}}",
+    "ok": true,
+    "out": "{\"sub\":{\"a\":1,\"b\":0}}",
+    "state": "false false|true false|false false true|false false|false false"
+  },
+  {
+    "input": "{\"sub\":{\"A\":1,\"B\":2}}",
+    "ok": true,
+    "out": "{\"sub\":{\"a\":1,\"b\":2}}",
+    "state": "false false|true false|false false true|false false|false false"
+  },
+  {
+    "input": "{\"SUB\":{\"a\":1}}",
+    "ok": true,
+    "out": "{\"sub\":{\"a\":1,\"b\":0}}",
+    "state": "false false|true false|false false true|false false|false false"
+  },
+  {
+    "input": "{\"sub\":null}",
+    "ok": true,
+    "out": "{\"sub\":null}",
+    "state": "false false|true true|false false true|false false|false false"
+  },
+  {
+    "input": "{\"sub\":{}}",
+    "ok": true,
+    "out": "{\"sub\":{\"a\":0,\"b\":0}}",
+    "state": "false false|true false|false false true|false false|false false"
+  },
+  {
+    "input": "{\"sub\":[]}",
+    "ok": false,
+    "out": "{\"sub\":{\"a\":0,\"b\":0}}",
+    "state": "false false|true false|false false true|false false|false false"
+  },
+  {
+    "input": "{\"sub\":{\"a\":1},\"sub\":{\"b\":2}}",
+    "ok": true,
+    "out": "{\"sub\":{\"a\":1,\"b\":2}}",
+    "state": "false false|true false|false false true|false false|false false"
+  },
+  {
+    "input": "{\"sub\":{\"a\":1},\"sub\":null}",
+    "ok": true,
+    "out": "{\"sub\":null}",
+    "state": "false false|true true|false false true|false false|false false"
+  },
+  {
+    "input": "{\"sub\":null,\"sub\":{\"a\":1}}",
+    "ok": true,
+    "out": "{\"sub\":{\"a\":1,\"b\":0}}",
+    "state": "false false|true false|false false true|false false|false false"
+  },
+  {
+    "input": "{\"ids\":[1,2]}",
+    "ok": true,
+    "out": "{\"ids\":[1,2]}",
+    "state": "false false|false false|true false false|false false|false false"
+  },
+  {
+    "input": "{\"ids\":[]}",
+    "ok": true,
+    "out": "{\"ids\":[]}",
+    "state": "false false|false false|true false false|false false|false false"
+  },
+  {
+    "input": "{\"ids\":null}",
+    "ok": true,
+    "out": "{\"ids\":null}",
+    "state": "false false|false false|true true true|false false|false false"
+  },
+  {
+    "input": "{\"ids\":[1,2],\"ids\":[null]}",
+    "ok": true,
+    "out": "{\"ids\":[1]}",
+    "state": "false false|false false|true false false|false false|false false"
+  },
+  {
+    "input": "{\"ids\":[null,2]}",
+    "ok": true,
+    "out": "{\"ids\":[0,2]}",
+    "state": "false false|false false|true false false|false false|false false"
+  },
+  {
+    "input": "{\"ids\":\"x\"}",
+    "ok": false,
+    "out": "{\"ids\":null}",
+    "state": "false false|false false|true false true|false false|false false"
+  },
+  {
+    "input": "{\"name\":\"a\",\"name\":\"b\"}",
+    "ok": true,
+    "out": "{\"name\":\"b\"}",
+    "state": "false false|false false|false false true|true false|false false"
+  },
+  {
+    "input": "{\"name\":1}",
+    "ok": false,
+    "out": "{\"name\":\"\"}",
+    "state": "false false|false false|false false true|true false|false false"
+  },
+  {
+    "input": "{\"name\":\"a\",\"name\":null}",
+    "ok": true,
+    "out": "{\"name\":null}",
+    "state": "false false|false false|false false true|true true|false false"
+  },
+  {
+    "input": "{\"flag\":true}",
+    "ok": true,
+    "out": "{\"flag\":true}",
+    "state": "false false|false false|false false true|false false|true false"
+  },
+  {
+    "input": "{\"flag\":0}",
+    "ok": false,
+    "out": "{\"flag\":false}",
+    "state": "false false|false false|false false true|false false|true false"
+  },
+  {
+    "input": "null",
+    "ok": true,
+    "out": "{}",
+    "state": "false false|false false|false false true|false false|false false"
+  }
+]

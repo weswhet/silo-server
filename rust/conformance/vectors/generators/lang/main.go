@@ -4,7 +4,7 @@
 // internal/lang and naming.SidecarSubtitleTags, from the real packages. Run it from the repository
 // root:
 //
-//	GOTOOLCHAIN=go1.26.7 go run -tags lang_vectors ./rust/conformance/vectors/generators/lang
+//	GOTOOLCHAIN=go1.26.10 go run -tags lang_vectors ./rust/conformance/vectors/generators/lang
 //
 // The tables come from the go/parser view of golang.org/x/text/internal/language/tables.go, because
 // that package can't be imported from here. The vectors prove the port behaves like the package.

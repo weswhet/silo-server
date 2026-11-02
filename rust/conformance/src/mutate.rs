@@ -75,6 +75,29 @@ pub struct Applied {
     /// A rule knowingly accepts this value; it is reported as what the rule allows.
     #[serde(default)]
     pub by_design: bool,
+    /// How a feed probe changed the feed, so the check can tell whether the reference could show it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feed_fault: Option<FeedFault>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FeedFault {
+    Emptied,
+    KeyDropped(String),
+    KeyRetyped(String),
+}
+
+impl FeedFault {
+    /// Whether `feeds_alike` can report this fault given the reference's feed. It compares a feed to
+    /// the other side's, so a candidate changed to what the reference already has is still alike.
+    pub fn observable(&self, reference: &crate::normalize::FeedSummary) -> bool {
+        match self {
+            FeedFault::Emptied => !reference.empty,
+            FeedFault::KeyDropped(k) => reference.universal.contains(k),
+            FeedFault::KeyRetyped(k) => reference.typed.contains(k),
+        }
+    }
 }
 
 /// What the proxy saw of the request, with the case id taken apart.
@@ -349,6 +372,7 @@ impl Ctx<'_> {
             after: clip(after.as_ref()),
             rule: None,
             by_design: false,
+            feed_fault: None,
         });
     }
 
@@ -1086,7 +1110,9 @@ fn in_format(rule: &Rule, v: &Value, pick: u64) -> Option<(Value, bool)> {
     }
 }
 
-fn array_probe(rule: &Rule, v: &Value, pick: u64, out_of: bool) -> Option<(Value, bool)> {
+type ArrayProbe = (Value, bool, Option<FeedFault>);
+
+fn array_probe(rule: &Rule, v: &Value, pick: u64, out_of: bool) -> Option<ArrayProbe> {
     let items = v.as_array()?;
     match &rule.spec.format {
         Format::UnorderedArray { .. } => {
@@ -1095,7 +1121,7 @@ fn array_probe(rule: &Rule, v: &Value, pick: u64, out_of: bool) -> Option<(Value
                 return None;
             }
             a.pop();
-            Some((Value::Array(a), false))
+            Some((Value::Array(a), false, None))
         }
         Format::ArrayOfObjects {
             required_keys,
@@ -1108,10 +1134,10 @@ fn array_probe(rule: &Rule, v: &Value, pick: u64, out_of: bool) -> Option<(Value
             if out_of {
                 let key = required_keys.get(pick as usize % required_keys.len().max(1))?;
                 a[0].as_object_mut()?.remove(key);
-                return Some((Value::Array(a), false));
+                return Some((Value::Array(a), false, None));
             }
             match pick % 3 {
-                0 => Some((json!([]), false)),
+                0 => Some((json!([]), false, Some(FeedFault::Emptied))),
                 1 => {
                     let key = required_keys.get(pick as usize % required_keys.len().max(1))?;
                     for e in a.iter_mut() {
@@ -1124,7 +1150,11 @@ fn array_probe(rule: &Rule, v: &Value, pick: u64, out_of: bool) -> Option<(Value
                             _ => json!("x"),
                         };
                     }
-                    Some((Value::Array(a), false))
+                    Some((
+                        Value::Array(a),
+                        false,
+                        Some(FeedFault::KeyRetyped(key.clone())),
+                    ))
                 }
                 _ => {
                     // A key outside the required list, gone from every entry. Only one
@@ -1143,7 +1173,7 @@ fn array_probe(rule: &Rule, v: &Value, pick: u64, out_of: bool) -> Option<(Value
                     for e in a.iter_mut() {
                         e.as_object_mut()?.remove(&extra);
                     }
-                    Some((Value::Array(a), allowed))
+                    Some((Value::Array(a), allowed, Some(FeedFault::KeyDropped(extra))))
                 }
             }
         }
@@ -1175,6 +1205,7 @@ pub fn apply_rule_probe(
             after: clip(&after),
             rule: Some(rule.spec.id.clone()),
             by_design,
+            feed_fault: None,
         });
     };
     if !resp.is_json() {
@@ -1237,11 +1268,11 @@ pub fn apply_rule_probe(
         let replacement = if v.is_array() {
             array_probe(rule, &v, pick, out_of)
         } else if out_of {
-            out_of_format(rule, &v).map(|x| (x, false))
+            out_of_format(rule, &v).map(|x| (x, false, None))
         } else {
-            in_format(rule, &v, pick)
+            in_format(rule, &v, pick).map(|(x, by_design)| (x, by_design, None))
         };
-        let Some((next, by_design)) = replacement else {
+        let Some((next, by_design, feed_fault)) = replacement else {
             continue;
         };
         if next == v {
@@ -1258,6 +1289,9 @@ pub fn apply_rule_probe(
             by_design,
             &mut out,
         );
+        if let Some(applied) = out.last_mut() {
+            applied.feed_fault = feed_fault;
+        }
     }
     if !out.is_empty() {
         resp.body = doc.to_string().into_bytes();
@@ -1284,6 +1318,28 @@ pub fn apply(name: &str, req: &Req, resp: &mut Resp, rules: &Rules, salt: u64) -
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_feed_fault_only_shows_where_the_reference_has_what_it_removed() {
+        use crate::normalize::FeedSummary;
+        let reference = FeedSummary::of(&[
+            json!({"id": 1, "request_id": "x", "attrs": null}),
+            json!({"id": 2, "attrs": null}),
+        ]);
+        let cases = [
+            (FeedFault::Emptied, true),
+            (FeedFault::KeyDropped("id".into()), true),
+            // Some reference entries lack it, so no entry having it is allowed.
+            (FeedFault::KeyDropped("request_id".into()), false),
+            (FeedFault::KeyRetyped("id".into()), true),
+            // Never non-null on the reference, so it has no type to disagree with.
+            (FeedFault::KeyRetyped("attrs".into()), false),
+        ];
+        for (fault, shows) in cases {
+            assert_eq!(fault.observable(&reference), shows, "{fault:?}");
+        }
+        assert!(!FeedFault::Emptied.observable(&FeedSummary::of(&[])));
+    }
+
     use super::*;
 
     fn req<'a>(id: &'a str, path: &'a str, headers: &'a [(String, String)]) -> Req<'a> {

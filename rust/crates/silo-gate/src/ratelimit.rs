@@ -8,10 +8,13 @@
 //! territory, not this crate's), [`attempts`] (sign-in attempt tracking), [`session_quota`] (the
 //! hourly per-session quota — same token-bucket math as here, but keyed and configured
 //! differently; not attempted), [`outbound`], [`account`], and [`middleware`] (the HTTP middleware
-//! chain itself: this crate has no HTTP stack dependency, same reasoning as `clientip`'s module
-//! doc). See the port report for the full list.
+//! chain itself: this crate has no HTTP stack dependency). See the port report for the full list.
 
-use std::time::Duration;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock};
+use std::time::{Duration, SystemTime};
 
 /// `rate.Limit`: events per second. `rate.Inf`'s "no burst needed" special case is represented as
 /// `f64::INFINITY`, matching Go's `math.MaxFloat64` closely enough for every comparison this port
@@ -124,15 +127,16 @@ pub struct Rate {
     pub burst: i32,
 }
 
-/// `ratelimit.AllowResult`. `reset_at`/`retry_after` are nanosecond values on the same clock the
-/// caller passed to [`MemoryLimiter::allow_at`], not wall-clock `SystemTime`.
+/// `ratelimit.AllowResult`. `reset_at` is nanoseconds on the same clock the caller passed to
+/// [`MemoryLimiter::allow_at`]. It is an `i128` because a saturated delay added to a Unix-epoch `now`
+/// does not fit in `i64`; Go's `time.Time` holds that sum without overflow.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AllowResult {
     pub allowed: bool,
     pub retry_after: Duration,
     pub limit: i64,
     pub remaining: i64,
-    pub reset_at: i64,
+    pub reset_at: i128,
 }
 
 /// `memory.tokenDelay`: how long `bucket` needs to hold a whole token at `now`, without taking
@@ -153,73 +157,174 @@ fn token_delay(bucket: &TokenBucket, now: i64) -> Duration {
     Duration::from_nanos(delay as u64)
 }
 
-/// `memory.roundUpToSecond`.
-fn round_up_to_second(now: i64) -> i64 {
-    const SECOND: i64 = 1_000_000_000;
-    let whole = (now / SECOND) * SECOND;
+/// `memory.roundUpToSecond`. Rounding the time, not the delay, keeps a saturated delay from
+/// overflowing.
+fn round_up_to_second(now: i128) -> i128 {
+    let whole = now.div_euclid(SECOND) * SECOND;
     if whole < now { whole + SECOND } else { whole }
 }
 
-struct Entry {
+const SECOND: i128 = 1_000_000_000;
+/// `evictLoop`'s ticker.
+const EVICT_INTERVAL: Duration = Duration::from_secs(60);
+/// `evictLoop`'s idle cutoff.
+const EVICT_IDLE: Duration = Duration::from_secs(600);
+
+struct Buckets {
     per_second: TokenBucket,
     per_minute: TokenBucket,
 }
 
+/// `memoryEntry`: its mutex makes checking and taking tokens one step for one key.
+struct Entry {
+    buckets: Mutex<Buckets>,
+    /// `lastUsed`: nanoseconds since the Unix epoch, always read from the wall clock as in Go,
+    /// independent of the `now` a caller passes to `allow_at`.
+    last_used: AtomicI64,
+}
+
+type Entries = RwLock<HashMap<String, Arc<Entry>>>;
+
+fn wall_clock_nanos() -> i64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_nanos()).unwrap_or(i64::MAX))
+}
+
+/// A panic elsewhere must not disable rate limiting, so a poisoned lock is still used. Nothing here
+/// leaves the guarded data in a state that a later caller could misread.
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+fn evict_idle(entries: &Entries, cutoff: i64) {
+    entries
+        .write()
+        .unwrap_or_else(PoisonError::into_inner)
+        .retain(|_, entry| entry.last_used.load(Ordering::Relaxed) >= cutoff);
+}
+
 /// `ratelimit.MemoryLimiter`: a two-bucket (per-second and per-minute) in-memory limiter, keyed by
-/// an arbitrary string. The eviction goroutine (`evictLoop`) is not ported — callers that need
-/// bounded memory under many distinct keys should expire entries themselves, e.g. on a timer
-/// calling a method this type does not yet have. `Clear` and key eviction economics are otherwise
-/// unaffected: the per-key math is unchanged by not evicting promptly.
-#[derive(Default)]
+/// an arbitrary string, with per-entry locks and a background eviction thread like Go's `evictLoop`.
+/// The thread stops when the limiter is dropped or [`Self::close`] runs.
 pub struct MemoryLimiter {
-    entries: std::sync::Mutex<std::collections::HashMap<String, Entry>>,
+    entries: Arc<Entries>,
+    stop: Mutex<Option<mpsc::Sender<()>>>,
+}
+
+impl Default for MemoryLimiter {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MemoryLimiter {
+    /// `ratelimit.NewMemoryLimiter`.
     pub fn new() -> Self {
-        Self::default()
+        let entries: Arc<Entries> = Arc::default();
+        let (stop, stopped) = mpsc::channel::<()>();
+        let weak = Arc::downgrade(&entries);
+        std::thread::Builder::new()
+            .name("ratelimit-evict".to_owned())
+            .spawn(move || {
+                while let Err(RecvTimeoutError::Timeout) = stopped.recv_timeout(EVICT_INTERVAL) {
+                    let Some(entries) = weak.upgrade() else {
+                        return;
+                    };
+                    let idle = i64::try_from(EVICT_IDLE.as_nanos()).unwrap_or(i64::MAX);
+                    evict_idle(&entries, wall_clock_nanos().saturating_sub(idle));
+                }
+            })
+            .expect("spawning the rate limiter eviction thread");
+        Self {
+            entries,
+            stop: Mutex::new(Some(stop)),
+        }
+    }
+
+    fn get_or_create(&self, key: &str, limit: Rate) -> Arc<Entry> {
+        if let Some(entry) = self
+            .entries
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(key)
+        {
+            return Arc::clone(entry);
+        }
+        let minute_burst = (limit.requests_per_minute.ceil() as i32).max(1);
+        let entry = Arc::new(Entry {
+            buckets: Mutex::new(Buckets {
+                per_second: TokenBucket::new(limit.requests_per_second, limit.burst),
+                per_minute: TokenBucket::new(limit.requests_per_minute / 60.0, minute_burst),
+            }),
+            last_used: AtomicI64::new(wall_clock_nanos()),
+        });
+        Arc::clone(
+            self.entries
+                .write()
+                .unwrap_or_else(PoisonError::into_inner)
+                .entry(key.to_owned())
+                .or_insert(entry),
+        )
     }
 
     /// `MemoryLimiter.allowAt`. `now` is a nanosecond timestamp on the caller's chosen clock,
     /// consistent across calls for one key.
     pub fn allow_at(&self, key: &str, limit: Rate, now: i64) -> AllowResult {
-        let mut entries = self.entries.lock().expect("ratelimit entries lock");
-        let entry = entries.entry(key.to_owned()).or_insert_with(|| {
-            let minute_burst = (limit.requests_per_minute.ceil() as i32).max(1);
-            Entry {
-                per_second: TokenBucket::new(limit.requests_per_second, limit.burst),
-                per_minute: TokenBucket::new(limit.requests_per_minute / 60.0, minute_burst),
-            }
-        });
+        let entry = self.get_or_create(key, limit);
+        entry.last_used.store(wall_clock_nanos(), Ordering::Relaxed);
+        let mut buckets = lock(&entry.buckets);
 
-        let delay = token_delay(&entry.per_second, now).max(token_delay(&entry.per_minute, now));
+        let delay =
+            token_delay(&buckets.per_second, now).max(token_delay(&buckets.per_minute, now));
         if delay > Duration::ZERO {
             return AllowResult {
                 allowed: false,
                 retry_after: delay,
                 limit: limit.requests_per_second as i64,
                 remaining: 0,
-                reset_at: round_up_to_second(now + delay.as_nanos() as i64),
+                reset_at: round_up_to_second(i128::from(now) + delay.as_nanos() as i128),
             };
         }
 
-        entry.per_second.allow_n(now, 1);
-        entry.per_minute.allow_n(now, 1);
+        buckets.per_second.allow_n(now, 1);
+        buckets.per_minute.allow_n(now, 1);
 
-        let remaining = entry.per_second.tokens_at(now).max(0.0).floor() as i64;
-        const SECOND: i64 = 1_000_000_000;
+        let remaining = buckets.per_second.tokens_at(now).max(0.0).floor() as i64;
         AllowResult {
             allowed: true,
             retry_after: Duration::ZERO,
             limit: limit.requests_per_second as i64,
             remaining,
-            reset_at: ((now + SECOND) / SECOND) * SECOND,
+            reset_at: (i128::from(now) + SECOND).div_euclid(SECOND) * SECOND,
         }
     }
 
     /// `MemoryLimiter.Clear`.
     pub fn clear(&self) {
-        self.entries.lock().expect("ratelimit entries lock").clear();
+        self.entries
+            .write()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clear();
+    }
+
+    /// `MemoryLimiter.Close`: stops the eviction thread. Unlike Go's `close(ml.done)`, a second call
+    /// is harmless.
+    pub fn close(&self) {
+        lock(&self.stop).take();
+    }
+
+    /// The number of live keys, for tests and metrics.
+    pub fn len(&self) -> usize {
+        self.entries
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .len()
+    }
+
+    /// Whether no key is live.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
@@ -344,6 +449,42 @@ mod tests {
         assert!(b.allow_n(0, 1));
         assert!(!b.allow_n(100_000_000, 1)); // 0.1s later, not enough
         assert!(b.allow_n(1_000_000_000, 1)); // 1s later, refilled
+    }
+
+    #[test]
+    fn zero_rate_refuses_without_breaking_the_limiter() {
+        let ml = MemoryLimiter::new();
+        // 2026-11-01 as Unix nanoseconds: the saturated delay would overflow an i64 sum.
+        let now = 1_793_577_600_000_000_000;
+        let refused = ml.allow_at("a", Rate::default(), now);
+        assert!(!refused.allowed);
+        assert_eq!(refused.retry_after, INF_DURATION);
+        assert!(refused.reset_at > i128::from(i64::MAX));
+        let other = Rate {
+            requests_per_second: 1.0,
+            requests_per_minute: 60.0,
+            burst: 1,
+        };
+        assert!(ml.allow_at("b", other, now).allowed);
+    }
+
+    #[test]
+    fn eviction_drops_only_idle_keys() {
+        let ml = MemoryLimiter::new();
+        let rate = Rate {
+            requests_per_second: 1.0,
+            requests_per_minute: 60.0,
+            burst: 1,
+        };
+        ml.allow_at("old", rate, 0);
+        ml.allow_at("new", rate, 0);
+        let old = wall_clock_nanos() - 1_000_000_000_000;
+        ml.entries.read().unwrap()["old"]
+            .last_used
+            .store(old, Ordering::Relaxed);
+        evict_idle(&ml.entries, wall_clock_nanos() - 600_000_000_000);
+        assert_eq!(ml.len(), 1);
+        assert!(ml.entries.read().unwrap().contains_key("new"));
     }
 
     #[test]

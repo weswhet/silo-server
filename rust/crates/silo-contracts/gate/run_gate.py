@@ -223,7 +223,7 @@ def main():
     subprocess.run(["docker", "compose", "-f", str(HERE / "compose.yml"), "up", "-d", "--wait"], check=True, capture_output=True)
     workdir = Path(tempfile.mkdtemp(prefix="silo-pg-gate-"))
     go_binary = workdir / "go-migrate"
-    env = {**os.environ, "GOTOOLCHAIN": os.environ.get("GOTOOLCHAIN", "go1.26.7")}
+    env = {**os.environ, "GOTOOLCHAIN": os.environ.get("GOTOOLCHAIN", "go1.26.10")}
     run([str(RUST / "conformance/vectors/generators/migrate/build.sh"), str(go_binary)], env=env)
     run(["cargo", "build", "-p", "silo-contracts", "--example", "migrate", "-j", "4"], cwd=RUST)
     go = Runner("go", str(go_binary))

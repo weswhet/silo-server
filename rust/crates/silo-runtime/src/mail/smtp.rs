@@ -6,6 +6,10 @@
 //! message itself (`gomail.Msg`'s multipart, attachment, and header assembly in
 //! `internal/mail/mail.go`'s `buildMessage`) is a separate, much larger port that critique finding
 //! 11 does not call for; a caller of [`Client::send_envelope`] supplies already-built message bytes.
+//!
+//! go-mail's two line protections hold here: [`validate_line`] refuses CR or LF in a value bound for
+//! a command line, and [`dot_stuff`] is `net/textproto`'s `DotWriter`, so a message body cannot end
+//! `DATA` early.
 
 use std::pin::Pin;
 use std::sync::Arc;
@@ -105,19 +109,81 @@ async fn read_reply(stream: &mut BufReader<Stream>) -> Result<(u16, String), Str
             return Err("server closed the connection".to_owned());
         }
         let line = line.trim_end_matches(['\r', '\n']);
-        if line.len() < 4 {
+        // `textproto.parseCodeLine`, on bytes: a server's reply is untrusted, and a multi-byte
+        // character across these offsets must be an error rather than a slice panic.
+        let (Some(code_text), Some(separator), Some(rest)) =
+            (line.get(..3), line.as_bytes().get(3), line.get(4..))
+        else {
+            return Err(format!("malformed SMTP reply line: {line:?}"));
+        };
+        if *separator != b' ' && *separator != b'-' {
             return Err(format!("malformed SMTP reply line: {line:?}"));
         }
-        let this_code: u16 = line[..3]
+        let this_code: u16 = code_text
             .parse()
             .map_err(|_| format!("malformed SMTP reply code: {line:?}"))?;
         code.get_or_insert(this_code);
-        lines.push(line[4..].to_owned());
-        if line.as_bytes()[3] == b' ' {
+        lines.push(rest.to_owned());
+        if *separator == b' ' {
             break;
         }
     }
     Ok((code.unwrap_or(0), lines.join("\n")))
+}
+
+/// go-mail's `smtp.validateLine`: a value on a command line must not hold CR or LF, or it could
+/// inject further SMTP commands.
+pub fn validate_line(line: &str) -> Result<(), SendError> {
+    if line.contains(['\r', '\n']) {
+        return Err(SendError::NotSent(
+            "smtp: A line must not contain CR or LF".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+/// `net/textproto`'s `DotWriter` over a whole message: doubles a leading dot on each line, writes a
+/// bare LF as CRLF, and appends the `.` terminator line. A bare CR passes through, as in Go.
+pub fn dot_stuff(message: &[u8]) -> Vec<u8> {
+    #[derive(PartialEq)]
+    enum State {
+        BeginLine,
+        Data,
+        Cr,
+        Begin,
+    }
+    let mut state = State::Begin;
+    let mut out = Vec::with_capacity(message.len() + message.len() / 64 + 5);
+    for &c in message {
+        if matches!(state, State::Begin | State::BeginLine) {
+            state = State::Data;
+            if c == b'.' {
+                out.push(b'.');
+            }
+        }
+        if state == State::Data {
+            if c == b'\r' {
+                state = State::Cr;
+            } else if c == b'\n' {
+                out.push(b'\r');
+                state = State::BeginLine;
+            }
+        } else {
+            state = if c == b'\n' {
+                State::BeginLine
+            } else {
+                State::Data
+            };
+        }
+        out.push(c);
+    }
+    match state {
+        State::BeginLine => {}
+        State::Cr => out.push(b'\n'),
+        State::Begin | State::Data => out.extend_from_slice(b"\r\n"),
+    }
+    out.extend_from_slice(b".\r\n");
+    out
 }
 
 async fn send_line(stream: &mut BufReader<Stream>, line: &str) -> Result<(), String> {
@@ -144,6 +210,7 @@ impl Client {
         security: Security,
         ehlo_name: &str,
     ) -> Result<(Self, Vec<String>, bool), SendError> {
+        validate_line(ehlo_name)?;
         let tcp = TcpStream::connect((host, port))
             .await
             .map_err(|e| SendError::NotSent(format!("dial {host}:{port}: {e}")))?;
@@ -249,14 +316,18 @@ impl Client {
         }
     }
 
-    /// `MAIL FROM` / `RCPT TO` / `DATA`, sending `message` (already dot-stuffed per RFC 5321 section
-    /// 4.5.2 by the caller) as the body.
+    /// `MAIL FROM` / `RCPT TO` / `DATA`, sending `message` through [`dot_stuff`]. Addresses are
+    /// checked before the first command, so a refused address sends nothing.
     pub async fn send_envelope(
         &mut self,
         from: &str,
         to: &[&str],
         message: &[u8],
     ) -> Result<(), SendError> {
+        validate_line(from)?;
+        for recipient in to {
+            validate_line(recipient)?;
+        }
         self.command_expect(&format!("MAIL FROM:<{from}>"), 250)
             .await?;
         for recipient in to {
@@ -265,16 +336,20 @@ impl Client {
         }
         self.command_expect("DATA", 354).await?;
         self.stream
-            .write_all(message)
+            .write_all(&dot_stuff(message))
             .await
             .map_err(|e| SendError::Uncertain(format!("writing message body: {e}")))?;
-        if !message.ends_with(b"\r\n") {
-            self.stream
-                .write_all(b"\r\n")
-                .await
-                .map_err(|e| SendError::Uncertain(e.to_string()))?;
+        self.stream
+            .flush()
+            .await
+            .map_err(|e| SendError::Uncertain(format!("flushing message body: {e}")))?;
+        let (code, text) = read_reply(&mut self.stream)
+            .await
+            .map_err(SendError::Uncertain)?;
+        if code != 250 {
+            return Err(SendError::Uncertain(format!("message body: {code} {text}")));
         }
-        self.command_expect(".", 250).await
+        Ok(())
     }
 
     async fn command_expect(&mut self, line: &str, want: u16) -> Result<(), SendError> {
@@ -322,4 +397,17 @@ async fn tls_connect(host: &str, tcp: TcpStream) -> Result<TlsStream<TcpStream>,
         .connect(server_name, tcp)
         .await
         .map_err(|e| SendError::NotSent(format!("TLS handshake with {host}: {e}")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_line_refuses_line_breaks() {
+        assert!(validate_line("a@example.com").is_ok());
+        assert!(validate_line("a@example.com>\r\nDATA").is_err());
+        assert!(validate_line("a\nb").is_err());
+        assert!(validate_line("a\rb").is_err());
+    }
 }

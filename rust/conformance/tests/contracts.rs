@@ -9,6 +9,50 @@ fn repo() -> &'static Path {
     Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
 }
 
+/// The harness's universe and the front's row table are the same set of rows. A row only one of them
+/// knows either can't be scored or isn't declared.
+#[test]
+fn harness_universe_is_the_row_table() {
+    let src = sources::load(repo()).unwrap();
+    let harness: BTreeSet<String> = src.routes.iter().map(|r| r.key()).collect();
+    let table: BTreeSet<String> = silo_front::rows::ROWS
+        .iter()
+        .map(|r| format!("{} {} {}", r.surface.name(), r.method, r.path))
+        .collect();
+    let only_harness: Vec<_> = harness.difference(&table).collect();
+    let only_table: Vec<_> = table.difference(&harness).collect();
+    assert!(
+        only_harness.is_empty(),
+        "not in the table: {only_harness:?}"
+    );
+    assert!(only_table.is_empty(), "not in the harness: {only_table:?}");
+}
+
+/// An entry the doc no longer produces, or whose parent is gone, is stale.
+#[test]
+fn doc_illustrations_are_current() {
+    let doc = std::fs::read_to_string(repo().join(sources::JELLY_DOC)).unwrap();
+    let mentioned = sources::doc_routes(&doc);
+    let src = sources::load(repo()).unwrap();
+    for ill in sources::DOC_ILLUSTRATIONS {
+        assert!(
+            mentioned
+                .iter()
+                .any(|(m, p)| m == ill.method && p == ill.path),
+            "{} is no longer in the doc",
+            ill.path
+        );
+        assert!(
+            !src.routes.iter().any(|r| r.path == ill.path),
+            "{}",
+            ill.path
+        );
+        if let Some(parent) = ill.parent {
+            assert!(src.routes.iter().any(|r| r.path == parent), "{parent}");
+        }
+    }
+}
+
 #[test]
 fn every_source_route_is_counted_and_gets_a_case() {
     let src = sources::load(repo()).unwrap();

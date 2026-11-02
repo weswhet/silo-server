@@ -70,13 +70,19 @@ impl ServerCertVerifier for AcceptAnyServerCert {
 /// A `tokio-postgres` TLS connector that encrypts the connection without authenticating the
 /// server, for `sslmode` values pgx treats this way (`allow`, `prefer`, `require` without a root
 /// CA).
-pub(crate) fn insecure_connector() -> MakeRustlsConnect {
+///
+/// `direct` is `sslnegotiation=direct`: pgx then offers the `postgresql` ALPN protocol, which a
+/// direct TLS connection requires.
+pub(crate) fn insecure_connector(direct: bool) -> MakeRustlsConnect {
     let provider = Arc::new(default_provider());
-    let config = ClientConfig::builder_with_provider(Arc::clone(&provider))
+    let mut config = ClientConfig::builder_with_provider(Arc::clone(&provider))
         .with_safe_default_protocol_versions()
         .expect("ring's default provider supports TLS 1.2 and 1.3")
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(AcceptAnyServerCert(provider)))
         .with_no_client_auth();
+    if direct {
+        config.alpn_protocols = vec![b"postgresql".to_vec()];
+    }
     MakeRustlsConnect::new(config)
 }

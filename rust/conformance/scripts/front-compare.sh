@@ -33,9 +33,11 @@ origin="$out/origin.jsonl"
 
 cd "$CONF_REPO" || exit 1
 "$CONF_SCRIPTS_DIR/self-compare.sh" --up-only
-cargo build --quiet --manifest-path rust/Cargo.toml -j 4 -p silo-server -p silo-conformance
+cargo build --quiet --manifest-path rust/Cargo.toml -j 3 -p silo-server -p silo-conformance
 
 DATABASE_URL="postgres://silo:silo@127.0.0.1:$(b_port CONF_PG_PORT)/silo?sslmode=disable" \
+  SECRET_KEY="$CONF_SECRET_KEY" \
+  REDIS_URL="redis://127.0.0.1:$(b_port CONF_REDIS_PORT)" \
   SILO_FRONT_WEB_DIST=rust/conformance/baseline/web-dist \
   SILO_FRONT_ORIGIN_LOG="$origin" \
   SILO_FRONT_FORCE_GO="$force_go" \
@@ -64,9 +66,14 @@ rust/target/debug/silo-conformance run \
   --surface "metrics=http://127.0.0.1:$CONF_METRICS_PORT,http://127.0.0.1:19090" \
   --origin-log "$origin" \
   --candidate-kind strangler \
+  --reference-forwarded-for 127.0.0.1 \
   --reset-reference "$CONF_SCRIPTS_DIR/reset.sh --fast >/dev/null" \
   --reset-candidate "env ${b_env[*]} $CONF_SCRIPTS_DIR/reset.sh --fast >/dev/null" \
   --source-revision "$(conf_revision)" \
   --out "$out" \
   "$@" || rc=$?
+# A command to run against the running front, such as native-chain-traits.sh.
+if [ -n "${CONF_FRONT_AFTER:-}" ]; then
+  $CONF_FRONT_AFTER || rc=1
+fi
 exit "$rc"

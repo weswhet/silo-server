@@ -6,7 +6,7 @@
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
@@ -333,6 +333,46 @@ fn json_kind(v: &Value) -> &'static str {
         Value::String(_) => "string",
         Value::Array(_) => "array",
         Value::Object(_) => "object",
+    }
+}
+
+/// What a feed's rule can hold another side to: see `feeds_alike`. The fault check needs it, because a
+/// fault that removes what the rule asks of only one side can only show if the reference had it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FeedSummary {
+    pub empty: bool,
+    /// Keys every entry has.
+    pub universal: BTreeSet<String>,
+    /// Keys some entry has a non-null value for.
+    pub typed: BTreeSet<String>,
+}
+
+impl FeedSummary {
+    pub fn of(items: &[Value]) -> FeedSummary {
+        let mut typed = BTreeSet::new();
+        for e in items.iter().filter_map(Value::as_object) {
+            for (k, v) in e {
+                if !v.is_null() {
+                    typed.insert(k.clone());
+                }
+            }
+        }
+        let universal = items
+            .first()
+            .and_then(Value::as_object)
+            .map(|first| {
+                first
+                    .keys()
+                    .filter(|k| items.iter().all(|e| e.get(k.as_str()).is_some()))
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default();
+        FeedSummary {
+            empty: items.is_empty(),
+            universal,
+            typed,
+        }
     }
 }
 

@@ -35,12 +35,24 @@
 //!
 //! # Field conventions
 //!
-//! No `#[serde(default)]` is needed. A field missing from the document, or holding only `null`,
-//! gets its zero value, including when the top-level document is `null`. A field with
-//! `#[serde(default)]` or `#[serde(default = "..")]` keeps that default in both cases, which is how
-//! to port a Go struct whose fields are set before `Unmarshal`. Serde reports only the first missing
-//! field and hides each field's kind, so the first decode of a type that needs this learns it by
-//! retrying, and caches what it learned for the life of the process.
+//! For the built-in kinds, `serde_json::Value`, and this crate's own types, no `#[serde(default)]` is
+//! needed: a field missing from the document, or holding only `null`, gets its zero value, including
+//! when the top-level document is `null`. **A type with a hand-written `Deserialize` needs
+//! `#[serde(default)]`, and so does a newtype.** Go never runs a decoder for an absent field, and only
+//! the default gets a value without running one. Without it, the decode fails with an error naming
+//! the field, on the first document that omits it. `Default` must then be the Go zero value.
+//!
+//! One shape escapes that error. Serde's derive answers an absent field by running the field's
+//! `Deserialize` against its own deserializer, which reports `None` to `deserialize_option`, before
+//! this module can see the field. So a `Deserialize` that calls `Option::deserialize` first would read
+//! absent as `null`. Such a type must enter through `deserialize_newtype_struct`, as
+//! `silo_api_v2::wire::Patch` does; then absence is the error above.
+//!
+//! A field with `#[serde(default)]` or `#[serde(default = "..")]` keeps that default for an absent
+//! field and for a `null`-only one, which is how to port a Go struct whose fields are set before
+//! `Unmarshal`. Serde reports only the first missing field and hides each field's kind, so the first
+//! decode of a type that needs this learns it by retrying, and caches what it learned, per destination
+//! type, for the life of the process.
 //!
 //! | Go | Rust |
 //! |---|---|
@@ -64,9 +76,12 @@
 //!
 //! # Known differences
 //!
-//! - A debug build refuses to build a value nested deeper than 1,000 levels, because dropping it
-//!   would overflow the caller's stack. Go has no such limit. Optimized builds reach Go's 10,000,
-//!   but a dropped 10,000-level `serde_json::Value` takes 1.7 MiB of the dropping thread's stack.
+//! - A debug build refuses to build a value nested deeper than 1,000 levels, because using it would
+//!   overflow a test thread's stack. Go has no such limit. Optimized builds reach Go's 10,000, and a
+//!   thread that holds such a value needs [`VALUE_STACK_BYTES`] for its recursive `Clone`, `Drop`,
+//!   `to_value`, and `from_value`.
+//! - A document over 512 MiB is an error. Go has no such limit, and Silo's request limits are far
+//!   below it.
 //! - Rust's `i64` and `isize` both deserialize as serde `i64`, so a mismatch on a Go `int` reads
 //!   `int64`, and likewise `uint`.
 //! - On a `[]byte` with duplicate keys, a string followed by an array containing `null` loses the
@@ -91,34 +106,64 @@ use crate::json::scanner::{self, ValueScan};
 // ---------------------------------------------------------------------------------------------
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
 enum Tag {
-    Null,
-    Bool,
-    Number,
-    Str,
-    Array,
-    Object,
+    Null = 0,
+    Bool = 1,
+    Number = 2,
+    Str = 3,
+    Array = 4,
+    Object = 5,
 }
 
+/// One node as the decoder reads it. [`Tape::node`] builds it from the packed form.
 #[derive(Clone, Copy)]
 struct Node {
     tag: Tag,
     start: usize,
     end: usize,
-    /// The index just past this node's subtree. Children start at this node's index plus one. An
-    /// object's children alternate key, value.
+    /// The index just past this node's subtree. Children start at [`Tape::first_child`]. An object's
+    /// children alternate key, value.
     next: usize,
+}
+
+/// A tape slot, 8 bytes so a wide document costs far less than the values built from it. `meta` holds
+/// the tag in its top 3 bits. Under it, a scalar has its end offset and a container the index past its
+/// subtree. A container's first slot is followed by a slot whose `start` is the container's end.
+#[derive(Clone, Copy)]
+struct Slot {
+    start: u32,
+    meta: u32,
+}
+
+const TAG_SHIFT: u32 = 29;
+const META_MASK: u32 = (1 << TAG_SHIFT) - 1;
+/// The largest document [`Tape`] can index: offsets and indexes share 29 bits. Every Silo request body
+/// limit is far below this; Go itself has none.
+const MAX_DOCUMENT_BYTES: usize = META_MASK as usize;
+
+fn pack(tag: Tag, value: usize) -> u32 {
+    ((tag as u32) << TAG_SHIFT) | value as u32
 }
 
 struct Tape<'d> {
     data: &'d [u8],
-    nodes: Vec<Node>,
+    nodes: Vec<Slot>,
 }
 
 impl<'d> Tape<'d> {
-    /// Precondition: the scanner accepted `data` as one value.
+    /// Precondition: the scanner accepted `data` as one value, and it fits [`MAX_DOCUMENT_BYTES`].
     fn build(data: &'d [u8]) -> Self {
-        let mut nodes = Vec::with_capacity(data.len() / 8 + 1);
+        // An exact upper bound, so a wide document does not double the vector through its peak.
+        let capacity = 1 + data
+            .iter()
+            .map(|c| match c {
+                b',' | b':' => 1,
+                b'[' | b'{' => 3,
+                _ => 0,
+            })
+            .sum::<usize>();
+        let mut nodes = Vec::with_capacity(capacity);
         let mut open: Vec<usize> = Vec::new();
         let mut i = 0;
         while i < data.len() {
@@ -131,12 +176,12 @@ impl<'d> Tape<'d> {
                 }
                 b'{' | b'[' => {
                     open.push(nodes.len());
-                    nodes.push(Node {
-                        tag: if c == b'{' { Tag::Object } else { Tag::Array },
-                        start,
-                        end: start,
-                        next: 0,
+                    let tag = if c == b'{' { Tag::Object } else { Tag::Array };
+                    nodes.push(Slot {
+                        start: start as u32,
+                        meta: pack(tag, 0),
                     });
+                    nodes.push(Slot { start: 0, meta: 0 });
                     i += 1;
                     continue;
                 }
@@ -144,8 +189,9 @@ impl<'d> Tape<'d> {
                     i += 1;
                     let at = open.pop().expect("balanced by the scanner");
                     let next = nodes.len();
-                    nodes[at].end = i;
-                    nodes[at].next = next;
+                    let tag = if c == b'}' { Tag::Object } else { Tag::Array };
+                    nodes[at].meta = pack(tag, next);
+                    nodes[at + 1].start = i as u32;
                     continue;
                 }
                 b'"' => {
@@ -177,15 +223,45 @@ impl<'d> Tape<'d> {
                     Tag::Number
                 }
             };
-            let next = nodes.len() + 1;
-            nodes.push(Node {
-                tag,
-                start,
-                end: i,
-                next,
+            nodes.push(Slot {
+                start: start as u32,
+                meta: pack(tag, i),
             });
         }
         Self { data, nodes }
+    }
+
+    fn node(&self, id: usize) -> Node {
+        let slot = self.nodes[id];
+        let value = (slot.meta & META_MASK) as usize;
+        let tag = match slot.meta >> TAG_SHIFT {
+            0 => Tag::Null,
+            1 => Tag::Bool,
+            2 => Tag::Number,
+            3 => Tag::Str,
+            4 => Tag::Array,
+            _ => Tag::Object,
+        };
+        if matches!(tag, Tag::Array | Tag::Object) {
+            Node {
+                tag,
+                start: slot.start as usize,
+                end: self.nodes[id + 1].start as usize,
+                next: value,
+            }
+        } else {
+            Node {
+                tag,
+                start: slot.start as usize,
+                end: value,
+                next: id + 1,
+            }
+        }
+    }
+
+    /// The index of a container's first child, or of its `next` when it has none.
+    fn first_child(&self, id: usize) -> usize {
+        id + 2
     }
 
     fn raw(&self, n: Node) -> &'d [u8] {
@@ -204,8 +280,8 @@ impl<'d> Tape<'d> {
     fn children(&self, id: usize) -> Children<'_, 'd> {
         Children {
             tape: self,
-            at: id + 1,
-            end: self.nodes[id].next,
+            at: self.first_child(id),
+            end: self.node(id).next,
         }
     }
 }
@@ -224,7 +300,7 @@ impl Iterator for Children<'_, '_> {
             return None;
         }
         let id = self.at;
-        self.at = self.tape.nodes[id].next;
+        self.at = self.tape.node(id).next;
         Some(id)
     }
 }
@@ -425,7 +501,11 @@ impl serde::de::Error for Error {
 // What serde hides about a struct's fields, learned by retrying.
 // ---------------------------------------------------------------------------------------------
 
-type StructKey = (usize, usize);
+/// One destination type: the derived visitor's own type, plus the field list for a hand-written
+/// visitor shared between lists. Names and field-list addresses do not identify a type: two structs
+/// named `Body` in one module share a name, `W<i32>` and `W<Option<i32>>` share both, and a linker may
+/// merge equal field lists across modules.
+type StructKey = (std::any::TypeId, usize);
 
 #[derive(Default)]
 struct Learned {
@@ -441,8 +521,8 @@ fn learned() -> &'static RwLock<HashMap<StructKey, Learned>> {
     LEARNED.get_or_init(RwLock::default)
 }
 
-fn struct_key(name: &'static str, fields: &'static [&'static str]) -> StructKey {
-    (name.as_ptr() as usize, fields.as_ptr() as usize)
+fn struct_key<V>(fields: &'static [&'static str]) -> StructKey {
+    (typeid::of::<V>(), fields.as_ptr() as usize)
 }
 
 /// Records one fact, and returns whether it was new. The table only grows, is bounded by the
@@ -470,6 +550,11 @@ fn learn(
 fn grow<R>(f: impl FnOnce() -> R) -> R {
     stacker::maybe_grow(256 * 1024, 4 * 1024 * 1024, f)
 }
+
+/// The stack a thread needs to clone, drop, or pass through `serde_json::to_value` and `from_value` a
+/// `serde_json::Value` nested to Go's 10,000-level limit, with a margin. Every runtime that handles
+/// request bodies sets this as its `thread_stack_size`. It is address space until touched.
+pub const VALUE_STACK_BYTES: usize = 32 * 1024 * 1024;
 
 /// How deep a value this decoder will build. The decode itself is safe to the scanner's 10,000, but
 /// the caller drops the result on its own stack with recursive drop glue. Unoptimized, a
@@ -523,7 +608,7 @@ impl<'a> Ctx<'a> {
     }
 
     fn node(&self, id: usize) -> Node {
-        self.tape.nodes[id]
+        self.tape.node(id)
     }
 
     fn save(&self, pos: usize, err: Error) {
@@ -899,9 +984,18 @@ const MAX_EXACT_F64: i128 = 1 << 53;
 
 /// Saves `convertNumber`'s error for each number under `id` that overflows a `float64`.
 fn scan_any_numbers(ctx: &Ctx<'_>, id: usize) {
-    for n in &ctx.tape.nodes[id..ctx.node(id).next] {
+    // Scalars and container heads occur in order; a container's second slot is only an end offset.
+    let mut at = id;
+    let end = ctx.node(id).next;
+    while at < end {
+        let n = ctx.node(at);
+        at += if matches!(n.tag, Tag::Array | Tag::Object) {
+            2
+        } else {
+            1
+        };
         if n.tag == Tag::Number {
-            let lit = ctx.tape.literal(*n);
+            let lit = ctx.tape.literal(n);
             let may_overflow = lit.len() > 300 || lit.bytes().any(|b| matches!(b, b'e' | b'E'));
             if may_overflow && lit.parse::<f64>().is_ok_and(f64::is_infinite) {
                 ctx.save_type(n.start, format!("number {lit}"), "float64");
@@ -995,7 +1089,7 @@ impl<'a> De<'a> {
 
     fn is_empty_array(&self, id: usize) -> bool {
         let n = self.ctx.node(id);
-        n.tag == Tag::Array && n.next == id + 1
+        n.tag == Tag::Array && n.next == self.ctx.tape.first_child(id)
     }
 
     /// Runs a compound destination's decode, one level deeper.
@@ -1334,11 +1428,12 @@ impl<'de, 'a> Deserializer<'de> for De<'a> {
     ) -> Result<V::Value, Error> {
         self.nested(|| {
             self.null_is_noop();
-            let access = StructA::new(self, name, fields);
+            let key = struct_key::<V>(fields);
+            let access = StructA::new(self, name, fields, key);
             match visitor.visit_map(access) {
                 Err(Error::MissingField(f)) if fields.contains(&f) => {
                     let f = fields.iter().copied().find(|&x| x == f).unwrap_or(f);
-                    learn(struct_key(name, fields), f, |l| &mut l.fill);
+                    learn(key, f, |l| &mut l.fill);
                     self.ctx.retry.set(true);
                     Err(stop())
                 }
@@ -1439,7 +1534,7 @@ impl<'a> SeqA<'a> {
     }
 
     fn direct(de: De<'a>, id: usize) -> Self {
-        let elems = Elems::Direct(id + 1, de.ctx.node(id).next);
+        let elems = Elems::Direct(de.ctx.tape.first_child(id), de.ctx.node(id).next);
         Self::with(de, elems)
     }
 
@@ -1470,7 +1565,7 @@ impl<'a> SeqA<'a> {
         for &id in tail.iter() {
             match ctx.node(id).tag {
                 Tag::Array if arrays == 1 && tail.len() == 1 => {
-                    seq.elems = Elems::Direct(id + 1, ctx.node(id).next);
+                    seq.elems = Elems::Direct(ctx.tape.first_child(id), ctx.node(id).next);
                     return seq;
                 }
                 Tag::Array => {
@@ -1747,7 +1842,7 @@ impl<'a> MapA<'a> {
         let ctx = self.de.ctx;
         while self.at >= self.end {
             let id = self.objects.pop()?;
-            self.at = id + 1;
+            self.at = ctx.tape.first_child(id);
             self.end = ctx.node(id).next;
         }
         let key = self.at;
@@ -1906,9 +2001,13 @@ struct StructA<'a> {
 
 impl<'a> StructA<'a> {
     /// `decodeState.object`'s field dispatch, over every occurrence that reached this struct.
-    fn new(de: De<'a>, name: &'static str, fields: &'static [&'static str]) -> Self {
+    fn new(
+        de: De<'a>,
+        name: &'static str,
+        fields: &'static [&'static str],
+        key: StructKey,
+    ) -> Self {
         let ctx = de.ctx;
-        let key = struct_key(name, fields);
         let mut slot_of = vec![usize::MAX; fields.len()];
         let mut slots: Vec<Emit> = Vec::new();
         for &id in de.ops {
@@ -2002,10 +2101,128 @@ impl<'de> MapAccess<'de> for StructA<'_> {
                 field: emit.field,
             });
         }
-        let result = seed.deserialize(de);
+        let result = if emit.ops.is_empty() && !zero_is_safe(std::any::type_name::<V>()) {
+            seed.deserialize(AbsentDe {
+                de,
+                field: emit.field,
+                type_name: std::any::type_name::<V>(),
+            })
+        } else {
+            seed.deserialize(de)
+        };
         ctx.fields.borrow_mut().pop();
         ctx.struct_name.set(saved_struct);
         result
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Absent fields.
+// ---------------------------------------------------------------------------------------------
+
+/// Whether decoding "nothing" into this seed's type gives Go's zero value. Go leaves an absent field
+/// untouched and never runs its `UnmarshalJSON`. Serde gives no way to produce a value without running
+/// `Deserialize` except `#[serde(default)]`, so a field without one is safe only for these types,
+/// whose decode this module controls. `Option`, `Vec`, and maps construct no inner value here.
+fn zero_is_safe(seed: &str) -> bool {
+    const SAFE_EXACT: &[&str] = &[
+        "bool",
+        "char",
+        "f32",
+        "f64",
+        "i8",
+        "i16",
+        "i32",
+        "i64",
+        "i128",
+        "isize",
+        "u8",
+        "u16",
+        "u32",
+        "u64",
+        "u128",
+        "usize",
+        "alloc::string::String",
+        "serde_json::value::Value",
+        "silo_gocompat::json::RawMessage",
+        "silo_gocompat::json::Number",
+        "silo_gocompat::json::Bytes",
+        "silo_gocompat::time::GoTime",
+        "serde::de::ignored_any::IgnoredAny",
+    ];
+    const SAFE_GENERIC: &[&str] = &[
+        "core::option::Option<",
+        "alloc::vec::Vec<",
+        "std::collections::hash::map::HashMap<",
+        "std::collections::hash::set::HashSet<",
+        "alloc::collections::btree::map::BTreeMap<",
+        "alloc::collections::btree::set::BTreeSet<",
+    ];
+    let name = seed
+        .strip_prefix("core::marker::PhantomData<")
+        .and_then(|inner| inner.strip_suffix('>'))
+        .unwrap_or(seed);
+    SAFE_EXACT.contains(&name) || SAFE_GENERIC.iter().any(|prefix| name.starts_with(prefix))
+}
+
+/// The deserializer an absent field of any other type sees. A derived struct or Go array recurses,
+/// and its own fields come back through this check. Anything else is a hand-written `Deserialize` or a
+/// newtype, which would read an absent field as `null` or fail its own validation, so the decode stops
+/// and names the fix before that code sees a value.
+struct AbsentDe<'a> {
+    de: De<'a>,
+    field: &'static str,
+    type_name: &'static str,
+}
+
+impl<'de> Deserializer<'de> for AbsentDe<'_> {
+    type Error = Error;
+
+    fn deserialize_any<V: Visitor<'de>>(self, _visitor: V) -> Result<V::Value, Error> {
+        Err(Error::Message(format!(
+            "json: field `{}` of type {} is absent and needs #[serde(default)]: Go leaves it at its \
+             zero value without running its decoder",
+            self.field, self.type_name
+        )))
+    }
+
+    fn deserialize_struct<V: Visitor<'de>>(
+        self,
+        name: &'static str,
+        fields: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, Error> {
+        self.de.deserialize_struct(name, fields, visitor)
+    }
+
+    fn deserialize_tuple<V: Visitor<'de>>(self, len: usize, visitor: V) -> Result<V::Value, Error> {
+        self.de.deserialize_tuple(len, visitor)
+    }
+
+    fn deserialize_tuple_struct<V: Visitor<'de>>(
+        self,
+        name: &'static str,
+        len: usize,
+        visitor: V,
+    ) -> Result<V::Value, Error> {
+        self.de.deserialize_tuple_struct(name, len, visitor)
+    }
+
+    fn deserialize_unit<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        visitor.visit_unit()
+    }
+
+    fn deserialize_unit_struct<V: Visitor<'de>>(
+        self,
+        _name: &'static str,
+        visitor: V,
+    ) -> Result<V::Value, Error> {
+        visitor.visit_unit()
+    }
+
+    serde::forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string bytes byte_buf option
+        newtype_struct seq map enum identifier ignored_any
     }
 }
 
@@ -2024,6 +2241,11 @@ fn drop_deep<T>(value: T) {
 
 /// `decodeState.unmarshal`, for bytes the scanner already accepted as one value.
 fn decode_value<T: DeserializeOwned>(data: &[u8], strict: bool) -> Result<T, Error> {
+    if data.len() > MAX_DOCUMENT_BYTES {
+        return Err(Error::Message(format!(
+            "json: a document over {MAX_DOCUMENT_BYTES} bytes is not supported"
+        )));
+    }
     let tape = Tape::build(data);
     let root = [0usize];
     let mut passes = 0;

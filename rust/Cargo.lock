@@ -2856,6 +2856,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "silo-front",
  "time",
 ]
 
@@ -2903,11 +2904,17 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "silo-api-v2",
+ "silo-auth",
  "silo-config",
  "silo-contracts",
+ "silo-core",
+ "silo-gate",
  "silo-gocompat",
  "silo-http",
  "silo-pg",
+ "silo-runtime",
+ "silo-store",
  "tokio",
  "tokio-util",
  "tracing",
@@ -2918,12 +2925,20 @@ name = "silo-gate"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "rand 0.9.5",
+ "redis",
  "regorus",
  "serde",
  "serde_json",
+ "silo-auth",
+ "silo-config",
+ "silo-contracts",
  "silo-core",
  "silo-gocompat",
+ "silo-http",
+ "silo-jwt",
  "silo-pg",
+ "silo-store",
  "thiserror",
  "tokio",
  "tracing",
@@ -2939,6 +2954,7 @@ dependencies = [
  "sha2 0.10.9",
  "stacker",
  "time",
+ "typeid",
 ]
 
 [[package]]
@@ -3037,6 +3053,7 @@ name = "silo-server"
 version = "0.1.0"
 dependencies = [
  "silo-front",
+ "silo-gocompat",
  "tokio",
  "tracing",
  "tracing-subscriber",

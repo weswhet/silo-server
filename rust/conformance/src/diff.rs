@@ -1,7 +1,7 @@
 //! Compares one reference exchange with one candidate exchange.
 
 use crate::http::Exchange;
-use crate::normalize::{render_path, Rules, Step};
+use crate::normalize::{render_path, FeedSummary, Rules, Step};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -130,6 +130,8 @@ pub struct Outcome {
     pub body_skip_reason: Option<String>,
     /// A feed rule names this route, so its contents do not count as compared.
     pub feed_relaxed: bool,
+    /// What each feed on the reference side held, by location.
+    pub feed_reference: BTreeMap<String, FeedSummary>,
 }
 
 fn clip(s: &str) -> String {
@@ -528,6 +530,8 @@ fn walk(
                 if x != y {
                     *out.rule_hits.entry(rule.spec.id.clone()).or_default() += 1;
                 }
+                out.feed_reference
+                    .insert(render_path(steps), FeedSummary::of(x));
                 return;
             }
             if x.len() != y.len() {

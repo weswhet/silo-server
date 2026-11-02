@@ -192,22 +192,45 @@ impl<T: Serialize> Serialize for Patch<T> {
     }
 }
 
+/// A field holding this type needs `#[serde(default)]`: Go leaves an omitted field absent without
+/// running its decoder. The value decodes through `Option<T>`, not an intermediate
+/// `serde_json::Value`, so `T` sees Go's decoder rules: 64-bit integers keep every bit, field names
+/// fold, a missing inner field is its zero value, and duplicate keys merge.
+///
+/// It enters through `deserialize_newtype_struct` because serde's derive runs a field's `Deserialize`
+/// against a deserializer of its own when the field is absent, and calling `Option::deserialize`
+/// directly would read that as an explicit `null`. This way a missing `#[serde(default)]` is an error.
 impl<'de, T: Deserialize<'de> + Default> Deserialize<'de> for Patch<T> {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        let v = serde_json::Value::deserialize(d)?;
-        if v.is_null() {
-            return Ok(Patch {
-                present: true,
-                null: true,
-                value: T::default(),
-            });
+        struct PatchVisitor<T>(std::marker::PhantomData<T>);
+
+        impl<'de, T: Deserialize<'de> + Default> serde::de::Visitor<'de> for PatchVisitor<T> {
+            type Value = Patch<T>;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("a patch value")
+            }
+
+            fn visit_newtype_struct<D: Deserializer<'de>>(
+                self,
+                d: D,
+            ) -> Result<Patch<T>, D::Error> {
+                Ok(match Option::<T>::deserialize(d)? {
+                    None => Patch {
+                        present: true,
+                        null: true,
+                        value: T::default(),
+                    },
+                    Some(value) => Patch {
+                        present: true,
+                        null: false,
+                        value,
+                    },
+                })
+            }
         }
-        let value = T::deserialize(v).map_err(D::Error::custom)?;
-        Ok(Patch {
-            present: true,
-            null: false,
-            value,
-        })
+
+        d.deserialize_newtype_struct("Patch", PatchVisitor(std::marker::PhantomData))
     }
 }
 

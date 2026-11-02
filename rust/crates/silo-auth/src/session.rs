@@ -112,6 +112,17 @@ pub enum Error {
     /// not created), different error shape. See the port report's `divergences`.
     #[error("creating session: not an IP address: {0:?}")]
     InvalidIpAddress(String),
+    /// A value does not fit its `int4` column. pgx refuses it while encoding, before anything
+    /// reaches Postgres; casting instead would name the account in the low 32 bits.
+    #[error("{op}: {value} does not fit in int4")]
+    Int4OutOfRange { op: &'static str, value: i64 },
+    /// A row column did not scan into its Go field type, such as a NULL into a plain string.
+    #[error("{op}: scanning row: {source}")]
+    Scan {
+        op: &'static str,
+        #[source]
+        source: PgError,
+    },
 }
 
 /// `auth.IsSessionNotFound`.
@@ -127,26 +138,38 @@ const SESSION_COLUMNS: &str = "id, user_id, device_name, COALESCE(device_id, '')
     provider_since, last_seen_at, purpose, COALESCE(bound_profile_id, '') AS bound_profile_id, \
     absolute_expires_at";
 
-fn scan_session(row: &Row) -> AuthSession {
-    AuthSession {
-        id: row.get(0),
-        user_id: row.get::<_, i32>(1) as i64,
-        device_name: row.get(2),
-        device_id: row.get(3),
-        device_platform: row.get(4),
-        ip_address: row.get(5),
-        created_at: row.get(6),
-        expires_at: row.get(7),
-        revoked_at: row.get(8),
-        impersonator_user_id: row.get::<_, Option<i32>>(9).map(i64::from),
-        impersonation_started_at: row.get(10),
-        identity_id: row.get(11),
-        provider_since: row.get(12),
-        last_seen_at: row.get(13),
-        purpose: row.get(14),
-        bound_profile_id: row.get(15),
-        absolute_expires_at: row.get(16),
-    }
+/// pgx's `int4` encode check: an out-of-range value is an error, never a truncated ID.
+fn int4(op: &'static str, value: i64) -> Result<i32> {
+    i32::try_from(value).map_err(|_| Error::Int4OutOfRange { op, value })
+}
+
+fn scan_session(op: &'static str, row: &Row) -> Result<AuthSession> {
+    let scan = |source: silo_pg::DriverError| Error::Scan {
+        op,
+        source: PgError::from(source),
+    };
+    Ok(AuthSession {
+        id: row.try_get(0).map_err(scan)?,
+        user_id: i64::from(row.try_get::<_, i32>(1).map_err(scan)?),
+        device_name: row.try_get(2).map_err(scan)?,
+        device_id: row.try_get(3).map_err(scan)?,
+        device_platform: row.try_get(4).map_err(scan)?,
+        ip_address: row.try_get(5).map_err(scan)?,
+        created_at: row.try_get(6).map_err(scan)?,
+        expires_at: row.try_get(7).map_err(scan)?,
+        revoked_at: row.try_get(8).map_err(scan)?,
+        impersonator_user_id: row
+            .try_get::<_, Option<i32>>(9)
+            .map_err(scan)?
+            .map(i64::from),
+        impersonation_started_at: row.try_get(10).map_err(scan)?,
+        identity_id: row.try_get(11).map_err(scan)?,
+        provider_since: row.try_get(12).map_err(scan)?,
+        last_seen_at: row.try_get(13).map_err(scan)?,
+        purpose: row.try_get(14).map_err(scan)?,
+        bound_profile_id: row.try_get(15).map_err(scan)?,
+        absolute_expires_at: row.try_get(16).map_err(scan)?,
+    })
 }
 
 /// `auth.SessionAuthority`.
@@ -170,6 +193,7 @@ impl SessionAuthority {
 }
 
 /// `auth.SessionRepository`.
+#[derive(Clone)]
 pub struct SessionRepository {
     pool: Arc<Pool>,
 }
@@ -230,8 +254,11 @@ impl SessionRepository {
                 .map_err(|_| Error::InvalidIpAddress(session.ip_address.clone()))?;
             Some(InetAddr(parsed))
         };
-        let user_id = session.user_id as i32;
-        let impersonator = session.impersonator_user_id.map(|v| v as i32);
+        let user_id = int4("creating session", session.user_id)?;
+        let impersonator = session
+            .impersonator_user_id
+            .map(|v| int4("creating session", v))
+            .transpose()?;
 
         let mut conn = self.pool.acquire().await.map_err(|source| Error::Query {
             op: "creating session",
@@ -269,8 +296,8 @@ impl SessionRepository {
         let sql = format!("SELECT {SESSION_COLUMNS} FROM auth_sessions WHERE id = $1");
         self.query_row_opt("getting session", &sql, &[&id])
             .await?
-            .map(|row| scan_session(&row))
             .ok_or(Error::NotFound)
+            .and_then(|row| scan_session("getting session", &row))
     }
 
     /// `SessionRepository.ListByUser`.
@@ -278,11 +305,11 @@ impl SessionRepository {
         let sql = format!(
             "SELECT {SESSION_COLUMNS} FROM auth_sessions WHERE user_id = $1 ORDER BY created_at DESC"
         );
+        let user_id = int4("listing sessions", user_id)?;
         let mut session = self.pool.acquire().await.map_err(|source| Error::Query {
             op: "listing sessions",
             source,
         })?;
-        let user_id = user_id as i32;
         let rows = session
             .query(&sql, &[&user_id])
             .await
@@ -290,7 +317,9 @@ impl SessionRepository {
                 op: "listing sessions",
                 source,
             })?;
-        Ok(rows.iter().map(scan_session).collect())
+        rows.iter()
+            .map(|row| scan_session("listing sessions", row))
+            .collect()
     }
 
     /// `auth.SessionKey`.
@@ -305,7 +334,7 @@ impl SessionRepository {
         after: Option<(SystemTime, &str)>,
         limit: i64,
     ) -> Result<Vec<AuthSession>> {
-        let user_id_i32 = user_id as i32;
+        let user_id_i32 = int4("listing session page", user_id)?;
         let mut sql = format!(
             "SELECT {SESSION_COLUMNS} FROM auth_sessions WHERE user_id = $1 AND expires_at > NOW() AND revoked_at IS NULL"
         );
@@ -326,7 +355,9 @@ impl SessionRepository {
             op: "listing session page",
             source,
         })?;
-        Ok(rows.iter().map(scan_session).collect())
+        rows.iter()
+            .map(|row| scan_session("listing session page", row))
+            .collect()
     }
 
     /// `SessionRepository.Revoke`.
@@ -353,7 +384,7 @@ impl SessionRepository {
 
     /// `SessionRepository.RevokeAllByUser`.
     pub async fn revoke_all_by_user(&self, user_id: i64) -> Result<()> {
-        let user_id = user_id as i32;
+        let user_id = int4("revoking sessions for user", user_id)?;
         let mut conn = self.pool.acquire().await.map_err(|source| Error::Query {
             op: "revoking sessions for user",
             source,
@@ -372,7 +403,7 @@ impl SessionRepository {
 
     /// `SessionRepository.RevokeAllByImpersonator`.
     pub async fn revoke_all_by_impersonator(&self, user_id: i64) -> Result<()> {
-        let user_id = user_id as i32;
+        let user_id = int4("revoking impersonation sessions", user_id)?;
         let mut conn = self.pool.acquire().await.map_err(|source| Error::Query {
             op: "revoking impersonation sessions",
             source,
@@ -404,17 +435,21 @@ impl SessionRepository {
         let sql = "SELECT u.role, s.purpose, COALESCE(s.bound_profile_id, '') FROM auth_sessions s
             JOIN users u ON u.id = s.user_id
             WHERE s.id = $1 AND s.user_id = $2 AND s.revoked_at IS NULL AND s.expires_at > NOW()";
-        let user_id_i32 = user_id as i32;
+        let user_id_i32 = int4("checking session validity", user_id)?;
         let Some(row) = self
             .query_row_opt("checking session validity", sql, &[&id, &user_id_i32])
             .await?
         else {
             return Ok(None);
         };
+        let scan = |source| Error::Scan {
+            op: "checking session validity",
+            source: PgError::from(source),
+        };
         let mut authority = SessionAuthority {
-            role: row.get(0),
-            purpose: row.get(1),
-            bound_profile_id: row.get(2),
+            role: row.try_get(0).map_err(scan)?,
+            purpose: row.try_get(1).map_err(scan)?,
+            bound_profile_id: row.try_get(2).map_err(scan)?,
         };
         if authority.purpose == SESSION_PURPOSE_REMOTE_PLAYBACK {
             if authority.bound_profile_id.is_empty() {

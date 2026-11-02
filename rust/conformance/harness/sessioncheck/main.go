@@ -15,6 +15,10 @@
 //	active  --db <url> --session <id> --user <id>
 //	    Calls SessionRepository.ActiveSession and prints {"active": bool, "role": "...", ...}.
 //
+//	oversized --db <url> --session <id> --user <id>
+//	    Calls every method that takes a user ID and prints, per method, whether Go returned an
+//	    error. Used with a user ID that does not fit int4.
+//
 // Pin: GOTOOLCHAIN=go1.26.10 go run ./rust/conformance/harness/sessioncheck ...
 package main
 
@@ -33,18 +37,18 @@ import (
 )
 
 type sessionJSON struct {
-	ID                     string  `json:"id"`
-	UserID                 int     `json:"user_id"`
-	DeviceName             *string `json:"device_name"`
-	DeviceID               string  `json:"device_id"`
-	DevicePlatform         string  `json:"device_platform"`
-	IPAddress              string  `json:"ip_address"`
-	ExpiresAt              string  `json:"expires_at"`
-	RevokedAt              *string `json:"revoked_at"`
-	ImpersonatorUserID     *int    `json:"impersonator_user_id"`
-	IdentityID             *int64  `json:"identity_id"`
-	Purpose                string  `json:"purpose"`
-	BoundProfileID         string  `json:"bound_profile_id"`
+	ID                 string  `json:"id"`
+	UserID             int     `json:"user_id"`
+	DeviceName         *string `json:"device_name"`
+	DeviceID           string  `json:"device_id"`
+	DevicePlatform     string  `json:"device_platform"`
+	IPAddress          string  `json:"ip_address"`
+	ExpiresAt          string  `json:"expires_at"`
+	RevokedAt          *string `json:"revoked_at"`
+	ImpersonatorUserID *int    `json:"impersonator_user_id"`
+	IdentityID         *int64  `json:"identity_id"`
+	Purpose            string  `json:"purpose"`
+	BoundProfileID     string  `json:"bound_profile_id"`
 }
 
 func toSessionJSON(s *models.AuthSession) sessionJSON {
@@ -143,6 +147,24 @@ func main() {
 			"purpose":          authority.Purpose,
 			"bound_profile_id": authority.BoundProfileID,
 		})
+	case "oversized":
+		errored := func(err error) bool { return err != nil }
+		results := map[string]bool{}
+		_, _, err := repo.ActiveSession(ctx, *sessionID, *userID)
+		results["active_session"] = errored(err)
+		_, err = repo.ListByUser(ctx, *userID)
+		results["list_by_user"] = errored(err)
+		_, err = repo.ListByUserPage(ctx, *userID, nil, 10)
+		results["list_by_user_page"] = errored(err)
+		results["revoke_all_by_user"] = errored(repo.RevokeAllByUser(ctx, *userID))
+		results["revoke_all_by_impersonator"] = errored(repo.RevokeAllByImpersonator(ctx, *userID))
+		results["create"] = errored(repo.Create(ctx, models.AuthSession{
+			ID: *sessionID + "-oversized", UserID: *userID, ExpiresAt: time.Now().Add(time.Hour),
+		}))
+		results["create_impersonator"] = errored(repo.Create(ctx, models.AuthSession{
+			ID: *sessionID + "-oversized-imp", UserID: 1, ImpersonatorUserID: userID, ExpiresAt: time.Now().Add(time.Hour),
+		}))
+		json.NewEncoder(os.Stdout).Encode(results)
 	case "valid":
 		valid, err := repo.IsValid(ctx, *sessionID)
 		if err != nil {

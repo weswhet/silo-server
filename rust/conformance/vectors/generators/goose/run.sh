@@ -4,7 +4,7 @@
 # cache and the Go tree stay untouched. Run it from anywhere.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
-export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.26.7}"
+export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.26.10}"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 goose_dir="$(go list -m -f '{{.Dir}}' github.com/pressly/goose/v3)"

@@ -12,13 +12,9 @@
 //! - [`Engine`]: loads the vendor bundle plus per-domain custom sources (or the vendor's own
 //!   always-`false` stub when a domain has none active) and evaluates the three decisions, mirroring
 //!   `engine.go`'s `swap`/`Evaluate`.
-//! - [`compile_check`]: `compile.go`'s `CompileCheck` — domain validation, the size limit, the
-//!   `silo_custom.<domain>` package-name check, and a locked builtin denylist mirroring
-//!   `LockedCapabilities` (every builtin OPA's `ast.Builtin.Nondeterministic` flags, plus
-//!   `rego.parse_module(s)`). After those checks, `compile_check` also *tries to compile and
-//!   evaluate* the candidate against the full vendor bundle (`regorus::Engine::add_policy` +
-//!   `eval_rule`) across a battery of representative inputs, which catches the undefined-reference
-//!   and most-arity errors Go's `ast.Compiler` finds statically.
+//! - [`compile_check`]: `compile.go`'s `CompileCheck`, built on [`crate::rego_check`]'s static check
+//!   of a deliberately small Rego subset. It never accepts what Go refuses, and it refuses some
+//!   sources Go accepts; `rego_check`'s module doc lists which.
 //!
 //! Not ported: [`decisionlog`], the Postgres-backed [`store`]/[`document_mutations`] CRUD for admin
 //! policy sources, [`viewer_resolver`] (the Go-side caller that builds a [`ScopeInput`] from
@@ -27,28 +23,13 @@
 //! each need crates this session's dependency graph doesn't have (catalog, userstore wiring,
 //! Postgres document storage for custom sources).
 //!
-//! # `CompileCheck`'s capability/arity/type gap (read before trusting this in production)
-//!
-//! Go's `ast.Compiler` performs whole-program static type inference: an administrator's Rego is
-//! rejected at save time if *any* reachable-or-not code path calls an unknown function, passes the
-//! wrong arity, or type-mismatches, regardless of which branches a given input would actually take.
-//! `regorus` 0.14 has no public capability-restriction or standalone type-checker API (confirmed by
-//! reading its public surface before writing this), so [`compile_check`] approximates Go's static
-//! check by *running* the candidate across a battery of representative inputs and treating any
-//! runtime error (undefined function/arity/type) as a rejection. This is strictly a narrowing in one
-//! direction and a gap in the other:
-//! - A branch the battery never exercises can hide a defect regorus would otherwise have caught,
-//!   which **is** a live "Rust accepts what Go refuses" risk for adversarial sources crafted to hide
-//!   bad code behind an untested condition. This is the one honestly unresolved gap in this port;
-//!   see the port report's `divergences`.
-//! - Conversely, the locked-builtin denylist is a pure substring/token scan over the source text
-//!   rather than an AST walk, so it can flag a builtin name that only appears inside a string
-//!   literal or comment. That direction is safe (only ever rejects something Go would accept), so it
-//!   is left as-is rather than fixed: fail-closed is supposed to over-reject, never under-reject.
 
 use std::collections::BTreeMap;
 use std::fmt;
+use std::num::NonZeroU32;
+use std::time::Duration;
 
+use regorus::utils::limits::ExecutionTimerConfig;
 use serde::{Deserialize, Serialize};
 
 /// `policy.DomainScope`/`DomainPermission`/`DomainAction`.
@@ -132,8 +113,11 @@ pub mod vendor {
     }
 }
 
-/// An error evaluating a decision: `ErrPolicyEvalFailed`'s class, without `engine.go`'s timeout
-/// plumbing (no wall-clock budget is enforced here; see the module doc on what is not ported).
+/// `engine.go`'s `defaultEvalTimeout`.
+pub const DEFAULT_EVAL_TIMEOUT: Duration = Duration::from_millis(100);
+
+/// An error evaluating a decision: `ErrPolicyEvalFailed`'s class. A decision that exceeds the budget
+/// is [`EvalError::Eval`], so a caller fails closed as it does in Go.
 #[derive(Debug, thiserror::Error)]
 pub enum EvalError {
     #[error("compiling policy bundle: {0}")]
@@ -164,12 +148,26 @@ impl Engine {
         Self::with_custom(&BTreeMap::new())
     }
 
+    /// Replaces the per-decision budget. `Engine.SetEvalTimeout`: a zero duration is ignored.
+    pub fn set_eval_timeout(&mut self, timeout: Duration) {
+        if !timeout.is_zero() {
+            self.inner.set_execution_timer_config(ExecutionTimerConfig {
+                limit: timeout,
+                check_interval: NonZeroU32::MIN,
+            });
+        }
+    }
+
     /// `policy.NewEngineWithCustom`. `custom` maps an active domain to its administrator-authored
-    /// Rego source; a domain missing from the map uses the vendor stub. Unlike Go, a source that
-    /// fails [`compile_check`] here is a hard error rather than a boot-time skip: callers that want
-    /// Go's "skip invalid sources, keep booting" behavior must call [`compile_check`] themselves
-    /// per source first and only pass the ones that pass.
+    /// Rego source; a domain missing from the map uses the vendor stub. Every source goes through
+    /// [`compile_check`] first. Unlike Go's boot path, a refused source is an error rather than a
+    /// skip: callers that want to keep booting call [`compile_check`] per source and pass only the
+    /// ones that pass, as Go's `Reload` effectively does.
     pub fn with_custom(custom: &BTreeMap<Domain, String>) -> Result<Self, EvalError> {
+        for (domain, source) in custom {
+            compile_check(domain.as_str(), source)
+                .map_err(|e| EvalError::Compile(e.to_string()))?;
+        }
         let mut inner = regorus::Engine::new();
         for (path, source) in vendor::base_modules() {
             inner
@@ -191,7 +189,9 @@ impl Engine {
                 }
             }
         }
-        Ok(Self { inner })
+        let mut engine = Self { inner };
+        engine.set_eval_timeout(DEFAULT_EVAL_TIMEOUT);
+        Ok(engine)
     }
 
     /// `Engine.Evaluate`: evaluates one decision against `input` and decodes the result into `T`.
@@ -392,54 +392,9 @@ fn single_issue(message: impl Into<String>) -> CompileError {
 /// `compile.maxPolicySourceBytes`.
 pub const MAX_POLICY_SOURCE_BYTES: usize = 256 * 1024;
 
-/// Every builtin name Go's `LockedCapabilities` excludes by being in OPA's `Nondeterministic` set,
-/// plus the two always-excluded parse builtins. This is `lockedBuiltin`'s *effect* as a literal
-/// name table, not a port of its mechanism: OPA carries a per-builtin `Nondeterministic` flag in
-/// its capabilities JSON that regorus has no equivalent registry for (see the module doc's gap
-/// section), so the table is hand-maintained against the OPA v1.18.2 builtin list (every builtin
-/// under the `time`, `rand`, `uuid`, `opa`, `http`, `net` (lookup only), `graphql` (parses+network),
-/// and `trace`/`print`-adjacent nondeterministic families) and must be re-checked against OPA's
-/// capabilities.json on every OPA upgrade — the same obligation Go's own comment places on itself
-/// ("a future OPA upgrade cannot silently expose a new impure builtin" does NOT hold here the way
-/// it holds for Go's reflective exclusion; this table needs a human to update it).
-const LOCKED_BUILTIN_PREFIXES: &[&str] = &[
-    "http.send",
-    "net.lookup_ip_addr",
-    "net.cidr_expand", // amplification, excluded defensively alongside lookups
-    "opa.runtime",
-    "time.now_ns",
-    "time.clock",
-    "time.date",
-    "time.diff",
-    "time.weekday",
-    "time.add_date",
-    "time.parse_ns",
-    "time.parse_rfc3339_ns",
-    "time.parse_duration_ns",
-    "rand.intn",
-    "uuid.rfc4122",
-    "rego.parse_module",
-    "rego.parse_modules",
-    "trace.now_ns",
-    "print(",
-];
-
-fn source_uses_locked_builtin(source: &str) -> Option<&'static str> {
-    LOCKED_BUILTIN_PREFIXES
-        .iter()
-        .find(|needle| source.contains(*needle))
-        .copied()
-}
-
-/// `policy.CompileCheck`. `representative_inputs` is this port's substitute for Go's static whole-
-/// program type check (see the module doc): every one of them is run through the candidate's
-/// `override` rule, and a runtime error from any of them fails the check. Pass at least one input
-/// per shape the domain's vendor policy can produce (the empty object counts as one).
-pub fn compile_check(
-    domain: &str,
-    source: &str,
-    representative_inputs: &[serde_json::Value],
-) -> Result<(), CompileError> {
+/// `policy.CompileCheck`. Never evaluates the source, so it cannot be made to hang or overflow the
+/// stack by what the source computes. See [`crate::rego_check`].
+pub fn compile_check(domain: &str, source: &str) -> Result<(), CompileError> {
     let Some(domain) = Domain::parse(domain) else {
         return Err(single_issue(format!(
             "unsupported policy domain {domain:?}"
@@ -453,60 +408,29 @@ pub fn compile_check(
     if source.trim().is_empty() {
         return Err(single_issue("policy source is empty"));
     }
-    if let Some(builtin) = source_uses_locked_builtin(source) {
-        return Err(single_issue(format!(
-            "policy source uses a disallowed builtin: {builtin}"
-        )));
-    }
+    crate::rego_check::check_module(source, &format!("silo_custom.{domain}"))
+        .map_err(single_issue)?;
 
-    // Package-name check, cheaply: parsing into a throwaway engine both validates syntax and
-    // yields the canonical `data.`-prefixed package path via `add_policy`'s return value.
+    // The static check bounds nesting, so regorus's recursive parser stays within the stack. A panic
+    // in that third-party parser must still refuse the source rather than take the process down.
     let candidate_path = domain.custom_module_path();
-    let mut probe = regorus::Engine::new();
-    let package = probe
-        .add_policy(candidate_path.clone(), source.to_owned())
-        .map_err(|e| single_issue(format!("parse error: {e}")))?;
-    let expected = format!("data.silo_custom.{domain}");
-    if package != expected {
-        return Err(single_issue(format!(
-            "policy package must be silo_custom.{domain}, got {}",
-            package.strip_prefix("data.").unwrap_or(&package)
-        )));
-    }
-
-    // Compile against the full vendor bundle and force evaluation of `override` across the
-    // representative battery, so an undefined reference or an arity/type error on any exercised
-    // path fails closed instead of loading.
-    let mut engine = regorus::Engine::new();
-    for (path, src) in vendor::base_modules() {
+    let source = source.to_owned();
+    let loaded = std::panic::catch_unwind(move || -> Result<(), String> {
+        let mut engine = regorus::Engine::new();
+        for (path, src) in vendor::base_modules() {
+            engine
+                .add_policy(path.to_owned(), src.to_owned())
+                .map_err(|e| format!("internal: vendor bundle failed to load: {e}"))?;
+        }
         engine
-            .add_policy(path.to_owned(), src.to_owned())
-            .map_err(|e| single_issue(format!("internal: vendor bundle failed to load: {e}")))?;
+            .add_policy(candidate_path, source)
+            .map_err(|e| format!("parse error: {e}"))?;
+        Ok(())
+    });
+    match loaded {
+        Ok(result) => result.map_err(single_issue),
+        Err(_) => Err(single_issue("policy source could not be parsed")),
     }
-    engine
-        .add_policy(candidate_path, source.to_owned())
-        .map_err(|e| single_issue(format!("parse error: {e}")))?;
-
-    let override_query =
-        format!("data.silo_custom.{domain}.override(data.silo.{domain}.base_decision, input)");
-    let base_query = format!("data.silo.{domain}.decision");
-    let inputs: Vec<serde_json::Value> = if representative_inputs.is_empty() {
-        vec![serde_json::Value::Object(Default::default())]
-    } else {
-        representative_inputs.to_vec()
-    };
-    for input in &inputs {
-        engine.set_input(regorus::Value::from(input.clone()));
-        if let Err(e) = engine.eval_query(override_query.clone(), false) {
-            return Err(single_issue(format!("compile error: {e}")));
-        }
-        // Also evaluate the whole decision through `tighten`, which is the only caller of
-        // `override` and exercises its result rather than just its own body.
-        if let Err(e) = engine.eval_rule(base_query.clone()) {
-            return Err(single_issue(format!("compile error: {e}")));
-        }
-    }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -550,7 +474,6 @@ mod tests {
         let err = compile_check(
             "scope",
             "package silo_custom.wrong\nimport rego.v1\noverride(_, _) := {}",
-            &[],
         );
         assert!(err.is_err());
     }
@@ -559,27 +482,51 @@ mod tests {
     fn compile_check_rejects_locked_builtin() {
         let src =
             "package silo_custom.scope\nimport rego.v1\noverride(_, _) := {\"t\": time.now_ns()}";
-        assert!(compile_check("scope", src, &[]).is_err());
+        assert!(compile_check("scope", src).is_err());
     }
 
     #[test]
     fn compile_check_rejects_unknown_domain() {
-        assert!(compile_check("bogus", "package silo_custom.bogus\n", &[]).is_err());
+        assert!(compile_check("bogus", "package silo_custom.bogus\n").is_err());
     }
 
     #[test]
     fn compile_check_accepts_a_valid_override() {
         let src = "package silo_custom.scope\nimport rego.v1\noverride(base, i) := {\"unrestricted\": false} if { i.user_id == 1 } else := {}";
+        assert_eq!(compile_check("scope", src), Ok(()));
+    }
+
+    #[test]
+    fn with_custom_refuses_what_compile_check_refuses() {
+        for source in [
+            "package silo_custom.wrong\noverride(_, _) := {}",
+            "package silo_custom.scope\noverride(_, _) := {\"t\": time.now_ns()}",
+            "package silo_custom.permission\noverride(_, _) := {}",
+        ] {
+            let custom = BTreeMap::from([(Domain::Scope, source.to_owned())]);
+            assert!(matches!(
+                Engine::with_custom(&custom),
+                Err(EvalError::Compile(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn evaluation_stops_at_the_budget() {
+        let source = "package silo_custom.scope\n\
+            override(_, i) := {\"n\": count(r)} if {\n\
+            \tr := [1 | some a in i.xs; some b in i.xs; some c in i.xs]\n\
+            }";
+        let custom = BTreeMap::from([(Domain::Scope, source.to_owned())]);
+        let mut engine = Engine::with_custom(&custom).unwrap();
+        let xs: Vec<i64> = (0..400).collect();
+        let started = std::time::Instant::now();
+        let result = engine.evaluate_json(Domain::Scope, &serde_json::json!({"xs": xs}));
+        assert!(result.is_err(), "the decision must fail closed: {result:?}");
         assert!(
-            compile_check(
-                "scope",
-                src,
-                &[
-                    serde_json::json!({"user_id": 1}),
-                    serde_json::json!({"user_id": 2})
-                ]
-            )
-            .is_ok()
+            started.elapsed() < Duration::from_secs(5),
+            "took {:?}",
+            started.elapsed()
         );
     }
 }

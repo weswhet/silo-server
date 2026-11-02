@@ -96,8 +96,10 @@ all of the above, with `--proxy-all` for the proxy-all run.
 
 The baseline's socat edge makes every client one private, trusted address, on both sides. A run through
 it cannot see what a relay does to the peer trust decision, and it gives the two Go servers different
-client addresses: the edge's on the reference, `127.0.0.1` through the front. The one route that shows
-this, `GET /api/v2/admin/ips` with `ip=127.0.0.1`, therefore differs there.
+client addresses: the edge's on the reference, `127.0.0.1` through the front. `front-compare.sh`
+evens out the second problem without a front on the reference: `--reference-forwarded-for 127.0.0.1`
+sends the reference the header the front sends the candidate's Go, so both servers file the client
+under one address, and the `client-address` normalizer is dropped.
 
 `scripts/peer-lab.sh` removes both problems:
 
@@ -182,9 +184,16 @@ because the servers listen on different ports.
 
 Sources: `contracts/api/v2/openapi.json` (the `api_v2` surface), `route-inventory.json`
 (`api_v1`, `api_delegate`, `root`, `metrics`, `debug`, `proxy_node`, `transcode_node`),
-the route manifests of the Jellyfin and Audiobookshelf routers plus routes mentioned in
-`docs/jellycompat-api.md`, and contract fixtures and scenarios where the seed supports
+`internal/api/testdata/media_routes.txt` for what those two omit (`api_v2_walked`: raw plugin and
+artwork routes), the route manifests of the Jellyfin and Audiobookshelf routers plus routes mentioned
+in `docs/jellycompat-api.md`, the few rows only router source shows (`WIRED_*` in `sources.rs`), and
+contract fixtures and scenarios where the seed supports
 their principals and placeholders. `list` prints what was skipped and why.
+
+This universe equals the front's row table, as `tests/contracts.rs` checks. Doc mentions that are not
+routes, such as `/Items/{id}/Images/Thumb`, are in `sources::DOC_ILLUSTRATIONS` with a reason, are out
+of the denominator, and still run as `doc_example:*` cases of the route they illustrate. An `ALL` row
+is a mount that takes any method, and its cases send `GET`.
 
 Each route gets anonymous, normal-user and admin cases where sensible, a CORS preflight,
 and invalid input: an unknown path id, an invalid typed query parameter, a malformed
@@ -268,6 +277,11 @@ in one run, which is the quick way to try all of them. `rule_out_of_format` and
 `rule_in_format` change every value a normalizer covers. A value a rule is meant to accept,
 such as any non-negative gauge, is counted under `by_design` for that rule rather than as an
 escape, so that column is the list of what the rules still allow.
+
+A feed rule only compares a feed with the other side's, so a fault that leaves the candidate's feed
+holding what the reference's already holds cannot show: emptied against an empty feed, a key dropped
+that not every reference entry has, a key retyped that is never non-null there. Each case records its
+reference feed, and these count under `reference_matches_fault`, not as escapes.
 
 The proxy only touches requests carrying the runner's `--tag-cases` header, so logins and
 liveness probes stay honest and each fault maps to one case.

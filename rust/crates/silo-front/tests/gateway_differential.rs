@@ -92,6 +92,7 @@ async fn spa_vectors_match_the_real_frontend_handler() {
         .collect();
     let inputs_for = |values: HashMap<String, String>| NativeInputs {
         identity: None,
+        stack: None,
         spa: Some((
             WebDist::from_files(files.clone()),
             BrandingSource::Fixed(values),
@@ -674,7 +675,7 @@ fn clientip_binary() -> PathBuf {
     let bin = root.join("rust/target/silo-front-clientip");
     let status = Command::new("go")
         .current_dir(&root)
-        .env("GOTOOLCHAIN", "go1.26.7")
+        .env("GOTOOLCHAIN", "go1.26.10")
         .env("CGO_ENABLED", "0")
         .args(["build", "-tags", "front_vectors", "-o"])
         .arg(&bin)

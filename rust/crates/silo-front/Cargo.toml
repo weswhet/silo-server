@@ -9,6 +9,12 @@ build = "build.rs"
 
 [dependencies]
 sha2 = "0.10"
+silo-api-v2 = { path = "../silo-api-v2" }
+silo-auth = { path = "../silo-auth" }
+silo-gate = { path = "../silo-gate" }
+silo-runtime = { path = "../silo-runtime" }
+silo-store = { path = "../silo-store" }
+silo-core = { path = "../silo-core" }
 silo-config = { path = "../silo-config" }
 silo-contracts = { path = "../silo-contracts" }
 silo-gocompat = { path = "../silo-gocompat" }

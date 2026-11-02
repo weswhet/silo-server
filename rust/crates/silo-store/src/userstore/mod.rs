@@ -10,6 +10,7 @@
 //! Scope actually ported, and what is deferred, is documented on [`pgstore`].
 
 pub mod pgstore;
+pub mod profiles;
 
 pub use silo_config::resolve::{
     ReadError, ServerSettings, SettingIdentity, SettingResolutionQuery, SettingValue, Store,

@@ -88,58 +88,62 @@ fn capacity(n: usize) -> std::num::NonZeroUsize {
     std::num::NonZeroUsize::new(n.max(1)).expect("at least one")
 }
 
-/// Connects per `config.ssl_mode`, matching pgx's `configTLS` fallback order
-/// (`pgconn/config.go`): `disable` never negotiates TLS; `prefer` and `require` negotiate TLS in
-/// one attempt (declining to fall back to plaintext after the server has agreed to TLS, which is
-/// at least as strict as pgx); `allow` tries plaintext first and only opens a second, TLS
-/// connection if that attempt fails outright. `verify-ca` and `verify-full` are rejected in
+/// pgconn's `connectPreferred` stops trying further configurations on these three server errors:
+/// a wrong password, a missing database, or no connect privilege.
+fn stops_fallback(err: &tokio_postgres::Error) -> bool {
+    use tokio_postgres::error::SqlState;
+    err.code().is_some_and(|code| {
+        *code == SqlState::INVALID_PASSWORD
+            || *code == SqlState::INVALID_CATALOG_NAME
+            || *code == SqlState::INSUFFICIENT_PRIVILEGE
+    })
+}
+
+/// Connects per `config.ssl_mode`, in pgx's `configTLS` order (`pgconn/config.go`):
+/// - `disable`: plaintext only.
+/// - `require`: TLS only.
+/// - `prefer`: TLS, then plaintext if that attempt fails. `sslnegotiation=direct` upgrades this to
+///   `require`, because a server cannot decline direct TLS. The startup message goes in the clear
+///   only after a TLS attempt failed, as with pgx.
+/// - `allow`: plaintext, then TLS if that attempt fails.
+///
+/// Fallbacks stop on [`stops_fallback`] errors. `verify-ca` and `verify-full` are rejected in
 /// [`Pool::new`] before this is ever called.
 async fn connect(config: &PoolConfig) -> Result<Client, tokio_postgres::Error> {
-    use tokio_postgres::config::SslMode as GoSslMode;
-
-    match config.ssl_mode {
-        SslMode::Disable => {
-            let mut cfg = config.pg.clone();
-            cfg.ssl_mode(GoSslMode::Disable);
-            let (client, connection) = cfg.connect(NoTls).await?;
-            spawn_connection(connection);
-            Ok(client)
-        }
-        SslMode::Prefer => {
-            let mut cfg = config.pg.clone();
-            cfg.ssl_mode(GoSslMode::Prefer);
-            let (client, connection) = cfg.connect(insecure_connector()).await?;
-            spawn_connection(connection);
-            Ok(client)
-        }
-        SslMode::Require => {
-            let mut cfg = config.pg.clone();
-            cfg.ssl_mode(GoSslMode::Require);
-            let (client, connection) = cfg.connect(insecure_connector()).await?;
-            spawn_connection(connection);
-            Ok(client)
-        }
-        SslMode::Allow => {
-            let mut plain = config.pg.clone();
-            plain.ssl_mode(GoSslMode::Disable);
-            match plain.connect(NoTls).await {
-                Ok((client, connection)) => {
-                    spawn_connection(connection);
-                    Ok(client)
-                }
-                Err(_) => {
-                    let mut secure = config.pg.clone();
-                    secure.ssl_mode(GoSslMode::Require);
-                    let (client, connection) = secure.connect(insecure_connector()).await?;
-                    spawn_connection(connection);
-                    Ok(client)
-                }
-            }
-        }
-        SslMode::VerifyCa | SslMode::VerifyFull => {
+    match (config.ssl_mode, config.direct_tls) {
+        (SslMode::Disable, _) => connect_plain(config).await,
+        (SslMode::Require, _) | (SslMode::Prefer, true) => connect_tls(config).await,
+        (SslMode::Prefer, false) => match connect_tls(config).await {
+            Err(err) if !stops_fallback(&err) => connect_plain(config).await,
+            result => result,
+        },
+        (SslMode::Allow, _) => match connect_plain(config).await {
+            Err(err) if !stops_fallback(&err) => connect_tls(config).await,
+            result => result,
+        },
+        (SslMode::VerifyCa | SslMode::VerifyFull, _) => {
             unreachable!("Pool::new rejects verify-ca and verify-full before connecting")
         }
     }
+}
+
+async fn connect_plain(config: &PoolConfig) -> Result<Client, tokio_postgres::Error> {
+    let mut cfg = config.pg.clone();
+    cfg.ssl_mode(tokio_postgres::config::SslMode::Disable);
+    let (client, connection) = cfg.connect(NoTls).await?;
+    spawn_connection(connection);
+    Ok(client)
+}
+
+async fn connect_tls(config: &PoolConfig) -> Result<Client, tokio_postgres::Error> {
+    let mut cfg = config.pg.clone();
+    cfg.ssl_mode(tokio_postgres::config::SslMode::Require);
+    if config.direct_tls {
+        cfg.ssl_negotiation(tokio_postgres::config::SslNegotiation::Direct);
+    }
+    let (client, connection) = cfg.connect(insecure_connector(config.direct_tls)).await?;
+    spawn_connection(connection);
+    Ok(client)
 }
 
 fn spawn_connection<S, T>(connection: tokio_postgres::Connection<S, T>)

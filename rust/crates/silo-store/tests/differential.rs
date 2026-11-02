@@ -1,8 +1,7 @@
 //! Differential test against the real Go packages: `internal/catalog`'s two settings repos and
-//! `internal/userstore/pgstore`. It replays the same ops.json recipe
-//! (`docs/superpowers/silo-store-difftest/` generator output in the `silo-server` checkout, not
-//! committed here) through the real Go code and through this crate, on two databases migrated
-//! identically by the real Go migrator, then asserts:
+//! `internal/userstore/pgstore`. It replays `rust/conformance/vectors/store/ops.json` through
+//! `rust/conformance/harness/storediff` and through this crate, on two databases with one schema, then
+//! asserts:
 //! 1. every operation's outcome (ok/error kind/returned fields) is identical, in order;
 //! 2. the two databases' relevant tables end in byte-identical content (`server_settings`,
 //!    `user_setting_values`, `user_setting_mutations`), decrypting `enc:v1:` values first, since
@@ -10,13 +9,9 @@
 //!    are correct.
 //!
 //! Needs, as env vars (the test skips with a message if any are unset):
-//! - `SILO_STORE_DIFFTEST_GO_REPO`: path to a `silo-server` checkout with
-//!   `docs/superpowers/silo-store-difftest/main.go` present (gitignored scratch dir there) and
-//!   `web/dist/index.html` stubbed (`make embed-stub`).
-//! - `SILO_STORE_DIFFTEST_OPS`: path to the shared `ops.json`.
-//! - `SILO_STORE_DIFFTEST_GO_REF_URL` / `SILO_STORE_DIFFTEST_RUST_REF_URL`: two already-migrated,
-//!   empty-of-test-data Postgres databases (same schema, same seed rows: a `users` row id 1 and
-//!   id 2, and `user_profiles` rows `p1`/`p2`/`p3` under user 1 — see the generator's identities).
+//! - `SILO_STORE_DIFFTEST_GO_REF_URL` / `SILO_STORE_DIFFTEST_RUST_REF_URL`: two already-migrated
+//!   Postgres databases with `users` rows 1 and 2, and `user_profiles` rows `p1`, `p2`, and `p3` under
+//!   user 1.
 //! - `SILO_STORE_DIFFTEST_SECRET_KEY`: the `SECRET_KEY` both sides derive the cipher from.
 //!
 //! `cargo test -p silo-store --test differential -- --ignored --nocapture`
@@ -44,12 +39,15 @@ fn env(name: &str) -> Option<String> {
 #[tokio::test]
 #[ignore = "needs a throwaway two-database Postgres and a silo-server checkout; see module doc"]
 async fn matches_go_byte_for_byte() {
-    let Some(go_repo) = env("SILO_STORE_DIFFTEST_GO_REPO") else {
-        eprintln!("SILO_STORE_DIFFTEST_GO_REPO is not set; skipping");
+    let Some(go_ref_url) = env("SILO_STORE_DIFFTEST_GO_REF_URL") else {
+        eprintln!("SILO_STORE_DIFFTEST_GO_REF_URL is not set; skipping");
         return;
     };
-    let ops_path = env("SILO_STORE_DIFFTEST_OPS").expect("SILO_STORE_DIFFTEST_OPS");
-    let go_ref_url = env("SILO_STORE_DIFFTEST_GO_REF_URL").expect("SILO_STORE_DIFFTEST_GO_REF_URL");
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let ops_path = repo_root
+        .join("rust/conformance/vectors/store/ops.json")
+        .to_string_lossy()
+        .into_owned();
     let rust_ref_url =
         env("SILO_STORE_DIFFTEST_RUST_REF_URL").expect("SILO_STORE_DIFFTEST_RUST_REF_URL");
     let secret_key = env("SILO_STORE_DIFFTEST_SECRET_KEY").expect("SILO_STORE_DIFFTEST_SECRET_KEY");
@@ -62,13 +60,14 @@ async fn matches_go_byte_for_byte() {
     let status = Command::new("go")
         .args([
             "run",
-            "./docs/superpowers/silo-store-difftest",
+            "./rust/conformance/harness/storediff",
             &ops_path,
             &go_ref_url,
             &secret_key,
             go_out.to_str().unwrap(),
         ])
-        .current_dir(&go_repo)
+        .env("GOTOOLCHAIN", "go1.26.10")
+        .current_dir(&repo_root)
         .status()
         .expect("running the go harness");
     assert!(status.success(), "go harness exited non-zero");
@@ -98,6 +97,14 @@ async fn matches_go_byte_for_byte() {
     assert_eq!(rust_outcomes.len(), go_outcomes.len(), "op count mismatch");
     for (i, (rust, go)) in rust_outcomes.iter().zip(go_outcomes.iter()).enumerate() {
         assert_eq!(rust, go, "op #{} ({}) diverged", i + 1, op_kind(&ops[i]));
+    }
+
+    for outcome in &go_outcomes {
+        let kind = outcome["error_kind"].as_str().unwrap_or("");
+        assert!(
+            kind != "MISSING_EXPECTED_ERROR" && !kind.starts_with("unknown_op_kind"),
+            "{outcome}"
+        );
     }
 
     // 3. Compare final table content, byte for byte after decrypting enc:v1 values.

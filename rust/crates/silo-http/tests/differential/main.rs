@@ -27,7 +27,7 @@ fn repo_root() -> PathBuf {
 
 /// The toolchain Silo ships with (`Dockerfile`'s `golang:1.26` resolves to this patch today).
 ///
-/// This used to alias `silo_gocompat::unicode::GO_VERSION` (go1.26.7), which drifted from the
+/// This used to alias `silo_gocompat::unicode::GO_VERSION` (then go1.26.7), which drifted from the
 /// shipped image and hid real behavior changes between those patches: the 200-range Range-header
 /// limit (`net/http/fs.go`) and the CONNECT response-writer changes (`net/http/server.go`), both
 /// ported in this crate. `unicode.Version` is identical across both patches, so repinning here

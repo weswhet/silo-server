@@ -192,3 +192,156 @@ async fn rust_created_session_is_read_identically_by_go() {
     ]);
     assert_eq!(go_active["active"], serde_json::json!(true));
 }
+
+/// H2: a user ID outside `int4` must be an error on every method on both sides, must never reach the
+/// row of the account named by its low 32 bits, and must leave that account's session usable.
+#[tokio::test]
+#[ignore = "needs a live Postgres with Silo's schema migrated and the sessioncheck binary built; see module doc"]
+async fn oversized_user_ids_are_refused_like_go() {
+    let user_id: i64 = env("SESSIONCHECK_TEST_USER_ID")
+        .expect("SESSIONCHECK_TEST_USER_ID must be set")
+        .parse()
+        .unwrap();
+    let session_id = format!("oversized-{}", uuid::Uuid::new_v4());
+    sessioncheck(&[
+        "create",
+        "-session",
+        &session_id,
+        "-user",
+        &user_id.to_string(),
+    ]);
+    let repo = SessionRepository::new(pool().await);
+    let blank = |id: &str, user: i64, impersonator: Option<i64>| AuthSession {
+        id: id.to_owned(),
+        user_id: user,
+        device_name: String::new(),
+        device_id: String::new(),
+        device_platform: String::new(),
+        ip_address: String::new(),
+        created_at: std::time::SystemTime::now(),
+        expires_at: std::time::SystemTime::now() + std::time::Duration::from_secs(3600),
+        revoked_at: None,
+        impersonator_user_id: impersonator,
+        impersonation_started_at: None,
+        identity_id: None,
+        provider_since: None,
+        last_seen_at: None,
+        purpose: String::new(),
+        bound_profile_id: String::new(),
+        absolute_expires_at: None,
+    };
+
+    // Same low 32 bits as the real account, plus values at and past each int4 bound.
+    let oversized = [
+        (1i64 << 32) + user_id,
+        i64::from(i32::MAX) + 1,
+        i64::from(i32::MIN) - 1,
+        i64::MAX,
+        i64::MIN,
+    ];
+    let mut total = 0;
+    for value in oversized {
+        let text = value.to_string();
+        let go = sessioncheck(&[
+            "oversized",
+            "-session",
+            &session_id,
+            &format!("-user={text}"),
+        ]);
+        let rust = [
+            (
+                "active_session",
+                repo.active_session(&session_id, value).await.map(|_| ()),
+            ),
+            ("list_by_user", repo.list_by_user(value).await.map(|_| ())),
+            (
+                "list_by_user_page",
+                repo.list_by_user_page(value, None, 10).await.map(|_| ()),
+            ),
+            ("revoke_all_by_user", repo.revoke_all_by_user(value).await),
+            (
+                "revoke_all_by_impersonator",
+                repo.revoke_all_by_impersonator(value).await,
+            ),
+            (
+                "create",
+                repo.create(blank(&format!("{session_id}-r"), value, None))
+                    .await,
+            ),
+            (
+                "create_impersonator",
+                repo.create(blank(&format!("{session_id}-ri"), user_id, Some(value)))
+                    .await,
+            ),
+        ];
+        for (name, result) in rust {
+            total += 1;
+            assert_eq!(go[name], serde_json::json!(true), "Go {name} with {value}");
+            assert!(
+                matches!(
+                    result,
+                    Err(silo_auth::session::Error::Int4OutOfRange { .. })
+                ),
+                "Rust {name} with {value}: {result:?}"
+            );
+        }
+    }
+    assert_eq!(total, 35);
+    assert!(
+        repo.get_by_id(&session_id)
+            .await
+            .unwrap()
+            .revoked_at
+            .is_none(),
+        "an oversized ID must not revoke the low-32-bit account's session"
+    );
+    assert!(
+        repo.active_session(&session_id, user_id)
+            .await
+            .unwrap()
+            .is_some()
+    );
+}
+
+/// The NULL `device_name` the column allows is an error in Go's plain-string scan, and must not
+/// panic here.
+#[tokio::test]
+#[ignore = "needs a live Postgres with Silo's schema migrated and the sessioncheck binary built; see module doc"]
+async fn null_device_name_is_an_error_not_a_panic() {
+    let user_id: i64 = env("SESSIONCHECK_TEST_USER_ID").unwrap().parse().unwrap();
+    let session_id = format!("null-device-{}", uuid::Uuid::new_v4());
+    sessioncheck(&[
+        "create",
+        "-session",
+        &session_id,
+        "-user",
+        &user_id.to_string(),
+    ]);
+    let pool = pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    conn.execute(
+        "UPDATE auth_sessions SET device_name = NULL WHERE id = $1",
+        &[&session_id],
+    )
+    .await
+    .unwrap();
+    let output = Command::new(env("SESSIONCHECK_BIN").unwrap())
+        .args([
+            "get",
+            "-db",
+            &env("DATABASE_URL").unwrap(),
+            "-session",
+            &session_id,
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        !output.status.success(),
+        "Go must refuse a NULL device_name"
+    );
+    let repo = SessionRepository::new(pool);
+    assert!(matches!(
+        repo.get_by_id(&session_id).await,
+        Err(silo_auth::session::Error::Scan { .. })
+    ));
+}

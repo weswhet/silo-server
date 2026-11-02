@@ -96,32 +96,50 @@ pub trait AuthProvider: Send + Sync {
     ) -> impl Future<Output = Result<bool, AuthError>> + Send;
 }
 
-/// `auth.LookupLogin`'s gate: whether `identifier` is a plausible bare email address, for a
-/// `LoginDirectory`-style implementation's username/email fallback. This one pure helper is
-/// ported on its own — `LookupLogin` itself and `LoginDirectory` need the (unported)
-/// `UserRepository` to mean anything.
-///
-/// Go parses with `net/mail.ParseAddress` and requires the parsed address to equal the input
-/// exactly (rejecting a display-name form like `"Name <a@b.com>"` even though `net/mail` itself
-/// accepts it as an address). `silo_gocompat` has no `net/mail` port, and a full RFC 5322 address
-/// parser is its own undertaking, so this is a narrower check: it requires exactly one `@`, a
-/// non-empty local part and domain, and no whitespace or angle brackets anywhere in the string.
-/// This is strictly narrower than Go's parser in the direction that matters for a login-identifier
-/// gate (it rejects some strings Go would accept as "looks like an email", never the reverse for
-/// a plain `local@domain` address), so at worst it sends a few more identifiers through the
-/// username-only lookup path, which only changes whether the email-column fallback is tried, not
-/// whether a legitimate login succeeds for an account whose username equals its email.
+/// `auth.looksLikeEmail`, `LookupLogin`'s gate. Go requires `net/mail.ParseAddress` to succeed and its
+/// `Address` to equal the trimmed input. A display name, angle brackets, a quoted local part, a
+/// comment, or folding space all make `Address` differ from the input, so what remains is `net/mail`'s
+/// `consumeAddrSpec` on a bare `dot-atom@dot-atom` or `dot-atom@[ip]`, consuming the whole input.
+/// `tests/email_vectors.rs` checks this against the real `auth.LookupLogin`.
 pub fn looks_like_email(identifier: &str) -> bool {
-    let identifier = identifier.trim();
-    if identifier.contains(char::is_whitespace) || identifier.contains(['<', '>']) {
+    let identifier = silo_gocompat::strings::trim_space(identifier);
+    let Some(at) = identifier.find('@') else {
+        return false;
+    };
+    let (local, domain) = (&identifier[..at], &identifier[at + 1..]);
+    if !is_dot_atom(local) {
         return false;
     }
-    match identifier.split_once('@') {
-        Some((local, domain)) => {
-            !local.is_empty() && !domain.is_empty() && !domain.contains('@') && domain.contains('.')
-        }
-        None => false,
+    if let Some(literal) = domain.strip_prefix('[') {
+        return literal
+            .strip_suffix(']')
+            .is_some_and(|ip| ip.chars().all(is_dtext) && ip.parse::<std::net::IpAddr>().is_ok());
     }
+    is_dot_atom(domain)
+}
+
+/// `net/mail`'s `isVchar`: visible ASCII, or any multi-byte character.
+fn is_vchar(c: char) -> bool {
+    ('!'..='~').contains(&c) || !c.is_ascii()
+}
+
+/// `net/mail`'s `isDtext`.
+fn is_dtext(c: char) -> bool {
+    !matches!(c, '[' | ']' | '\\') && is_vchar(c)
+}
+
+/// `net/mail`'s `consumeAtom(dot=true, permissive=false)` over a whole string.
+fn is_dot_atom(atom: &str) -> bool {
+    !atom.is_empty()
+        && atom.chars().all(|c| {
+            !matches!(
+                c,
+                '(' | ')' | '<' | '>' | '[' | ']' | ':' | ';' | '@' | '\\' | ',' | '"'
+            ) && is_vchar(c)
+        })
+        && !atom.starts_with('.')
+        && !atom.ends_with('.')
+        && !atom.contains("..")
 }
 
 #[cfg(test)]

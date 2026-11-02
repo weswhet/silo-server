@@ -94,6 +94,8 @@ const BODY_RACES: &[(&str, &str)] = &[(
     "the removal runs in the background and may finish before the response",
 )];
 
+const ACTIVITY_FLUSH_WAIT_MS: u64 = 3000;
+
 fn body_race(path: &str) -> Option<&'static str> {
     BODY_RACES
         .iter()
@@ -214,7 +216,12 @@ impl Builder<'_> {
             name: name.to_string(),
             phase,
             identity,
-            method: route.method.clone(),
+            // `ALL` names a mount that takes any method, so one has to be picked.
+            method: if route.method == "ALL" {
+                "GET".to_string()
+            } else {
+                route.method.clone()
+            },
             path: route.path.clone(),
             query: required_query(self.src, route),
             headers: required_headers(self.src, route),
@@ -239,6 +246,7 @@ impl Builder<'_> {
             source: None,
             host: None,
             settle_on: None,
+            wait_ms: 0,
         }
     }
 
@@ -345,7 +353,7 @@ fn creator_prefix(routes: &[Route], route: &Route) -> Option<String> {
 
 fn mutate_phase(route: &Route) -> Phase {
     match route.surface {
-        Surface::ApiV2 | Surface::ApiDelegate => Phase::MutateV2,
+        Surface::ApiV2 | Surface::ApiV2Walked | Surface::ApiDelegate => Phase::MutateV2,
         Surface::ApiV1 | Surface::Root => Phase::MutateV1,
         _ => Phase::MutateCompat,
     }
@@ -405,7 +413,9 @@ pub fn build(src: &Sources) -> Plan {
     add_scenario_cases(&mut b);
     add_compat_logins(&mut b);
     add_auth_variants(&mut b);
+    add_native_chain_refusals(&mut b);
     add_slash_variants(&mut b);
+    add_doc_examples(&mut b);
     add_peer_cases(&mut b);
     let mut plan = Plan {
         cases: std::mem::take(&mut b.cases),
@@ -642,6 +652,12 @@ fn add_fixture_cases(b: &mut Builder) {
         let (path_only, query_text) = raw_path.split_once('?').unwrap_or((raw_path, ""));
         let mut c = b.blank(route_idx, &format!("fixture:{name}"), phase, identity);
         c.may_mutate = mutating;
+        // Reads the activity log, which `activitylog.Consumer` writes every 2 seconds, for the address
+        // the run's own requests come from when a run gives both servers one. Each side's counts and
+        // order depend on which of its batches landed, so let them all land.
+        if name == "admin_ip_users" {
+            c.wait_ms = ACTIVITY_FLUSH_WAIT_MS;
+        }
         // A not-found fixture's synthetic id is the point; everything else uses seed ids.
         if f["expected_status"].as_u64() == Some(404) {
             c.path = path_only.to_string();
@@ -711,8 +727,128 @@ fn add_slash_variants(b: &mut Builder) {
     }
 }
 
+/// A doc's concrete example of a templated route stays a request, on the route it illustrates: it is
+/// not a row, but it is often the only value the handler answers with a success.
+fn add_doc_examples(b: &mut Builder) {
+    for ill in crate::sources::DOC_ILLUSTRATIONS {
+        let Some(parent) = ill.parent else {
+            b.skip(
+                format!("jellycompat {} {}", ill.method, ill.path),
+                ill.reason,
+            );
+            continue;
+        };
+        b.skip(
+            format!("jellycompat {} {}", ill.method, ill.path),
+            format!("{}; sent as a case of {parent}", ill.reason),
+        );
+        let key = (
+            Surface::Jellycompat,
+            ill.method.to_string(),
+            parent.to_string(),
+        );
+        let Some(&i) = b.index.get(&key) else {
+            continue;
+        };
+        let mut c = b.blank(
+            i,
+            &format!("doc_example:{}", ill.path),
+            Phase::Reads,
+            Identity::User,
+        );
+        c.path = ill.path.to_string();
+        b.push(c);
+    }
+}
+
 /// One credential spelled the ways real clients spell it. Sent with no identity, so
 /// the spelling is the only thing authenticating the request.
+/// Rows behind the native chain, each with its credential and profile refusals. A row in no such list
+/// still gets the generated anonymous cases.
+const CHAIN_ROWS: &[(Surface, &str, bool)] = &[
+    (Surface::ApiV1, "/api/v1/auth/me", false),
+    (Surface::ApiV1, "/api/v1/auth/account/capability", true),
+    (Surface::ApiV1, "/api/v1/images/capability", true),
+    (Surface::ApiV2, "/api/v2/account/me", false),
+    (Surface::ApiV2, "/api/v2/account/password/capability", true),
+    (Surface::ApiV2, "/api/v2/images/capabilities", true),
+    (Surface::ApiV2, "/api/v2/user/libraries/capabilities", true),
+];
+
+fn add_native_chain_refusals(b: &mut Builder) {
+    const NO_SUCH_PROFILE: &str = "c0f00000-0000-4000-8000-0000000000ff";
+    for &(surface, path, viewer) in CHAIN_ROWS {
+        let Some(&i) = b.index.get(&(surface, "GET".to_string(), path.to_string())) else {
+            b.skip(
+                format!("{} GET {path}", surface.name()),
+                "chain row is not in the sources",
+            );
+            continue;
+        };
+        let credentials = [
+            ("anonymous", Identity::Anon, None),
+            ("malformed_scheme", Identity::Anon, Some("Basic abc")),
+            ("empty_bearer", Identity::Anon, Some("Bearer ")),
+            ("wrong_token", Identity::Anon, Some("Bearer not.a.token")),
+            (
+                "wrong_api_key",
+                Identity::Anon,
+                Some("Bearer sa_0000000000"),
+            ),
+            ("api_key", Identity::Anon, Some("Bearer ${user_api_key}")),
+        ];
+        for (name, identity, authorization) in credentials {
+            let mut c = b.blank(i, &format!("chain:{name}"), Phase::Reads, identity);
+            if let Some(value) = authorization {
+                c.headers
+                    .push(("Authorization".to_string(), value.to_string()));
+            }
+            b.push(c);
+        }
+        let mut c = b.blank(i, "chain:query_token_refused", Phase::Reads, Identity::Anon);
+        if surface == Surface::ApiV1 {
+            c.query
+                .push(("token".to_string(), "not.a.token".to_string()));
+            b.push(c);
+        }
+        let profiles = [
+            ("wrong_profile", Identity::UserJwt, NO_SUCH_PROFILE),
+            (
+                "wrong_profile_api_key",
+                Identity::UserNoProfile,
+                NO_SUCH_PROFILE,
+            ),
+            (
+                "other_account_profile",
+                Identity::UserJwt,
+                "${admin_profile_id}",
+            ),
+            ("not_a_uuid_profile", Identity::UserJwt, "nope"),
+        ];
+        for (name, identity, profile) in profiles {
+            let mut c = b.blank(i, &format!("chain:{name}"), Phase::Reads, identity);
+            c.headers
+                .push(("X-Profile-Id".to_string(), profile.to_string()));
+            b.push(c);
+        }
+        // Without viewer access on the row, a named profile is not judged; these still run above.
+        let _ = viewer;
+        let c = b.blank(i, "chain:admin", Phase::Reads, Identity::AdminJwt);
+        b.push(c);
+        let c = b.blank(i, "chain:kid_profile", Phase::Reads, Identity::Kid);
+        b.push(c);
+        let mut c = b.blank(
+            i,
+            "chain:device_header_repeated",
+            Phase::Reads,
+            Identity::User,
+        );
+        c.headers
+            .push(("X-Silo-Device-Id".to_string(), "a,b".to_string()));
+        b.push(c);
+    }
+}
+
 fn add_auth_variants(b: &mut Builder) {
     let mut turn = 0usize;
     for (i, route) in b.src.routes.iter().enumerate() {
@@ -802,6 +938,7 @@ fn add_auth_variants(b: &mut Builder) {
 fn add_compat_logins(b: &mut Builder) {
     let jf = "{\"Username\":\"${member_username}#Conf User\",\"Pw\":\"${member_password}\"}";
     let native = "{\"username\":\"${member_username}\",\"password\":\"${member_password}\"}";
+    #[allow(clippy::type_complexity)]
     let logins: [(Surface, &str, &str, Vec<(String, String)>); 3] = [
         (
             Surface::Jellycompat,
@@ -1322,6 +1459,7 @@ fn scenario_identity(principal: &Value) -> Result<Identity, String> {
 }
 
 /// One exchange of a scenario: `principal` + `request`, as the primary step or a `then`.
+#[allow(clippy::too_many_arguments)]
 fn scenario_step(
     b: &mut Builder,
     route_idx: usize,

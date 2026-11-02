@@ -12,7 +12,7 @@ use clap::{Parser, Subcommand};
 use serde::Serialize;
 use serde_json::Value;
 use silo_conformance::mutate::{self, Applied, Req, Resp, CASE_TAG_HEADER};
-use silo_conformance::normalize::Rules;
+use silo_conformance::normalize::{FeedSummary, Rules};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Write};
@@ -413,6 +413,7 @@ fn exchange(
                     after: "200".to_string(),
                     rule: None,
                     by_design: false,
+                    feed_fault: None,
                 });
             }
         }
@@ -484,6 +485,9 @@ struct Tally {
     allowed_by_design: usize,
     /// A rule's by-design allowance that was reported anyway.
     by_design_reported: usize,
+    /// A feed fault that left the candidate holding what the reference's feed already holds, so no
+    /// differ could report it. The escapes the check rules out, listed so they stay visible.
+    reference_matches_fault: usize,
     /// No difference, but the report says this body was not compared.
     body_not_compared: usize,
     escaped: usize,
@@ -509,7 +513,13 @@ fn covers(diff_at: &str, at: &str) -> bool {
     d == a || inside(&a, &d) || inside(&d, &a) || (a == "body" && d == "body")
 }
 
-fn add(t: &mut Tally, a: &Applied, diffs: Option<&Vec<Value>>, body_compared: bool) {
+fn add(
+    t: &mut Tally,
+    a: &Applied,
+    diffs: Option<&Vec<Value>>,
+    body_compared: bool,
+    feeds: Option<&BTreeMap<String, FeedSummary>>,
+) {
     t.applied += 1;
     let list: &[Value] = diffs.map_or(&[], Vec::as_slice);
     let at_path = list
@@ -529,6 +539,12 @@ fn add(t: &mut Tally, a: &Applied, diffs: Option<&Vec<Value>>, body_compared: bo
         }
     } else if a.by_design {
         t.allowed_by_design += 1;
+    } else if a.feed_fault.as_ref().is_some_and(|fault| {
+        feeds
+            .and_then(|f| f.get(&a.at))
+            .is_some_and(|reference| !fault.observable(reference))
+    }) {
+        t.reference_matches_fault += 1;
     } else if !body_compared
         && (!a.at.starts_with("header:") || a.at == "header:content-length")
         && a.at != "status"
@@ -550,10 +566,14 @@ fn check(log: PathBuf, report: PathBuf, json_out: Option<PathBuf>) -> Result<Exi
     let cases = fs::read_to_string(report.join("cases.jsonl"))
         .with_context(|| format!("reading {}", report.display()))?;
     let mut known = BTreeMap::new();
+    let mut feeds: BTreeMap<String, BTreeMap<String, FeedSummary>> = BTreeMap::new();
     for line in cases.lines().filter(|l| !l.is_empty()) {
         let v: Value = serde_json::from_str(line)?;
         let id = v["id"].as_str().unwrap_or_default().to_string();
         known.insert(id.clone(), v["body_compared"].as_bool().unwrap_or(false));
+        if let Some(f) = v.get("feed_reference") {
+            feeds.insert(id.clone(), serde_json::from_value(f.clone())?);
+        }
         if let Some(d) = v["diffs"].as_array() {
             if !d.is_empty() {
                 by_case.insert(id, d.clone());
@@ -570,17 +590,25 @@ fn check(log: PathBuf, report: PathBuf, json_out: Option<PathBuf>) -> Result<Exi
             continue;
         };
         let diffs = by_case.get(&a.case);
+        let feed = feeds.get(&a.case);
         add(
             mutations.entry(a.mutation.clone()).or_default(),
             &a,
             diffs,
             compared,
+            feed,
         );
         seen.entry(a.mutation.clone())
             .or_default()
             .insert(a.case.clone());
         if let Some(rule) = &a.rule {
-            add(rules.entry(rule.clone()).or_default(), &a, diffs, compared);
+            add(
+                rules.entry(rule.clone()).or_default(),
+                &a,
+                diffs,
+                compared,
+                feed,
+            );
         }
     }
     for (m, t) in mutations.iter_mut() {

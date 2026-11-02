@@ -1,0 +1,18 @@
+# One container holds a Redis master, a replica, and a Sentinel, so every address Sentinel reports
+# (127.0.0.1) also works from the host through the published ports. Used by the Sentinel failover test
+# in rust/crates/silo-runtime/tests/redis.rs.
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:26480:26480"
+      - "127.0.0.1:26481:26481"
+      - "127.0.0.1:26482:26482"
+    command:
+      - sh
+      - -c
+      - |
+        redis-server --port 26480 --save "" --appendonly no --daemonize yes
+        redis-server --port 26481 --save "" --appendonly no --replicaof 127.0.0.1 26480 --daemonize yes
+        printf 'port 26482\nsentinel monitor silomaster 127.0.0.1 26480 1\nsentinel down-after-milliseconds silomaster 1000\nsentinel failover-timeout silomaster 5000\n' > /tmp/sentinel.conf
+        exec redis-server /tmp/sentinel.conf --sentinel

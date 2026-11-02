@@ -4,7 +4,7 @@
 // import: package main under cmd/silo, and packages whose closure needs libvips through cgo. It keeps
 // their real source, not a hand copy. Run it from the repository root before the generator:
 //
-//	GOTOOLCHAIN=go1.26.7 go run -tags silo_config_vectors ./rust/conformance/vectors/generators/config/extract
+//	GOTOOLCHAIN=go1.26.10 go run -tags silo_config_vectors ./rust/conformance/vectors/generators/config/extract
 package main
 
 import (

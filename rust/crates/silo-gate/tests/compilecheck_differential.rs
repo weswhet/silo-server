@@ -6,10 +6,9 @@
 //! Rust rejects is logged, not failed — [`silo_gate::policy`]'s module doc discloses this as a
 //! deliberate, safe narrowing (fail-closed must only ever over-reject).
 //!
-//! Regenerate with:
+//! Regenerate from the repository root:
 //! ```text
-//! GOTOOLCHAIN=go1.26.10 go run ./rust/conformance/vectors/generators/compilecheck \
-//!   -out rust/conformance/vectors/policy/compilecheck.json
+//! GOTOOLCHAIN=go1.26.10 go run ./rust/conformance/vectors/generators/compilecheck
 //! ```
 
 use serde::Deserialize;
@@ -26,37 +25,15 @@ struct CaseRecord {
     error: String,
 }
 
-/// A representative input battery per domain, pulled from the real-OPA decision corpus so it
-/// covers the field shapes those vendor policies actually branch on, plus a couple of structural
-/// edge cases (empty object, nulls) the generator's randomized inputs might not phrase.
-fn battery(domain: &str) -> Vec<serde_json::Value> {
-    let path = silo_gocompat::filepath::join(&[
-        env!("CARGO_MANIFEST_DIR"),
-        "../../conformance/vectors/policy",
-        &format!("{domain}.json"),
-    ]);
-    let mut inputs: Vec<serde_json::Value> = match std::fs::read(&path) {
-        Ok(data) => {
-            #[derive(Deserialize)]
-            struct Row {
-                input: serde_json::Value,
-            }
-            let rows: Vec<Row> =
-                silo_gocompat::json::unmarshal(&data).expect("parsing decision vectors");
-            rows.into_iter().take(40).map(|r| r.input).collect()
-        }
-        Err(_) => Vec::new(),
-    };
-    inputs.push(serde_json::Value::Object(Default::default()));
-    inputs
-}
-
 #[test]
 fn rust_never_accepts_what_go_refuses() {
-    let path = silo_gocompat::filepath::join(&[
-        env!("CARGO_MANIFEST_DIR"),
-        "../../conformance/vectors/policy/compilecheck.json",
-    ]);
+    // COMPILECHECK_VECTORS points at a corpus generated with another -seed, for exploring.
+    let path = std::env::var("COMPILECHECK_VECTORS").unwrap_or_else(|_| {
+        silo_gocompat::filepath::join(&[
+            env!("CARGO_MANIFEST_DIR"),
+            "../../conformance/vectors/policy/compilecheck.json",
+        ])
+    });
     let data = std::fs::read(&path).unwrap_or_else(|e| {
         panic!("reading {path:?}: {e} (did you run the generator? see this file's doc comment)")
     });
@@ -64,31 +41,58 @@ fn rust_never_accepts_what_go_refuses() {
         silo_gocompat::json::unmarshal(&data).expect("parsing compilecheck vectors");
     assert!(!cases.is_empty());
 
+    assert!(cases.len() >= 200);
     let mut agreed = 0;
-    let mut safely_narrower = 0;
+    let mut narrower = Vec::new();
+    let mut unsafe_widenings = Vec::new();
     for case in &cases {
-        let inputs = battery(&case.domain);
-        let rust_result = compile_check(&case.domain, &case.source, &inputs);
+        let rust_result = compile_check(&case.domain, &case.source);
         let rust_rejected = rust_result.is_err();
 
-        if case.rejected {
-            assert!(
-                rust_rejected,
-                "case {:?}: Go rejected but Rust accepted — a fail-closed violation (Go error: {})",
-                case.name, case.error
-            );
-            agreed += 1;
-        } else if rust_rejected {
-            safely_narrower += 1;
-            eprintln!(
-                "case {:?}: Go accepted, Rust narrowly rejected ({:?}) — disclosed, safe direction",
-                case.name, rust_result
-            );
+        if case.rejected && !rust_rejected {
+            unsafe_widenings.push(format!("{}: {}\n{}", case.name, case.error, case.source));
+        } else if rust_rejected && !case.rejected {
+            narrower.push(case.name.as_str());
         } else {
             agreed += 1;
         }
     }
     eprintln!(
-        "compile_check: {agreed} agreed with Go, {safely_narrower} safely narrower, 0 unsafe widenings"
+        "compile_check: {} cases, {agreed} agreed, {} safely narrower, {} unsafe widenings",
+        cases.len(),
+        narrower.len(),
+        unsafe_widenings.len()
+    );
+    let random_accepted = cases
+        .iter()
+        .filter(|c| c.name.starts_with("random_"))
+        .filter(|c| compile_check(&c.domain, &c.source).is_ok())
+        .count();
+    eprintln!("compile_check: {random_accepted} random programs accepted by both");
+    assert!(
+        random_accepted >= 200,
+        "the random corpus must exercise accepted programs"
+    );
+    let shown: Vec<&String> = unsafe_widenings.iter().take(12).collect();
+    assert!(unsafe_widenings.is_empty(), "{shown:#?}");
+    // A check that refuses everything would pass the assertion above. These must stay accepted.
+    for name in [
+        "valid_scope_override",
+        "valid_permission_override",
+        "valid_action_override",
+        "plain_base",
+        "go_test_tightening",
+        "stub",
+        "pure_net",
+        "no_import",
+        "concat_strs",
+        "typed_elem_ok",
+    ] {
+        assert!(!narrower.contains(&name), "{name} must stay accepted");
+    }
+    assert!(
+        agreed * 10 >= cases.len() * 7,
+        "{agreed} of {} agreed: the subset became too narrow",
+        cases.len()
     );
 }

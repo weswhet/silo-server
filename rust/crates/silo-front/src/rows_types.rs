@@ -53,33 +53,11 @@ impl Surface {
     }
 }
 
-/// The handler a native row runs.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum NativeId {
-    /// `handlers.HealthHandler`.
-    Health,
-    /// `getOpenAPIDocument`.
-    OpenApi,
-    /// `registerAPIDocs`.
-    Docs,
-    /// `server.FrontendHandler`.
-    Spa,
-    /// The root listener's explicit `/metrics` 404.
-    RootMetrics,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Disposition {
-    Native(NativeId),
-    GoProxy,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Row {
     pub surface: Surface,
     pub method: &'static str,
     pub path: &'static str,
-    pub disposition: Disposition,
 }
 
 pub const fn go(surface: Surface, method: &'static str, path: &'static str) -> Row {
@@ -87,20 +65,5 @@ pub const fn go(surface: Surface, method: &'static str, path: &'static str) -> R
         surface,
         method,
         path,
-        disposition: Disposition::GoProxy,
-    }
-}
-
-pub const fn native(
-    surface: Surface,
-    method: &'static str,
-    path: &'static str,
-    id: NativeId,
-) -> Row {
-    Row {
-        surface,
-        method,
-        path,
-        disposition: Disposition::Native(id),
     }
 }

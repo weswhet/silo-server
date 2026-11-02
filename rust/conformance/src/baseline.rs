@@ -370,6 +370,7 @@ mod tests {
             body_compared: true,
             body_skip_reason: None,
             feed_relaxed: false,
+            feed_reference: Default::default(),
             exercised: true,
             reference_error: None,
         }

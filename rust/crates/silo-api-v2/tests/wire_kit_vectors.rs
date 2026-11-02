@@ -321,6 +321,86 @@ fn patch_matches_go() {
 }
 
 #[test]
+fn patch_values_decode_like_go() {
+    #[derive(serde::Serialize, serde::Deserialize, Default)]
+    struct Sub {
+        a: i64,
+        b: i64,
+    }
+    #[derive(serde::Deserialize, Default)]
+    struct WithPatches {
+        #[serde(default)]
+        big: wire::Patch<i64>,
+        #[serde(default)]
+        sub: wire::Patch<Sub>,
+        #[serde(default)]
+        ids: wire::Patch<Option<Vec<i64>>>,
+        #[serde(default)]
+        name: wire::Patch<String>,
+        #[serde(default)]
+        flag: wire::Patch<bool>,
+    }
+    let cases = vectors("patch_values");
+    assert!(cases.as_array().unwrap().len() >= 25);
+    for case in cases.as_array().unwrap() {
+        let input = case["input"].as_str().unwrap();
+        let got = silo_gocompat::json::unmarshal::<WithPatches>(input.as_bytes());
+        assert_eq!(got.is_ok(), case["ok"].as_bool().unwrap(), "input={input}");
+        let Ok(w) = got else { continue };
+        // Go's Patch[[]int] marks a `[]` value non-nil and `null` nil, which `Option` carries here.
+        let state = format!(
+            "{} {}|{} {}|{} {} {}|{} {}|{} {}",
+            w.big.present,
+            w.big.null,
+            w.sub.present,
+            w.sub.null,
+            w.ids.present,
+            w.ids.null,
+            w.ids.value.is_none(),
+            w.name.present,
+            w.name.null,
+            w.flag.present,
+            w.flag.null
+        );
+        assert_eq!(state, case["state"].as_str().unwrap(), "input={input}");
+        let out = case["out"].as_str().unwrap();
+        let go: serde_json::Value = silo_gocompat::json::unmarshal(out.as_bytes()).unwrap();
+        if w.big.present && !w.big.null {
+            // Compare the literal: an f64 could not tell these integers apart.
+            let text = w.big.value.to_string();
+            assert!(out.contains(&text), "input={input} big={text} out={out}");
+        }
+        if w.sub.present && !w.sub.null {
+            assert_eq!(
+                w.sub.value.a,
+                go["sub"]["a"].as_i64().unwrap(),
+                "input={input}"
+            );
+            assert_eq!(
+                w.sub.value.b,
+                go["sub"]["b"].as_i64().unwrap(),
+                "input={input}"
+            );
+        }
+        if let Some(ids) = &w.ids.value
+            && w.ids.present
+        {
+            let expected: Vec<i64> = go["ids"]
+                .as_array()
+                .map(|a| a.iter().map(|v| v.as_i64().unwrap()).collect())
+                .unwrap_or_default();
+            assert_eq!(ids, &expected, "input={input}");
+        }
+        if w.name.present && !w.name.null {
+            assert_eq!(w.name.value, go["name"].as_str().unwrap(), "input={input}");
+        }
+        if w.flag.present && !w.flag.null {
+            assert_eq!(w.flag.value, go["flag"].as_bool().unwrap(), "input={input}");
+        }
+    }
+}
+
+#[test]
 fn parse_sort_matches_go() {
     for case in vectors("parse_sort").as_array().unwrap() {
         let raw = case["raw"].as_str().unwrap();

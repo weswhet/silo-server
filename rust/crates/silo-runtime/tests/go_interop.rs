@@ -4,8 +4,8 @@
 //! exit gate's "tested against a real Go program" proof; `tests/postgres.rs` and `tests/redis.rs`
 //! cover the same code against each other and are not a substitute for this file.
 //!
-//! The Go binary is a standalone harness, not part of the silo-server Go tree (see its own doc
-//! comment); built once with `GOTOOLCHAIN=go1.26.10 go build`, pinned to the real go.mod versions.
+//! The Go binary is `rust/conformance/harness/runtimeinterop`, built with
+//! `GOTOOLCHAIN=go1.26.10 go build -o <bin> ./rust/conformance/harness/runtimeinterop`.
 //! Set `SILO_RUNTIME_GO_INTEROP_BIN` to its path, plus `SILO_RUNTIME_TEST_DATABASE_URL` and
 //! `SILO_RUNTIME_TEST_REDIS_URL`, to run these. Run with `-- --test-threads=1`: the lock tests share
 //! fixed key numbers and must not interleave with each other or with `tests/postgres.rs`.

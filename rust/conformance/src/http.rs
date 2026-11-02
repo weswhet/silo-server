@@ -8,6 +8,7 @@ use reqwest::blocking::Client;
 use reqwest::Method;
 use std::io::{Read, Write};
 use std::net::TcpStream;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 const MAX_BODY: usize = 8 * 1024 * 1024;
@@ -54,6 +55,26 @@ pub struct Request<'a> {
     pub host: Option<&'a str>,
 }
 
+/// Headers every request to these base URLs carries. See `--reference-forwarded-for`.
+struct ReferenceHeaders {
+    bases: Vec<String>,
+    headers: Vec<(String, String)>,
+}
+
+static REFERENCE_HEADERS: OnceLock<ReferenceHeaders> = OnceLock::new();
+
+/// Set once, before a run. Lives here so logins and probes carry them as well as the cases do.
+pub fn set_reference_headers(bases: Vec<String>, headers: Vec<(String, String)>) {
+    let _ = REFERENCE_HEADERS.set(ReferenceHeaders { bases, headers });
+}
+
+fn added_headers(base: &str) -> &'static [(String, String)] {
+    match REFERENCE_HEADERS.get() {
+        Some(r) if r.bases.iter().any(|b| b == base) => &r.headers,
+        _ => &[],
+    }
+}
+
 pub fn client() -> Client {
     Client::builder()
         .redirect(reqwest::redirect::Policy::none())
@@ -76,7 +97,7 @@ pub fn send(client: &Client, req: &Request) -> Exchange {
         .request(method, &url)
         .timeout(Duration::from_secs(req.timeout_secs))
         .header("Host", req.host.unwrap_or(FIXED_HOST));
-    for (k, v) in req.headers {
+    for (k, v) in req.headers.iter().chain(added_headers(req.base)) {
         builder = builder.header(k.as_str(), v.as_str());
     }
     if let Some(b) = req.body {
@@ -159,7 +180,7 @@ fn send_connect(req: &Request) -> Exchange {
             "CONNECT {} HTTP/1.1\r\nHost: {FIXED_HOST}\r\nConnection: close\r\n",
             req.path_and_query
         );
-        for (k, v) in req.headers {
+        for (k, v) in req.headers.iter().chain(added_headers(req.base)) {
             head.push_str(&format!("{k}: {v}\r\n"));
         }
         head.push_str("\r\n");

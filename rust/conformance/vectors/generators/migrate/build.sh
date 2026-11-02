@@ -4,7 +4,7 @@
 set -euo pipefail
 output="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 cd "$(git rev-parse --show-toplevel)"
-export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.26.7}"
+export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.26.10}"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 cat > "$tmp/export.go" <<'GO'

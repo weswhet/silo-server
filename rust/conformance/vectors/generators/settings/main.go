@@ -3,7 +3,7 @@
 // Command settings writes differential vectors for the settings contract's ValidateValue and the
 // settingsmigrate planner, from the real packages. Run it from the repository root:
 //
-//	GOTOOLCHAIN=go1.26.7 go run -tags settings_vectors ./rust/conformance/vectors/generators/settings
+//	GOTOOLCHAIN=go1.26.10 go run -tags settings_vectors ./rust/conformance/vectors/generators/settings
 //
 // jsonschema errors embed the working directory, which is written here as {CWD}.
 package main

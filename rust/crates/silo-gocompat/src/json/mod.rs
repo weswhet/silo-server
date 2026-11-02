@@ -37,7 +37,7 @@ mod decode;
 mod scanner;
 mod ser;
 
-pub use decode::{Decoder, Error as DecodeError, Stream, unmarshal};
+pub use decode::{Decoder, Error as DecodeError, Stream, VALUE_STACK_BYTES, unmarshal};
 pub use scanner::{SyntaxError, check_valid, compact, html_escape, indent, valid};
 pub use ser::{Encoder, Error, marshal, marshal_indent, marshal_to_string};
 

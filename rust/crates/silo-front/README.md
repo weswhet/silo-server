@@ -48,9 +48,38 @@ Three things stay different, and the harness's peer cases show them
 
 ## Native rows
 
-`src/native.rs` runs behind silo-http's port of Go's connection engine. `Gate` sends a request of a native
-row to Go when answering it needs something the port lacks, such as a v2 guard's problem body or the
-network access registry, so the row reads as not ported instead of being guessed.
+`src/native/` holds the rows Rust answers. `rows_table.rs` lists every row and proxies it to Go unless a
+domain's `ROWS` names it; the build fails if a `ROWS` entry is not in the table. `Gate` routes a request to
+the native handler when its path has a native row, except a method the table gives Go at that path, a
+network access ingress request, or a v2 request with a query string, which go to Go.
+
+`src/native/chain.rs` is the chain: `useBaseMiddleware` (request ID, client IP, logger, metrics, activity
+log), the gates as an ordered `Step` list, the v1 refusal body, the v2 `denialWriter` translation, and
+`prepareCapabilityOperation`. The gates themselves are in `silo_gate::mw` and `silo_gate::limiter`.
+
+### Adding a native row
+
+1. Create or open `src/native/<domain>.rs`. Declare `pub const ROWS: &[NativeRow]` with the row.
+2. A new file: add `pub mod <domain>;`, then add `<domain>::ROWS` to `DOMAINS` and `<domain>::mount` to
+   `main_handler` in `src/native/mod.rs`. That is the only shared file you touch; `rows_table.rs` stays as is.
+3. Register the handler in `mount`, with the gates its Go route group has:
+
+   ```rust
+   // v1: the list is the chi group's `Use` order, read from `internal/api/router.go`.
+   const GROUP: &[Step] = &[Step::Auth, Step::Demo, Step::RateLimit, Step::Viewer];
+   api.get(PATH, stack.v1(PATH, GROUP, handler_fn(|w, r| Box::pin(async move { /* ... */ }))));
+   // v2: the operation's `Class`, as `gateChain` composes it.
+   v2.get(PATH, stack.v2(PATH, V2Class::ProfileOptional, handler));
+   ```
+
+4. In the handler, read `silo_gate::mw::auth::get_claims(r)`, `get_profile_id(r)`, and
+   `r.extensions.get::<Arc<silo_store::access::Scope>>()`. Answer with `write_v1_json`, `write_v2_json`,
+   `write_capability`, `write_v1_denial`, or `write_problem`.
+5. Add the row to `CHAIN_ROWS` in `rust/conformance/src/plan.rs` and to `native-chain-traits.sh` if it has a
+   `rate_limited` or `demo_guarded` trait, then run `front-compare.sh` with `--only` set to the row's case ids.
+
+The front needs `SECRET_KEY` to read the signing secret, or rows behind a credential stay on Go, and
+`REDIS_URL` when `ratelimit.backend` is `redis`.
 
 ## Tests
 
@@ -58,7 +87,7 @@ network access registry, so the row reads as not ported instead of being guessed
 cd rust && cargo test -p silo-front -j 4
 ```
 
-`tests/gateway_differential.rs` needs `go` with the 1.26.7 toolchain for the real `internal/clientip`. To
+`tests/gateway_differential.rs` needs `go` with the 1.26.10 toolchain for the real `internal/clientip`. To
 also compare raw bytes with a running Go server:
 
 ```sh

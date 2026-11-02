@@ -28,7 +28,7 @@ use crate::frontend::{BrandingSource, WebDist};
 use crate::native::{Gate, NativeInputs, ServerIdentity, main_handler};
 use crate::origin::OriginLog;
 use crate::relay::ListenerCtx;
-use crate::rows::{Disposition, ROWS, Surface};
+use crate::rows::{ROWS, Surface, native_count};
 use crate::trust::{DEFAULT_TRUSTED_PROXIES, SETTING_TRUSTED_PROXIES, TrustList};
 
 /// How often the trusted list is re-read. Go reloads on a settings event; this polls.
@@ -86,8 +86,18 @@ pub struct FrontConfig {
     pub web_dist: Option<PathBuf>,
     /// `SILO_FRONT_ORIGIN_LOG`.
     pub origin_log: Option<PathBuf>,
+    /// `SECRET_KEY`: decrypts `auth.jwt_secret`. Without it the rows behind a credential stay on Go.
+    pub secret_key: Option<String>,
+    /// `REDIS_URL`: the limiter's counters, shared with Go. Without it they stay in this process.
+    pub redis_url: Option<String>,
     /// `SILO_FRONT_FORCE_GO`: comma-separated surfaces to send back to Go, or `all`.
     pub force_go: Vec<Surface>,
+}
+
+impl FrontConfig {
+    fn trusted_list(&self) -> String {
+        self.trusted_proxies.clone().unwrap_or_default()
+    }
 }
 
 /// Parses `SILO_FRONT_FORCE_GO`.
@@ -201,7 +211,19 @@ pub async fn start(cfg: FrontConfig) -> Result<Vec<(String, SocketAddr)>, String
     let mut inputs = NativeInputs {
         identity,
         spa: None,
+        stack: None,
     };
+    if let (Some(pool), Some(secret)) = (&pool, &cfg.secret_key) {
+        let stack = native::chain::build(
+            Arc::new(pool.clone()),
+            secret,
+            cfg.redis_url.as_deref(),
+            cfg.trusted_list(),
+        )
+        .await
+        .map_err(|e| format!("building the request chain: {e}"))?;
+        inputs.stack = Some(stack);
+    }
     match (&cfg.web_dist, &pool) {
         (Some(dir), Some(pool)) => {
             let dist = WebDist::load(dir)
@@ -230,10 +252,7 @@ pub async fn start(cfg: FrontConfig) -> Result<Vec<(String, SocketAddr)>, String
     };
     let distinct_sources = peer::distinct_sources_available().await;
 
-    let native_rows = ROWS
-        .iter()
-        .filter(|r| matches!(r.disposition, Disposition::Native(_)))
-        .count();
+    let native_rows = native_count();
     tracing::warn!(
         "TEST ONLY: this front is a conformance tool and must not serve users until the Go server is gone. It answers {native_rows} of {} declared rows natively and forwards the rest to Go.",
         ROWS.len()

@@ -1,19 +1,16 @@
 //! `internal/clientip`: resolves the real client IP from an HTTP request behind trusted reverse
 //! proxies, and the request scheme/host a trusted proxy asserted.
 //!
-//! Ported from `resolver.go`, `middleware.go`, and `config.go`. The HTTP middleware itself
-//! (`Middleware`, which calls [`Resolver::resolve`]/[`Resolver::request_scheme`]/
-//! [`Resolver::request_host`] once per request and stashes the results in the request context)
-//! is not ported here: `silo-gate` has no HTTP stack dependency yet (that is `silo-front`'s and
-//! `silo-http`'s layer, ported separately), so only the pure resolution logic — the part the
-//! critique (finding 2) calls the actual security boundary — is ported. A caller wires this the
-//! way Go's `clientip.Middleware` does: resolve the scheme and host from the *original*
-//! `RemoteAddr` before replacing it with the resolved client IP.
+//! Ported from `resolver.go`, `middleware.go`, and `config.go`, and checked against the real
+//! `clientip.Middleware` by `tests/clientip_differential.rs`. `silo-gate` has no HTTP stack
+//! dependency, so [`Resolver::middleware`] takes the request fields Go's `Middleware` reads
+//! ([`RequestFields`]) and returns what Go stores in the request context ([`RequestContext`]). The
+//! caller replaces its remote address with [`RequestContext::client_ip`] afterwards.
 
 use std::net::IpAddr;
 use std::sync::RwLock;
 
-use silo_gocompat::strings::equal_fold;
+use silo_gocompat::strings::{equal_fold, to_lower, trim_space};
 
 /// A parsed CIDR block, matching Go's `*net.IPNet` as `(*net.IPNet).Contains` compares it: an
 /// IPv4-mapped IPv6 address (`::ffff:a.b.c.d`) is normalized to IPv4 before comparison against an
@@ -27,63 +24,92 @@ pub enum IpNet {
 }
 
 impl IpNet {
-    /// `net.ParseCIDR`, keeping only the network (Go discards the host bits too, since
-    /// `ParseCIDR` returns `*IPNet` with the masked network address).
+    /// `net.ParseCIDR`, keeping only the network. Go masks with the parsed address's own bit
+    /// length, then `(*net.IPNet).Contains` looks at `IP.To4()`: an IPv4-mapped network with a prefix
+    /// of at least 96 therefore acts as an IPv4 network with `prefix - 96` bits, while a shorter
+    /// prefix leaves the masked network unmapped and acts as IPv6. A mask length follows Go's
+    /// `dtoi`: ASCII digits only, so `+8` is refused and `08` is accepted.
     pub fn parse(s: &str) -> Option<Self> {
         let (addr, len) = s.split_once('/')?;
-        let prefix_len: u8 = len.parse().ok()?;
-        match addr.parse::<IpAddr>().ok()? {
-            IpAddr::V4(ip) => {
+        if len.is_empty() || !len.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        let prefix_len: u32 = len.parse().ok()?;
+        match parse_ip(addr)? {
+            ParsedIp::V4(ip) => {
                 if prefix_len > 32 {
                     return None;
                 }
-                let mask = v4_mask(prefix_len);
+                let prefix_len = prefix_len as u8;
                 Some(Self::V4 {
-                    network: u32::from(ip) & mask,
+                    network: u32::from(ip) & v4_mask(prefix_len),
                     prefix_len,
                 })
             }
-            IpAddr::V6(ip) => {
+            ParsedIp::V6(ip) => {
                 if prefix_len > 128 {
                     return None;
                 }
-                let mask = v6_mask(prefix_len);
+                let prefix_len = prefix_len as u8;
+                let network = u128::from(ip) & v6_mask(prefix_len);
+                let masked = std::net::Ipv6Addr::from(network);
+                if let Some(v4) = masked.to_ipv4_mapped() {
+                    // `network` keeps its `::ffff:0:0` prefix only when prefix_len >= 96.
+                    return Some(Self::V4 {
+                        network: u32::from(v4),
+                        prefix_len: prefix_len - 96,
+                    });
+                }
                 Some(Self::V6 {
-                    network: u128::from(ip) & mask,
+                    network,
                     prefix_len,
                 })
             }
         }
     }
 
-    /// `(*net.IPNet).Contains`.
+    /// `(*net.IPNet).Contains`. Addresses from this module are already canonical, but `ip` is
+    /// public input, so an IPv4-mapped address is still treated as IPv4 here.
     pub fn contains(&self, ip: IpAddr) -> bool {
-        // Go's To4(): an IPv4-mapped IPv6 address is treated as IPv4 for comparison purposes.
-        let as_v4 = match ip {
-            IpAddr::V4(v4) => Some(v4),
-            IpAddr::V6(v6) => v6.to_ipv4_mapped(),
-        };
-        match (self, as_v4, ip) {
+        match (self, ip.to_canonical()) {
             (
                 Self::V4 {
                     network,
                     prefix_len,
                 },
-                Some(v4),
-                _,
+                IpAddr::V4(v4),
             ) => u32::from(v4) & v4_mask(*prefix_len) == *network,
             (
                 Self::V6 {
                     network,
                     prefix_len,
                 },
-                None,
                 IpAddr::V6(v6),
             ) => u128::from(v6) & v6_mask(*prefix_len) == *network,
             // Length mismatch (network is v4 but ip is real IPv6, or vice versa): no match.
             _ => false,
         }
     }
+}
+
+/// `net.ParseIP`'s result before Go's `To4` normalization: `IpNet::parse` needs the address family
+/// as written, because a mapped address parses as a 128-bit address with a 128-bit prefix.
+enum ParsedIp {
+    V4(std::net::Ipv4Addr),
+    V6(std::net::Ipv6Addr),
+}
+
+fn parse_ip(s: &str) -> Option<ParsedIp> {
+    match s.parse::<IpAddr>().ok()? {
+        IpAddr::V4(ip) => Some(ParsedIp::V4(ip)),
+        IpAddr::V6(ip) => Some(ParsedIp::V6(ip)),
+    }
+}
+
+/// `net.ParseIP`, canonicalized the way `net.IP.String` prints it: an IPv4-mapped address becomes
+/// its IPv4 form, so one client cannot hold two rate-limit keys.
+fn parse_canonical_ip(s: &str) -> Option<IpAddr> {
+    s.parse::<IpAddr>().ok().map(|ip| ip.to_canonical())
 }
 
 fn v4_mask(prefix_len: u8) -> u32 {
@@ -117,7 +143,7 @@ pub fn has_forwarding_headers(
 
 fn has_forwarded_entry(values: &[&str]) -> bool {
     values.iter().any(|v| {
-        !v.trim_matches(|c: char| c == ',' || c.is_whitespace())
+        !v.trim_matches(|c: char| c == ',' || silo_gocompat::unicode::is_space(c as u32))
             .is_empty()
     })
 }
@@ -131,6 +157,63 @@ pub struct Resolved {
     /// because entries to its left could not be attributed, or its headers named no usable
     /// address at all while still being present.
     pub forwarded_client_unknown: bool,
+}
+
+/// The request fields `clientip.Middleware` reads. Header slices hold every value of that header in
+/// request order, unsplit.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RequestFields<'a> {
+    pub remote_addr: &'a str,
+    pub host: &'a str,
+    pub tls: bool,
+    pub x_forwarded_for: &'a [&'a str],
+    pub x_real_ip: &'a [&'a str],
+    pub forwarded: &'a [&'a str],
+    pub x_forwarded_proto: &'a [&'a str],
+    pub x_forwarded_host: &'a [&'a str],
+    pub upgrade: &'a [&'a str],
+    pub connection: &'a [&'a str],
+}
+
+/// The values `clientip.Middleware` stores in the request context.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RequestContext {
+    /// `FromContext`, also the value Go writes to `r.RemoteAddr`.
+    pub client_ip: String,
+    /// `ForwardedClientUnknown`.
+    pub forwarded_client_unknown: bool,
+    /// The raw context value behind `RequestScheme`: empty means ambiguous proxy metadata.
+    pub scheme: String,
+    /// The raw context value behind `RequestHost`.
+    pub host: String,
+    /// `PeerFromContext`.
+    pub peer: String,
+}
+
+impl RequestContext {
+    /// `clientip.PeerIP`: the transport peer's IP, or empty when the peer is not an IP address.
+    pub fn peer_ip(&self) -> String {
+        let host = split_host_port(&self.peer).unwrap_or(&self.peer);
+        parse_canonical_ip(host)
+            .map(|ip| ip.to_string())
+            .unwrap_or_default()
+    }
+
+    /// `clientip.RequestHost`: an empty context value falls back to `r.Host`, which `Middleware` set
+    /// it from, so the context value already is the answer.
+    pub fn request_host(&self) -> &str {
+        &self.host
+    }
+
+    /// `clientip.RequestOrigin`: ambiguous proxy scheme metadata names the transport's scheme.
+    pub fn request_origin(&self, tls: bool) -> String {
+        let scheme = if self.scheme.is_empty() {
+            if tls { "https" } else { "http" }
+        } else {
+            self.scheme.as_str()
+        };
+        serialize_origin(scheme, &self.host)
+    }
 }
 
 /// `clientip.Resolver`. Thread-safe: the trusted list can be swapped live (`UpdateTrustedCIDRs`)
@@ -162,17 +245,18 @@ impl Resolver {
     }
 
     /// `Resolver.ClientIP`: resolved IP only, normalized to its canonical string form. `remote_addr`
-    /// is `r.RemoteAddr` (host or host:port, as the Go listener would report it); `x_forwarded_for`
-    /// and `x_real_ip` are every value of their respective repeated headers, in request order,
+    /// is `r.RemoteAddr`; the header slices hold every value of the header, in request order,
     /// unsplit.
     pub fn client_ip(
         &self,
         remote_addr: &str,
         x_forwarded_for: &[&str],
         x_real_ip: &[&str],
+        forwarded: &[&str],
     ) -> String {
         normalize(Some(
-            self.resolve(remote_addr, x_forwarded_for, x_real_ip).ip,
+            self.resolve(remote_addr, x_forwarded_for, x_real_ip, forwarded)
+                .ip,
         ))
     }
 
@@ -182,9 +266,10 @@ impl Resolver {
         remote_addr: &str,
         x_forwarded_for: &[&str],
         x_real_ip: &[&str],
+        forwarded: &[&str],
     ) -> Resolved {
         let remote_ip = parse_remote_addr(remote_addr);
-        let forwarding_present = has_forwarding_headers(x_forwarded_for, x_real_ip, &[]);
+        let forwarding_present = has_forwarding_headers(x_forwarded_for, x_real_ip, forwarded);
 
         if !self.is_trusted(remote_ip) {
             return Resolved {
@@ -193,15 +278,16 @@ impl Resolver {
             };
         }
 
-        if let Some((ip, forwarded)) = self.forwarded_for(x_forwarded_for) {
+        let (ip, unknown) = self.forwarded_for(x_forwarded_for);
+        if let Some(ip) = ip {
             return Resolved {
                 ip,
-                forwarded_client_unknown: forwarded,
+                forwarded_client_unknown: unknown,
             };
         }
 
         if x_real_ip.len() == 1
-            && let Some(parsed) = parse_forwarded_addr(x_real_ip[0].trim())
+            && let Some(parsed) = parse_forwarded_addr(trim_space(x_real_ip[0]))
         {
             return Resolved {
                 ip: parsed,
@@ -215,29 +301,59 @@ impl Resolver {
         }
     }
 
-    /// `Resolver.forwardedFor`: walks the X-Forwarded-For lines right to left. `lines` are the
-    /// header's values in request order (one per header line, each possibly comma-separated).
-    fn forwarded_for(&self, lines: &[&str]) -> Option<(IpAddr, bool)> {
+    /// `Resolver.forwardedFor`: walks the X-Forwarded-For lines right to left. It returns `None` for
+    /// the address when the peer named no address, including when the rightmost entry is junk, so
+    /// `resolve` falls through to `X-Real-IP` and then the peer.
+    fn forwarded_for(&self, lines: &[&str]) -> (Option<IpAddr>, bool) {
         let mut last: Option<IpAddr> = None;
         for i in (0..lines.len()).rev() {
             let entries: Vec<&str> = lines[i].split(',').collect();
             for j in (0..entries.len()).rev() {
-                let entry = entries[j].trim();
+                let entry = trim_space(entries[j]);
                 if entry.is_empty() {
                     continue;
                 }
                 let Some(ip) = parse_forwarded_addr(entry) else {
-                    return Some((last.unwrap_or(IpAddr::from([0, 0, 0, 0])), true));
+                    return (last, true);
                 };
                 if !self.is_trusted(ip) {
                     let forwarded =
                         has_forwarded_entry(&entries[..j]) || has_forwarded_entry(&lines[..i]);
-                    return Some((ip, forwarded));
+                    return (Some(ip), forwarded);
                 }
                 last = Some(ip);
             }
         }
-        last.map(|ip| (ip, false))
+        (last, false)
+    }
+
+    /// `clientip.Middleware`, as one call: what Go stores in the request context, with scheme and
+    /// host computed from the original peer before the client IP replaces it.
+    pub fn middleware(&self, request: &RequestFields<'_>) -> RequestContext {
+        let websocket = is_websocket_upgrade(
+            request.upgrade.first().copied().unwrap_or(""),
+            request.connection,
+        );
+        let scheme = self.request_scheme(
+            request.remote_addr,
+            request.tls,
+            request.x_forwarded_proto,
+            websocket,
+        );
+        let host = self.request_host(request.remote_addr, request.host, request.x_forwarded_host);
+        let resolved = self.resolve(
+            request.remote_addr,
+            request.x_forwarded_for,
+            request.x_real_ip,
+            request.forwarded,
+        );
+        RequestContext {
+            client_ip: normalize(Some(resolved.ip)),
+            forwarded_client_unknown: resolved.forwarded_client_unknown,
+            scheme,
+            host,
+            peer: request.remote_addr.to_owned(),
+        }
     }
 
     /// `Resolver.peerTrusted`: whether the transport peer of `remote_addr` is trusted. `remote_addr`
@@ -245,10 +361,7 @@ impl Resolver {
     /// before `Middleware` overwrites it.
     pub fn peer_trusted(&self, remote_addr: &str) -> bool {
         let host = split_host_port(remote_addr).unwrap_or(remote_addr);
-        match host.parse::<IpAddr>() {
-            Ok(ip) => self.is_trusted(ip),
-            Err(_) => false,
-        }
+        parse_canonical_ip(host).is_some_and(|ip| self.is_trusted(ip))
     }
 
     /// `Resolver.requestScheme`. `tls` is whether the transport connection used TLS.
@@ -293,7 +406,7 @@ impl Resolver {
         if x_forwarded_host.len() != 1 {
             return host_header.to_owned();
         }
-        let host = x_forwarded_host[0].trim();
+        let host = trim_space(x_forwarded_host[0]);
         if host.is_empty() || host.contains([',', '/', '?', '#', '@', ' ', '\t']) {
             return host_header.to_owned();
         }
@@ -303,58 +416,51 @@ impl Resolver {
 
 /// `clientip.isWebSocketUpgrade`.
 pub fn is_websocket_upgrade(upgrade_header: &str, connection_values: &[&str]) -> bool {
-    if !equal_fold(upgrade_header.trim(), "websocket") {
+    if !equal_fold(trim_space(upgrade_header), "websocket") {
         return false;
     }
     connection_values.iter().any(|value| {
         value
             .split(',')
-            .any(|token| equal_fold(token.trim(), "upgrade"))
+            .any(|token| equal_fold(trim_space(token), "upgrade"))
     })
 }
 
 /// `clientip.SerializeOrigin`.
 pub fn serialize_origin(scheme: &str, host: &str) -> String {
-    let scheme = scheme.trim().to_ascii_lowercase();
-    let host = host.trim();
-    // url.URL{Host: host}.Hostname()/.Port(): split on the last ':' unless the host is a
-    // bracketed IPv6 literal, in which case the brackets are stripped for Hostname() and the
-    // trailing :port (if any) is Port().
-    let (mut name, port) = split_host_port_go(host);
-    name = name.to_ascii_lowercase();
+    let scheme = to_lower(trim_space(scheme));
+    let (name, port) = url_split_host_port(trim_space(host));
+    let mut name = to_lower(name);
     let port = if (scheme == "https" && port == "443") || (scheme == "http" && port == "80") {
-        String::new()
+        ""
     } else {
         port
     };
     if name.contains(':') {
         name = format!("[{name}]");
     }
-    let mut out = format!("{scheme}://{name}");
-    if !port.is_empty() {
-        out.push(':');
-        out.push_str(&port);
+    if port.is_empty() {
+        format!("{scheme}://{name}")
+    } else {
+        format!("{scheme}://{name}:{port}")
     }
-    out
 }
 
-/// Mirrors `net/url.URL{Host: host}.Hostname()`/`.Port()` closely enough for [`serialize_origin`]:
-/// a bracketed IPv6 literal's brackets are stripped for the hostname, and a trailing `:port` (if
-/// any, after removing a bracketed literal) becomes the port.
-fn split_host_port_go(host: &str) -> (String, String) {
-    if let Some(rest) = host.strip_prefix('[') {
-        if let Some(end) = rest.find(']') {
-            let hostname = &rest[..end];
-            let after = &rest[end + 1..];
-            let port = after.strip_prefix(':').unwrap_or("");
-            return (hostname.to_owned(), port.to_owned());
+/// `net/url`'s private `splitHostPort`, behind `URL.Hostname` and `URL.Port`.
+fn url_split_host_port(host_port: &str) -> (&str, &str) {
+    let mut host = host_port;
+    let mut port = "";
+    if let Some(colon) = host.rfind(':') {
+        let candidate = &host[colon + 1..];
+        if candidate.bytes().all(|b| b.is_ascii_digit()) {
+            port = candidate;
+            host = &host[..colon];
         }
-        return (host.to_owned(), String::new());
     }
-    match host.rfind(':') {
-        Some(i) if !host[i + 1..].contains(':') => (host[..i].to_owned(), host[i + 1..].to_owned()),
-        _ => (host.to_owned(), String::new()),
+    if host.len() >= 2 && host.starts_with('[') && host.ends_with(']') {
+        host = &host[1..host.len() - 1];
     }
+    (host, port)
 }
 
 /// `clientip.parseForwardedAddr`.
@@ -370,24 +476,27 @@ fn parse_forwarded_addr(addr: &str) -> Option<IpAddr> {
     parse_unzoned_ip(unbracketed)
 }
 
-/// `net.SplitHostPort`, as far as the two forms `clientip` ever feeds it need: `host:port` and
-/// `[host]:port`. Returns `None` when there is no `:port` suffix to split off (bare IP, or an
-/// unterminated bracket) — the caller then tries the whole string as a bare address.
-fn split_host_port(addr: &str) -> Option<&str> {
-    if let Some(rest) = addr.strip_prefix('[') {
-        let end = rest.find(']')?;
-        let after = &rest[end + 1..];
-        if after.strip_prefix(':').is_some() {
-            return Some(&rest[..end]);
+/// `net.SplitHostPort`, returning the host; `None` where Go returns an error. A port of Go's control
+/// flow, because the error cases decide whether the caller retries the whole string as an address.
+fn split_host_port(hostport: &str) -> Option<&str> {
+    let colon = hostport.rfind(':')?;
+    let (host, after_open, after_close) = if hostport.starts_with('[') {
+        let end = hostport.find(']')?;
+        if end + 1 != colon {
+            return None;
         }
+        (&hostport[1..end], 1, end + 1)
+    } else {
+        let host = &hostport[..colon];
+        if host.contains(':') {
+            return None;
+        }
+        (host, 0, 0)
+    };
+    if hostport[after_open..].contains('[') || hostport[after_close..].contains(']') {
         return None;
     }
-    let colon = addr.rfind(':')?;
-    if addr[..colon].contains(':') {
-        // More than one colon outside brackets: not host:port (an unbracketed IPv6 literal).
-        return None;
-    }
-    Some(&addr[..colon])
+    Some(host)
 }
 
 /// `clientip.parseUnzonedIP`: parses an IP, dropping an IPv6 zone (`fe80::1%eth0`).
@@ -396,20 +505,20 @@ fn parse_unzoned_ip(addr: &str) -> Option<IpAddr> {
         Some(i) if addr[..i].contains(':') => &addr[..i],
         _ => addr,
     };
-    addr.parse().ok()
+    parse_canonical_ip(addr)
 }
 
-/// `clientip.parseRemoteAddr`: never fails — an unparsable address becomes `0.0.0.0`, matching
-/// Go's `net.IPv4zero` fallback.
+/// `clientip.parseRemoteAddr`: never fails. An unparsable address becomes `0.0.0.0`, Go's
+/// `net.IPv4zero` fallback.
 fn parse_remote_addr(addr: &str) -> IpAddr {
     let host = split_host_port(addr).unwrap_or(addr);
-    host.parse().unwrap_or(IpAddr::from([0, 0, 0, 0]))
+    parse_canonical_ip(host).unwrap_or(IpAddr::from([0, 0, 0, 0]))
 }
 
 /// `clientip.normalize`.
 pub fn normalize(ip: Option<IpAddr>) -> String {
     match ip {
-        Some(ip) => ip.to_string(),
+        Some(ip) => ip.to_canonical().to_string(),
         None => "0.0.0.0".to_owned(),
     }
 }
@@ -469,7 +578,7 @@ mod tests {
     #[test]
     fn untrusted_peer_ignores_forwarding_headers() {
         let r = resolver("10.0.0.0/8");
-        let resolved = r.resolve("8.8.8.8:1234", &["1.2.3.4"], &[]);
+        let resolved = r.resolve("8.8.8.8:1234", &["1.2.3.4"], &[], &[]);
         assert_eq!(resolved.ip, "8.8.8.8".parse::<IpAddr>().unwrap());
         assert!(resolved.forwarded_client_unknown);
     }
@@ -477,7 +586,7 @@ mod tests {
     #[test]
     fn trusted_peer_uses_rightmost_untrusted_xff_entry() {
         let r = resolver("10.0.0.0/8");
-        let resolved = r.resolve("10.0.0.1:1234", &["1.2.3.4, 10.0.0.2"], &[]);
+        let resolved = r.resolve("10.0.0.1:1234", &["1.2.3.4, 10.0.0.2"], &[], &[]);
         assert_eq!(resolved.ip, "1.2.3.4".parse::<IpAddr>().unwrap());
         assert!(!resolved.forwarded_client_unknown);
     }
@@ -485,14 +594,14 @@ mod tests {
     #[test]
     fn trusted_peer_falls_back_to_x_real_ip() {
         let r = resolver("10.0.0.0/8");
-        let resolved = r.resolve("10.0.0.1:1234", &[], &["1.2.3.4"]);
+        let resolved = r.resolve("10.0.0.1:1234", &[], &["1.2.3.4"], &[]);
         assert_eq!(resolved.ip, "1.2.3.4".parse::<IpAddr>().unwrap());
     }
 
     #[test]
     fn x_real_ip_never_overrides_a_present_xff_entry() {
         let r = resolver("10.0.0.0/8");
-        let resolved = r.resolve("10.0.0.1:1234", &["10.0.0.2"], &["9.9.9.9"]);
+        let resolved = r.resolve("10.0.0.1:1234", &["10.0.0.2"], &["9.9.9.9"], &[]);
         // All XFF entries trusted and no untrusted hop: leftmost (only) trusted entry is reported.
         assert_eq!(resolved.ip, "10.0.0.2".parse::<IpAddr>().unwrap());
     }

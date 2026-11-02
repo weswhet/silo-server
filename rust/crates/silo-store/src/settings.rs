@@ -61,6 +61,7 @@ type Result<T> = std::result::Result<T, Error>;
 
 /// `catalog.ServerSettingsRepo`: raw CRUD access to the `server_settings` table. No encryption; see
 /// [`EncryptedSettingsRepo`] for the decorator Go always wires in front of this in production.
+#[derive(Clone)]
 pub struct ServerSettingsRepo {
     pool: Arc<Pool>,
 }

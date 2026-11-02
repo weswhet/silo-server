@@ -158,3 +158,116 @@ async fn read_first_message_tls(
     whole.extend_from_slice(&rest);
     whole
 }
+
+/// Answers the SSLRequest with `N`, then expects the plaintext startup message on a second connection:
+/// pgx's `prefer` falls back when TLS fails, so a server without TLS still works.
+#[tokio::test(flavor = "multi_thread")]
+async fn prefer_falls_back_to_plaintext_when_the_server_has_no_tls() {
+    let (listener, port) = fake_server().await;
+    let server = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let first = read_first_message(&mut stream).await;
+        assert!(is_ssl_request(&first));
+        stream.write_all(b"N").await.unwrap();
+        drop(stream);
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let first = read_first_message(&mut stream).await;
+        assert!(!is_ssl_request(&first));
+        assert!(startup_message_contains_user(&first, "fallback"));
+    });
+    let url =
+        format!("postgres://fallback:pw@127.0.0.1:{port}/db?sslmode=prefer&connect_timeout=5");
+    let result = tokio::time::timeout(
+        Duration::from_secs(10),
+        Pool::connect(PoolConfig::parse(&url).unwrap()),
+    )
+    .await
+    .expect("connect must not hang");
+    assert!(result.is_err());
+    tokio::time::timeout(Duration::from_secs(5), server)
+        .await
+        .expect("server task should finish")
+        .expect("server task should not panic");
+}
+
+fn fatal_auth_error(code: &str) -> Vec<u8> {
+    let mut body = Vec::new();
+    for (field, value) in [(b'S', "FATAL"), (b'C', code), (b'M', "refused")] {
+        body.push(field);
+        body.extend_from_slice(value.as_bytes());
+        body.push(0);
+    }
+    body.push(0);
+    let mut message = vec![b'E'];
+    message.extend_from_slice(&(body.len() as i32 + 4).to_be_bytes());
+    message.extend_from_slice(&body);
+    message
+}
+
+/// `allow` tries plaintext first. A wrong password must stop there, as in pgconn's `connectPreferred`,
+/// and any other failure goes on to TLS.
+#[tokio::test(flavor = "multi_thread")]
+async fn allow_stops_on_a_wrong_password_and_otherwise_tries_tls() {
+    for (code, expects_second_attempt) in [
+        ("28P01", false),
+        ("3D000", false),
+        ("42501", false),
+        ("53300", true),
+    ] {
+        let (listener, port) = fake_server().await;
+        let reply = fatal_auth_error(code);
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let first = read_first_message(&mut stream).await;
+            assert!(!is_ssl_request(&first), "allow starts in plaintext");
+            stream.write_all(&reply).await.unwrap();
+            drop(stream);
+            match tokio::time::timeout(Duration::from_millis(1500), listener.accept()).await {
+                Ok(Ok((mut stream, _))) => {
+                    assert!(is_ssl_request(&read_first_message(&mut stream).await));
+                    stream.write_all(b"N").await.unwrap();
+                    true
+                }
+                _ => false,
+            }
+        });
+        let url = format!("postgres://u:pw@127.0.0.1:{port}/db?sslmode=allow&connect_timeout=5");
+        let result = Pool::connect(PoolConfig::parse(&url).unwrap()).await;
+        assert!(result.is_err(), "{code}");
+        assert_eq!(server.await.unwrap(), expects_second_attempt, "{code}");
+    }
+}
+
+/// `sslnegotiation=direct`: no SSLRequest, a TLS ClientHello offering ALPN `postgresql` as the first
+/// bytes, and no plaintext fallback, because pgx upgrades `prefer` to `require` here.
+#[tokio::test(flavor = "multi_thread")]
+async fn direct_negotiation_sends_tls_first_and_never_falls_back() {
+    let (listener, port) = fake_server().await;
+    let server = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let mut hello = vec![0u8; 512];
+        let n = stream.read(&mut hello).await.unwrap();
+        hello.truncate(n);
+        assert_eq!(
+            hello[0], 0x16,
+            "the first byte must be a TLS handshake record"
+        );
+        assert!(
+            hello.windows(10).any(|w| w == b"postgresql"),
+            "the ClientHello must offer ALPN postgresql"
+        );
+        drop(stream);
+        tokio::time::timeout(Duration::from_millis(1500), listener.accept())
+            .await
+            .is_err()
+    });
+    let url = format!(
+        "postgres://u:pw@127.0.0.1:{port}/db?sslmode=prefer&sslnegotiation=direct&connect_timeout=5"
+    );
+    assert!(
+        Pool::connect(PoolConfig::parse(&url).unwrap())
+            .await
+            .is_err()
+    );
+    assert!(server.await.unwrap(), "direct must not retry in plaintext");
+}

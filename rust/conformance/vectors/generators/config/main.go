@@ -3,8 +3,8 @@
 // Command config writes the silo-config differential vectors and its language tables from the real
 // Go packages. Run it from the repository root with the toolchain the server ships with:
 //
-//	GOTOOLCHAIN=go1.26.7 go run -tags silo_config_vectors ./rust/conformance/vectors/generators/config/extract
-//	GOTOOLCHAIN=go1.26.7 TZ=UTC go run -tags silo_config_vectors ./rust/conformance/vectors/generators/config
+//	GOTOOLCHAIN=go1.26.10 go run -tags silo_config_vectors ./rust/conformance/vectors/generators/config/extract
+//	GOTOOLCHAIN=go1.26.10 TZ=UTC go run -tags silo_config_vectors ./rust/conformance/vectors/generators/config
 //
 // Packages it cannot import (cmd/silo, and those that need libvips through cgo) come from the
 // extracted subpackages, which hold their real source. The output is deterministic.

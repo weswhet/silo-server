@@ -251,6 +251,7 @@ fn world() -> World {
             source: None,
             host: None,
             settle_on: None,
+            wait_ms: 0,
             skip_body: None,
             timeout_secs: 5,
             sort_key: String::new(),

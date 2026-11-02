@@ -17,6 +17,8 @@ Test-only front. Answers the rows ported so far and relays everything else to a 
 Environment:
   DATABASE_URL           the Go server's database; read for the trust list, health identity, and branding
   SILO_TRUSTED_PROXIES   the trusted list when there is no DATABASE_URL
+  SECRET_KEY             decrypts the signing secret; without it rows behind a credential stay on Go
+  REDIS_URL              the Go server's Redis, for shared rate limit counters
   SILO_FRONT_WEB_DIST    the web build output the Go server embeds; without it the SPA stays on Go
   SILO_FRONT_ORIGIN_LOG  file to append one JSON line per request to, naming who answered it
   SILO_FRONT_FORCE_GO    comma-separated surfaces to send back to Go (api_v1, api_v2, root), or all
@@ -47,6 +49,8 @@ fn config() -> Result<FrontConfig, String> {
         trusted_proxies: non_empty_env("SILO_TRUSTED_PROXIES"),
         web_dist: non_empty_env("SILO_FRONT_WEB_DIST").map(PathBuf::from),
         origin_log: non_empty_env("SILO_FRONT_ORIGIN_LOG").map(PathBuf::from),
+        secret_key: non_empty_env("SECRET_KEY"),
+        redis_url: non_empty_env("REDIS_URL"),
         force_go: non_empty_env("SILO_FRONT_FORCE_GO")
             .map_or_else(|| Ok(Vec::new()), |raw| parse_force_go(&raw))?,
     })
@@ -69,6 +73,8 @@ fn main() -> ExitCode {
         .init();
 
     let runtime = match tokio::runtime::Builder::new_multi_thread()
+        // Tokio's 2 MiB default overflows on a JSON value at Go's 10,000-level limit, a 60 KB body.
+        .thread_stack_size(silo_gocompat::json::VALUE_STACK_BYTES)
         .enable_all()
         .build()
     {

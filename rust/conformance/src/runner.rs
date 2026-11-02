@@ -98,6 +98,9 @@ pub struct CaseResult {
     /// A feed rule names this route, so its contents do not count as compared.
     #[serde(default)]
     pub feed_relaxed: bool,
+    /// What each feed on the reference side held, for the fault check.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub feed_reference: BTreeMap<String, crate::normalize::FeedSummary>,
     /// False when both sides failed at the transport level: no evidence either way.
     pub exercised: bool,
     /// The start of an error answer from the reference, to explain a shallow route.
@@ -584,6 +587,7 @@ impl<'a> Runner<'a> {
             self.settle(path, &base_r, &base_c);
         }
         thread::sleep(self.cfg.pace);
+        thread::sleep(std::time::Duration::from_millis(case.wait_ms));
         let tag: Vec<(Side, (String, String))> = if self.cfg.tag_cases && record {
             vec![(
                 Side::Candidate,
@@ -656,6 +660,7 @@ impl<'a> Runner<'a> {
                 body_compared: outcome.body_compared,
                 body_skip_reason: outcome.body_skip_reason,
                 feed_relaxed: outcome.feed_relaxed,
+                feed_reference: outcome.feed_reference,
                 exercised: !(r.error.is_some() && c.error.is_some()),
                 reference_error: (r.status >= 400).then(|| {
                     let text = String::from_utf8_lossy(&r.body);

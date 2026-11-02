@@ -12,7 +12,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use futures_util::StreamExt;
 use redis::AsyncCommands;
@@ -76,10 +76,11 @@ pub fn new_event_bus(cfg: &RedisConfig) -> Box<dyn EventBus> {
     Box::new(RedisEventBus::new(cfg))
 }
 
-/// How often a Sentinel-following bus re-asks Sentinel for the master address, so a promotion is
-/// noticed even though this crate's Redis client has no raw-command access to the dedicated pub/sub
-/// connection to ping it the way `internal/cache/redis.go`'s `keepAlive` does. `pingInterval`.
-const SENTINEL_RECHECK_INTERVAL: Duration = Duration::from_secs(3);
+/// `pingInterval`: how often a Sentinel subscription pings its server.
+const SENTINEL_PING_INTERVAL: Duration = Duration::from_secs(3);
+/// `silenceLimit`: a Sentinel subscription leaves a server silent for this long and redials, which
+/// asks Sentinel for the current master again.
+const SENTINEL_SILENCE_LIMIT: Duration = Duration::from_secs(10);
 /// Backoff between reconnect attempts after a subscription's connection ends, matching the order of
 /// magnitude of Go's `redial`'s 100ms retry without hot-looping on a down Redis.
 const RECONNECT_BACKOFF: Duration = Duration::from_millis(250);
@@ -188,11 +189,11 @@ impl EventBus for RedisEventBus {
     }
 }
 
-/// Delivers messages on one subscription until the bus closes. A dropped connection (a break, or a
-/// Sentinel promotion this loop notices on its next recheck) is redialed and resubscribed, so the
-/// caller's `subscribe` call stays effective for the bus's whole lifetime, matching go-redis's own
-/// automatic reconnect for a standalone subscription and this crate's substitute for Go's
-/// ping-and-deadline silent-master detection in Sentinel mode (`listenToMaster`/`keepAlive`).
+/// Delivers messages on one subscription until the bus closes. A connection that ended is redialed
+/// and resubscribed, so the caller's `subscribe` stays effective for the bus's lifetime. In Sentinel
+/// mode this is `listenToMaster` and `keepAlive`: quiet periods keep the same connection, because a
+/// redial could lose a message published between the two subscriptions. Only 10 seconds without any
+/// reply, including pongs, leaves the connection.
 async fn run_subscription(
     connector: Connector,
     channel: String,
@@ -201,19 +202,21 @@ async fn run_subscription(
     closed: Arc<AtomicBool>,
     is_sentinel: bool,
 ) {
+    let mut last_heard = Instant::now();
     loop {
         if closed.load(Ordering::SeqCst) {
             return;
         }
         let mut stream = pubsub.on_message();
         let next = if is_sentinel {
-            tokio::time::timeout(SENTINEL_RECHECK_INTERVAL, stream.next()).await
+            tokio::time::timeout(SENTINEL_PING_INTERVAL, stream.next()).await
         } else {
             Ok(stream.next().await)
         };
+        drop(stream);
         match next {
             Ok(Some(msg)) => {
-                drop(stream);
+                last_heard = Instant::now();
                 let Ok(payload) = msg.get_payload::<String>() else {
                     continue;
                 };
@@ -222,18 +225,25 @@ async fn run_subscription(
                 }
             }
             Ok(None) => {
-                drop(stream);
                 // The connection ended. Redial (re-resolving the master, for Sentinel) and
                 // resubscribe.
                 if !redial(&connector, &channel, &mut pubsub, &closed).await {
                     return;
                 }
+                last_heard = Instant::now();
             }
             Err(_elapsed) => {
-                drop(stream);
-                // Sentinel recheck tick: see whether the master moved.
-                if !redial_if_moved(&connector, &channel, &mut pubsub, &closed).await {
-                    return;
+                let budget = SENTINEL_SILENCE_LIMIT.saturating_sub(last_heard.elapsed());
+                // `redis` 0.27 has no PING on a pub/sub connection. Repeating SUBSCRIBE for a channel
+                // this connection already holds is the same round trip, and changes nothing.
+                let pong = tokio::time::timeout(budget, pubsub.subscribe(&channel)).await;
+                if matches!(pong, Ok(Ok(()))) {
+                    last_heard = Instant::now();
+                } else if last_heard.elapsed() >= SENTINEL_SILENCE_LIMIT {
+                    if !redial(&connector, &channel, &mut pubsub, &closed).await {
+                        return;
+                    }
+                    last_heard = Instant::now();
                 }
             }
         }
@@ -258,19 +268,6 @@ async fn redial(
             Err(_) => tokio::time::sleep(RECONNECT_BACKOFF).await,
         }
     }
-}
-
-async fn redial_if_moved(
-    connector: &Connector,
-    channel: &str,
-    pubsub: &mut redis::aio::PubSub,
-    closed: &Arc<AtomicBool>,
-) -> bool {
-    // This crate's pub/sub type has no raw-command access to ping the existing connection (see the
-    // module doc), so a Sentinel bus redials unconditionally on every recheck tick instead of only
-    // on a detected promotion. The tick interval (3s) bounds how stale a connection can go
-    // unnoticed, trading a small, harmless resubscribe for certainty.
-    redial(connector, channel, pubsub, closed).await
 }
 
 async fn connect_and_subscribe(
