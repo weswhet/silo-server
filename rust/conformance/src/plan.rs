@@ -43,12 +43,18 @@ type AuthVariant = (
 const JF_AUTH_VARIANTS: &[AuthVariant] = &[
     (
         "authorization_mediabrowser",
-        &[("Authorization", "MediaBrowser Client=\"c\", Device=\"d\", DeviceId=\"conformance-1\", Version=\"1.0\", Token=\"${token}\"")],
+        &[(
+            "Authorization",
+            "MediaBrowser Client=\"c\", Device=\"d\", DeviceId=\"conformance-1\", Version=\"1.0\", Token=\"${token}\"",
+        )],
         &[],
     ),
     (
         "lowercase_scheme_and_key",
-        &[("X-Emby-Authorization", "mediabrowser client=\"c\", device=\"d\", deviceid=\"conformance-1\", version=\"1.0\", token=\"${token}\"")],
+        &[(
+            "X-Emby-Authorization",
+            "mediabrowser client=\"c\", device=\"d\", deviceid=\"conformance-1\", version=\"1.0\", token=\"${token}\"",
+        )],
         &[],
     ),
     (
@@ -56,14 +62,30 @@ const JF_AUTH_VARIANTS: &[AuthVariant] = &[
         &[("X-Emby-Authorization", "MEDIABROWSER TOKEN=${token}")],
         &[],
     ),
-    ("lowercase_bearer", &[("Authorization", "bearer ${token}")], &[]),
-    ("uppercase_bearer", &[("X-Emby-Authorization", "BEARER ${token}")], &[]),
+    (
+        "lowercase_bearer",
+        &[("Authorization", "bearer ${token}")],
+        &[],
+    ),
+    (
+        "uppercase_bearer",
+        &[("X-Emby-Authorization", "BEARER ${token}")],
+        &[],
+    ),
     ("x_emby_token", &[("X-Emby-Token", "${token}")], &[]),
-    ("x_mediabrowser_token", &[("X-MediaBrowser-Token", "${token}")], &[]),
+    (
+        "x_mediabrowser_token",
+        &[("X-MediaBrowser-Token", "${token}")],
+        &[],
+    ),
     ("query_api_key", &[], &[("api_key", "${token}")]),
     ("query_apikey", &[], &[("ApiKey", "${token}")]),
     ("query_uppercase_api_key", &[], &[("API_KEY", "${token}")]),
-    ("bad_token", &[("X-Emby-Token", "conformance-not-a-token")], &[]),
+    (
+        "bad_token",
+        &[("X-Emby-Token", "conformance-not-a-token")],
+        &[],
+    ),
     (
         "bad_authorization_good_token_header",
         &[
@@ -427,6 +449,10 @@ pub fn build(src: &Sources) -> Plan {
     add_doc_examples(&mut b);
     add_peer_cases(&mut b);
     crate::settings_flows::add(&mut b);
+    crate::notification_flows::add(&mut b);
+    crate::personal_flows::add(&mut b);
+    crate::collection_flows::add(&mut b);
+    crate::request_flows::add(&mut b);
     crate::auth_flows::add(&mut b);
     let mut plan = Plan {
         cases: std::mem::take(&mut b.cases),
@@ -780,6 +806,94 @@ fn add_doc_examples(b: &mut Builder) {
 const PUBLIC_V2_ROWS: &[&str] = &["/api/v2/openapi.json", "/api/v2/auth/device/capability"];
 
 const CHAIN_ROWS: &[(Surface, &str, bool)] = &[
+    (Surface::ApiV1, "/api/v1/notifications/", true),
+    (Surface::ApiV1, "/api/v1/notifications/sync", true),
+    (Surface::ApiV1, "/api/v1/notifications/unread-count", true),
+    (Surface::ApiV1, "/api/v1/notifications/capability", true),
+    (Surface::ApiV1, "/api/v1/notifications/preferences", true),
+    (
+        Surface::ApiV1,
+        "/api/v1/notifications/email-preferences",
+        true,
+    ),
+    (
+        Surface::ApiV1,
+        "/api/v1/notifications/discord-preferences",
+        true,
+    ),
+    (Surface::ApiV1, "/api/v1/admin/stats", true),
+    (Surface::ApiV1, "/api/v1/admin/stats/downloads", true),
+    (
+        Surface::ApiV1,
+        "/api/v1/admin/stats/playback-activity",
+        true,
+    ),
+    (Surface::ApiV1, "/api/v1/admin/stats/timeseries", true),
+    (Surface::ApiV1, "/api/v1/admin/stats/top-activity", true),
+    (Surface::ApiV2, "/api/v2/notifications", true),
+    (Surface::ApiV2, "/api/v2/notifications/sync", true),
+    (Surface::ApiV2, "/api/v2/notifications/unread-count", true),
+    (Surface::ApiV2, "/api/v2/notifications/capabilities", true),
+    (Surface::ApiV2, "/api/v2/notifications/preferences", true),
+    (
+        Surface::ApiV2,
+        "/api/v2/notifications/email-preferences",
+        true,
+    ),
+    (
+        Surface::ApiV2,
+        "/api/v2/notifications/discord-preferences",
+        true,
+    ),
+    (Surface::ApiV2, "/api/v2/admin/stats", true),
+    (Surface::ApiV2, "/api/v2/admin/stats/api-clients", true),
+    (Surface::ApiV2, "/api/v2/admin/stats/downloads", true),
+    (
+        Surface::ApiV2,
+        "/api/v2/admin/stats/playback-activity",
+        true,
+    ),
+    (Surface::ApiV2, "/api/v2/admin/stats/timeseries", true),
+    (Surface::ApiV2, "/api/v2/admin/stats/top-activity", true),
+    (Surface::ApiV2, "/api/v2/admin/catalog/capabilities", true),
+    (Surface::ApiV2, "/api/v2/catalog/search/capabilities", true),
+    (Surface::ApiV1, "/api/v1/requests/mine", true),
+    (Surface::ApiV1, "/api/v1/admin/requests", true),
+    (Surface::ApiV1, "/api/v1/admin/request-integrations", true),
+    (Surface::ApiV2, "/api/v2/requests/mine", true),
+    (Surface::ApiV2, "/api/v2/requests/status", true),
+    (Surface::ApiV2, "/api/v2/admin/requests", true),
+    (Surface::ApiV2, "/api/v2/admin/requests/counts", true),
+    (Surface::ApiV2, "/api/v2/admin/request-routes", true),
+    (Surface::ApiV2, "/api/v2/admin/request-integrations", true),
+    (
+        Surface::ApiV2,
+        "/api/v2/admin/libraries/{library_id}/collection-groups",
+        true,
+    ),
+    (
+        Surface::ApiV2,
+        "/api/v2/admin/libraries/{library_id}/collection-groups/order",
+        true,
+    ),
+    (Surface::ApiV1, "/api/v1/collections/capabilities", true),
+    (Surface::ApiV1, "/api/v1/collections/templates", true),
+    (Surface::ApiV1, "/api/v1/admin/collections/templates", true),
+    (
+        Surface::ApiV1,
+        "/api/v1/admin/collections/template-bundles",
+        true,
+    ),
+    (Surface::ApiV2, "/api/v2/collections/capabilities", true),
+    (Surface::ApiV2, "/api/v2/collections/templates", true),
+    (Surface::ApiV2, "/api/v2/collections/groups/order", true),
+    (Surface::ApiV2, "/api/v2/collections/order", true),
+    (Surface::ApiV2, "/api/v2/admin/collections/templates", true),
+    (
+        Surface::ApiV2,
+        "/api/v2/admin/collections/template-bundles",
+        true,
+    ),
     (Surface::ApiV1, "/api/v1/auth/me", false),
     (Surface::ApiV1, "/api/v1/auth/account/capability", true),
     (Surface::ApiV1, "/api/v1/images/capability", true),
@@ -853,6 +967,16 @@ const CHAIN_ROWS: &[(Surface, &str, bool)] = &[
     (Surface::ApiV2, "/api/v2/library-playback-prefs", true),
     (Surface::ApiV2, "/api/v2/library/{id}/layout", true),
     (Surface::ApiV2, "/api/v2/user/libraries", true),
+    (Surface::ApiV1, "/api/v1/ratings/", true),
+    (Surface::ApiV1, "/api/v1/progress/", true),
+    (Surface::ApiV1, "/api/v1/devices/", true),
+    (Surface::ApiV2, "/api/v2/ratings", true),
+    (Surface::ApiV2, "/api/v2/progress", true),
+    (Surface::ApiV2, "/api/v2/devices", true),
+    (Surface::ApiV2, "/api/v2/capabilities/personal-lists", true),
+    (Surface::ApiV2, "/api/v2/capabilities/not-interested", true),
+    (Surface::ApiV2, "/api/v2/progress/capabilities", true),
+    (Surface::ApiV2, "/api/v2/home/capabilities", true),
 ];
 
 /// `queryGuard`, Huma's unknown-parameter refusal, and the v2 representation guards.

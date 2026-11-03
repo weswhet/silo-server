@@ -40,5 +40,6 @@ pub mod access;
 pub mod blobstore;
 pub mod catalog;
 pub mod rating;
+pub mod requests;
 pub mod settings;
 pub mod userstore;

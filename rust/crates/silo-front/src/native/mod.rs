@@ -9,13 +9,20 @@
 
 pub mod account;
 pub mod admin_settings;
+pub mod admin_stats;
 pub mod api_keys;
 pub mod auth;
+pub mod catalog;
 pub mod chain;
+pub mod collections;
 pub mod discovery;
 pub mod huma;
+pub mod interest;
 pub mod libraries;
+pub mod notifications;
+pub mod personal;
 pub mod profiles;
+pub mod requests;
 pub mod settings;
 pub mod system;
 
@@ -43,6 +50,12 @@ pub const DOMAINS: &[&[NativeRow]] = &[
     profiles::ROWS,
     admin_settings::ROWS,
     libraries::ROWS,
+    notifications::ROWS,
+    personal::ROWS,
+    admin_stats::ROWS,
+    catalog::ROWS,
+    collections::ROWS,
+    requests::ROWS,
 ];
 
 const fn all_in_table() -> bool {
@@ -59,6 +72,7 @@ const fn all_in_table() -> bool {
     }
     true
 }
+#[allow(long_running_const_eval)]
 const _: () = assert!(
     all_in_table(),
     "a native/<domain>.rs ROWS entry is not in rows_table.rs"
@@ -210,6 +224,12 @@ pub fn main_handler(inputs: &NativeInputs) -> BoxHandler {
         profiles::mount(stack, &api, &v2);
         admin_settings::mount_v2(stack, &v2);
         libraries::mount(stack, &api, &v2);
+        notifications::mount(stack, &api, &v2);
+        personal::mount(stack, &api, &v2);
+        admin_stats::mount_v2(stack, &v2);
+        catalog::mount_v2(stack, &v2);
+        collections::mount(stack, &api, &v2);
+        requests::mount(stack, &api, &v2);
         discovery::mount(stack, &api, &v2);
     }
 
@@ -331,6 +351,9 @@ impl Gate {
         }
         let no_ingress = !INGRESS_HEADERS.iter().any(|h| head.has(h));
         let bare = path_text.strip_suffix('/').unwrap_or(path_text);
+        if notifications::is_go_subtree(bare) || requests::is_go_literal(bare) {
+            return false;
+        }
         if let Some(row) = domain_row(bare) {
             if !self.enabled(row.surface) || !no_ingress {
                 return false;
@@ -349,11 +372,40 @@ impl Gate {
                 return false;
             }
             // Avatars and library posters in S3 need presigned URLs, which are not ported.
-            if (profiles::ROWS.contains(row) || libraries::ROWS.contains(row))
+            if (profiles::ROWS.contains(row)
+                || libraries::ROWS.contains(row)
+                || notifications::ROWS.contains(row))
                 && self
                     .stack
                     .as_ref()
                     .is_some_and(|s| !s.local_operational_store)
+            {
+                return false;
+            }
+            // Go answers for its Meilisearch provider, its session limits, and its result window.
+            if bare == catalog::SEARCH_CAPABILITIES
+                && self.stack.as_ref().is_some_and(|s| s.search_meilisearch())
+            {
+                return false;
+            }
+            // The watch provider registry needs the plugin host.
+            if (bare == "/api/v1/admin/stats" || bare == "/api/v2/admin/stats")
+                && self.stack.as_ref().is_some_and(|s| s.plugins_installed())
+            {
+                return false;
+            }
+            // `missing_seasons_requestable` asks an enabled server's plugin.
+            if requests::STATUS_PATHS.contains(&bare)
+                && self
+                    .stack
+                    .as_ref()
+                    .is_some_and(|s| s.request_server_enabled())
+            {
+                return false;
+            }
+            // Watch provider fan-out and title promotion need the plugin host and watchlist service.
+            if personal::ROWS.contains(row)
+                && self.stack.as_ref().is_some_and(|s| s.personal_needs_go())
             {
                 return false;
             }

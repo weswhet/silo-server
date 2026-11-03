@@ -115,6 +115,8 @@ pub enum Step {
     Admin,
     /// `PolicyPermissionMiddleware.RequireMarkerEdit`.
     MarkerEdit,
+    /// `RequireMetadataCurationForItem`, on the route's `{id}`.
+    MetadataCuration,
 }
 
 /// `apiv2.Class`, as `gateChain` composes it.
@@ -183,6 +185,18 @@ pub struct Stack {
     pub tv_series_root_queue: bool,
     /// An auth plugin binding or a linked identity exists, so sign-in needs the plugin host, on Go.
     external_sign_in: AtomicBool,
+    /// A watch provider connection or a watchlist title entry exists.
+    personal_needs_go: AtomicBool,
+    /// A plugin installation exists, so its watch provider could be registered in Go's process.
+    plugins_installed: AtomicBool,
+    /// `catalog.search.provider` names Meilisearch.
+    search_meilisearch: AtomicBool,
+    /// An enabled request server exists, whose plugin `/requests/status` would ask.
+    request_server_enabled: AtomicBool,
+    /// Decrypts stored request server keys.
+    pub cipher: silo_core::secret::Cipher,
+    /// The machine lease for route IDs, taken on the first create.
+    pub route_ids: tokio::sync::OnceCell<silo_runtime::idgen_lease::Lease>,
 }
 
 /// `config.parseDuration`: a whole number of days, or Go's own form.
@@ -231,6 +245,51 @@ fn token_expiries(all: &HashMap<String, String>) -> (i64, i64) {
         read("auth.access_token_expiry", 8 * HOUR),
         read("auth.refresh_token_expiry", 30 * 24 * HOUR),
     )
+}
+
+/// Whether a personal list write would owe a watch provider a dispatch, or a read a title promotion.
+async fn personal_needs_go(pool: &Pool) -> Result<bool, String> {
+    let rows = pool
+        .query(
+            "SELECT EXISTS(SELECT 1 FROM watch_provider_connections) OR EXISTS(SELECT 1 FROM user_watchlist_titles)",
+            &[],
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(rows.first().is_none_or(|r| r.get::<_, bool>(0)))
+}
+
+async fn search_meilisearch(pool: &Pool) -> Result<bool, String> {
+    let rows = pool
+        .query(
+            "SELECT EXISTS(SELECT 1 FROM server_settings WHERE key = 'catalog.search.provider' AND value <> 'postgres' AND value <> '')",
+            &[],
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(rows.first().is_none_or(|r| r.get::<_, bool>(0)))
+}
+
+async fn request_server_enabled(pool: &Pool) -> Result<bool, String> {
+    let rows = pool
+        .query(
+            "SELECT EXISTS(SELECT 1 FROM request_integrations WHERE enabled)",
+            &[],
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(rows.first().is_none_or(|r| r.get::<_, bool>(0)))
+}
+
+async fn plugins_installed(pool: &Pool) -> Result<bool, String> {
+    let rows = pool
+        .query(
+            "SELECT EXISTS(SELECT 1 FROM plugin_installations WHERE kind <> 'builtin')",
+            &[],
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(rows.first().is_none_or(|r| r.get::<_, bool>(0)))
 }
 
 /// Whether sign-in depends on a plugin provider: any binding, or an identity a re-check would consult.
@@ -558,6 +617,13 @@ pub async fn build(
         artwork_url_ttl,
         tv_series_root_queue,
         external_sign_in: external_sign_in.into(),
+        personal_needs_go: personal_needs_go(&pool).await.unwrap_or(true).into(),
+        plugins_installed: plugins_installed(&pool).await.unwrap_or(true).into(),
+        search_meilisearch: search_meilisearch(&pool).await.unwrap_or(true).into(),
+        request_server_enabled: request_server_enabled(&pool).await.unwrap_or(true).into(),
+        cipher: silo_core::secret::Cipher::new(options.secret_key.as_bytes())
+            .map_err(|e| e.to_string())?,
+        route_ids: tokio::sync::OnceCell::new(),
         pool: pool.clone(),
         auth,
         users,
@@ -620,6 +686,23 @@ impl Stack {
         self.external_sign_in.load(Ordering::Relaxed)
     }
 
+    /// Whether personal rows go to Go. See `personal.rs`.
+    pub fn search_meilisearch(&self) -> bool {
+        self.search_meilisearch.load(Ordering::Relaxed)
+    }
+
+    pub fn plugins_installed(&self) -> bool {
+        self.plugins_installed.load(Ordering::Relaxed)
+    }
+
+    pub fn request_server_enabled(&self) -> bool {
+        self.request_server_enabled.load(Ordering::Relaxed)
+    }
+
+    pub fn personal_needs_go(&self) -> bool {
+        self.personal_needs_go.load(Ordering::Relaxed)
+    }
+
     /// `OnUserSessionsRevoked`: every Go replica discards its cached Jellyfin-compatible sessions.
     /// Without a bus no event can reach Go, and persistent lookups still check the deleted rows.
     pub async fn publish_sessions_revoked(&self, user_id: i64) {
@@ -680,6 +763,15 @@ impl Stack {
 
     /// One reload: what the settings event and the policy event each change in Go.
     async fn reload(&self, logger: &DecisionLogger, pdp: &Pdp, sources: &mut Option<Sources>) {
+        let needs_go = personal_needs_go(&self.pool).await.unwrap_or(true);
+        self.personal_needs_go.store(needs_go, Ordering::Relaxed);
+        let installed = plugins_installed(&self.pool).await.unwrap_or(true);
+        self.plugins_installed.store(installed, Ordering::Relaxed);
+        let enabled = request_server_enabled(&self.pool).await.unwrap_or(true);
+        self.request_server_enabled
+            .store(enabled, Ordering::Relaxed);
+        let meili = search_meilisearch(&self.pool).await.unwrap_or(true);
+        self.search_meilisearch.store(meili, Ordering::Relaxed);
         match external_sign_in_configured(&self.pool).await {
             Ok(configured) => self.external_sign_in.store(configured, Ordering::Relaxed),
             Err(e) => {
@@ -1171,6 +1263,11 @@ impl Stack {
                 Step::Admin => auth::require_admin(r)?,
                 Step::ActingAdmin => self.gates.require_acting_admin(r, &client_ip).await?,
                 Step::MarkerEdit => self.gates.require_marker_edit(r, &client_ip).await?,
+                Step::MetadataCuration => {
+                    self.gates
+                        .require_metadata_curation(r, r.url_param("id"), &client_ip)
+                        .await?
+                }
             }
         }
         Ok(())
@@ -1886,13 +1983,24 @@ fn structured_media_type_ok(content_type: &str) -> bool {
 /// The v1 `r.Route` mounts that hold native rows, read from `internal/api/router.go`. A v1 row's gates that
 /// sit on or above its mount run before the subrouter matches, and so do its own 404 and 405.
 const V1_MOUNTS: &[&str] = &[
+    "/api/v1/admin/collections",
     "/api/v1/admin",
     "/api/v1/api-keys",
     "/api/v1/auth",
+    "/api/v1/collections",
+    "/api/v1/devices",
+    "/api/v1/favorites",
+    "/api/v1/home/dismissals",
     "/api/v1/libraries",
     "/api/v1/library-playback-prefs",
+    "/api/v1/notifications",
     "/api/v1/profiles",
+    "/api/v1/progress",
+    "/api/v1/ratings",
+    "/api/v1/requests",
     "/api/v1/settings",
+    "/api/v1/sync",
+    "/api/v1/watchlist",
 ];
 
 /// chi's `RoutePattern` for a v1 request that never reached a row: the deepest mount it matched.

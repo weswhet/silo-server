@@ -630,7 +630,7 @@ async fn device_belongs(
 }
 
 /// `strconv.Atoi` of a Go `int`.
-fn atoi(value: &str) -> Option<i64> {
+pub(super) fn atoi(value: &str) -> Option<i64> {
     let (sign, digits) = match value.strip_prefix('-') {
         Some(rest) => (-1, rest),
         None => (1, value.strip_prefix('+').unwrap_or(value)),

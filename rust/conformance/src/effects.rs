@@ -32,6 +32,10 @@ pub struct EffectConfig {
     /// Request log messages that are not the same on two Go servers.
     #[serde(default)]
     pub ignored_log_messages: BTreeMap<String, String>,
+    /// Tables a server writes from its own timer, so a row lands in whichever case is running. They are
+    /// compared by their contents when each stage ends, not per case.
+    #[serde(default)]
+    pub timer_tables: BTreeMap<String, String>,
 }
 
 /// One side's connections.
@@ -383,6 +387,9 @@ impl Side {
             for row in rows.into_iter().flatten() {
                 let (table, op, text): (String, String, String) =
                     (row.get(0), row.get(1), row.get(2));
+                if self.cfg.timer_tables.contains_key(&table) {
+                    continue;
+                }
                 let value: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
                 let value = canonical(&value, &self.cfg);
                 // An update that moved only a clock (`last_used_at`, `last_seen_at`) changed nothing compared.
@@ -403,9 +410,33 @@ impl Side {
         out
     }
 
-    /// The stage's request log rows and live tail rows, by what names them, then clears the tail's count.
-    pub fn stage_counts(&mut self) -> BTreeMap<String, u64> {
+    /// The rows of each timer table as they now stand, by what they hold.
+    fn timer_rows(&self) -> BTreeMap<String, u64> {
         let mut out = BTreeMap::new();
+        let Some(client) = &self.client else {
+            return out;
+        };
+        for table in self.cfg.timer_tables.keys() {
+            let sql = format!("SELECT to_jsonb(t)::text FROM public.\"{table}\" t");
+            for row in self
+                .rt
+                .block_on(client.query(&sql, &[]))
+                .into_iter()
+                .flatten()
+            {
+                let text: String = row.get(0);
+                let value: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
+                let key = format!("final {table} {}", canonical(&value, &self.cfg));
+                *out.entry(key).or_insert(0) += 1;
+            }
+        }
+        out
+    }
+
+    /// The stage's request log rows, live tail rows, and timer table rows, by what names them, then clears
+    /// the tail's count.
+    pub fn stage_counts(&mut self) -> BTreeMap<String, u64> {
+        let mut out = self.timer_rows();
         if let Some(client) = &self.client {
             let rows = self.rt.block_on(client.query(
                 "SELECT component, message, COALESCE(attrs->>'method', ''), COALESCE(attrs->>'path_pattern', ''),

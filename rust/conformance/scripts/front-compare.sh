@@ -48,6 +48,7 @@ DATABASE_URL="postgres://silo:silo@127.0.0.1:$(b_port CONF_PG_PORT)/silo?sslmode
   SILO_FRONT_GO_WORKDIR=/var/lib/silo \
   SILO_FRONT_GO_REDIS_URL=redis://redis:6379 \
   SILO_NODE_NAME=silo-conformance \
+  TZ=Etc/UTC \
   rust/target/debug/silo \
   --front "main=127.0.0.1:18080,http://127.0.0.1:$(b_port CONF_API_PORT)" \
   --front "jellycompat=127.0.0.1:18096,http://127.0.0.1:$(b_port CONF_JF_PORT)" \
@@ -78,8 +79,12 @@ if [ -n "${CONF_ACTIVITY_DIR:-}" ]; then
 fi
 
 rc=0
+digest_skip='idgen_machine_leases|operational_logs'
 # The resets wait out the front's 2-second log batches: the front outlives them, and a row it flushed into
-# the restored database would fail the seed digest. Both wait, so both servers start together: their
+# the restored database would fail the seed digest. Two writers run on the front's own clocks and can still land
+# between the restore and the digest check: the machine ID lease renewal, which claims again in the restored
+# table, and log batch retries from inserts that failed while the database was gone. Those tables are left out
+# of the candidate's digest. Both wait, so both servers start together: their
 # background jobs race the first requests, as catalog export-jobs shows when one starts later.
 rust/target/debug/silo-conformance run \
   --reference "http://127.0.0.1:$CONF_API_PORT" \
@@ -91,7 +96,7 @@ rust/target/debug/silo-conformance run \
   --candidate-kind strangler \
   --reference-forwarded-for 127.0.0.1 \
   --reset-reference "sleep 3; $dump_a $CONF_SCRIPTS_DIR/reset.sh --fast >/dev/null" \
-  --reset-candidate "sleep 3; $dump_b env ${b_env[*]} $CONF_SCRIPTS_DIR/reset.sh --fast >/dev/null" \
+  --reset-candidate "sleep 3; $dump_b env ${b_env[*]} CONF_DIGEST_SKIP='$digest_skip' $CONF_SCRIPTS_DIR/reset.sh --fast >/dev/null" \
   --empty-users-reference "$CONF_SCRIPTS_DIR/empty-users.sh silo-conformance" \
   --empty-users-candidate "$CONF_SCRIPTS_DIR/empty-users.sh ${CONF_B_PROJECT:-silo-conformance-b}" \
   --effects-reference "pg=postgres://silo:silo@127.0.0.1:$CONF_PG_PORT/silo?sslmode=disable,redis=127.0.0.1:$CONF_REDIS_PORT" \
@@ -110,7 +115,7 @@ if [ -n "${CONF_FRONT_AFTER:-}" ]; then
   # From the seed, not from what the plan's writes left behind.
   sleep 3
   "$CONF_SCRIPTS_DIR/reset.sh" --fast >/dev/null
-  env "${b_env[@]}" "$CONF_SCRIPTS_DIR/reset.sh" --fast >/dev/null
+  env "${b_env[@]}" CONF_DIGEST_SKIP="$digest_skip" "$CONF_SCRIPTS_DIR/reset.sh" --fast >/dev/null
   $CONF_FRONT_AFTER || rc=1
 fi
 exit "$rc"

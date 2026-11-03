@@ -87,4 +87,58 @@ INSERT INTO request_settings (id, requests_enabled, created_at, updated_at)
 VALUES (true, true, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
 ON CONFLICT (id) DO UPDATE SET requests_enabled = true;
 
+-- Deliveries for the notification rows' success paths: fanout needs a scan and a release, and no request makes one.
+-- The insert trigger stamps created_at, so an update pins it.
+INSERT INTO notification_deliveries (id, user_id, profile_id, type, reason_flags, status, delivered_at) VALUES
+  ('01JCONFNOTIFICATION0000001', 2, :'user_profile', 'webhook.auto_disabled', '{"webhook_id":"w1","webhook_name":"Conf hook","last_failure_status":410}', 'delivered', '2026-01-01T00:00:00Z'),
+  ('01JCONFNOTIFICATION0000002', 2, :'user_profile', 'request.declined', '{"request_id":"r1","tmdb_id":1,"media_type":"movie","title":"Conf","poster_path":"tmdb://poster/conf.jpg","reason":"no"}', 'delivered', '2026-01-01T00:00:00Z'),
+  ('01JCONFNOTIFICATION0000003', 1, :'admin_profile', 'webhook.auto_disabled', '{"webhook_id":"w2","webhook_name":"Admin hook","last_failure_status":410}', 'delivered', '2026-01-01T00:00:00Z'),
+  ('01JCONFNOTIFICATION0000004', 1, :'admin_profile', 'request.declined', '{"request_id":"r2","tmdb_id":2,"media_type":"movie","title":"Conf 2","poster_path":"tmdb://poster/conf2.jpg","reason":"no"}', 'delivered', '2026-01-01T00:00:00Z');
+UPDATE notification_deliveries SET created_at = '2026-01-02T00:00:00Z' WHERE id = '01JCONFNOTIFICATION0000001';
+UPDATE notification_deliveries SET created_at = '2026-01-03T00:00:00Z' WHERE id = '01JCONFNOTIFICATION0000002';
+UPDATE notification_deliveries SET created_at = '2026-01-02T00:00:00Z' WHERE id = '01JCONFNOTIFICATION0000003';
+UPDATE notification_deliveries SET created_at = '2026-01-03T00:00:00Z' WHERE id = '01JCONFNOTIFICATION0000004';
+
+-- Devices for the device rows' success paths: a sighting is throttled per process.
+INSERT INTO user_devices (user_id, profile_id, device_id, device_name, device_platform, last_seen_at) VALUES
+  (2, :'user_profile', 'conf-device-1', 'Conf One', 'ios', '2026-01-04T00:00:00Z'),
+  (2, :'user_profile', 'conf-device-2', 'Conf Two', 'android', '2026-01-03T00:00:00Z'),
+  (1, :'admin_profile', 'conf-admin-1', 'Admin One', 'ios', '2026-01-04T00:00:00Z'),
+  (1, :'admin_profile', 'conf-admin-2', 'Admin Two', 'web', '2026-01-03T00:00:00Z');
+INSERT INTO user_setting_values (user_id, key, scope, profile_id, device_id, value) VALUES
+  (2, 'playback.buffering_quality_mode', 'profile_device', :'user_profile', 'conf-device-1', '"never"'),
+  (1, 'playback.buffering_quality_mode', 'profile_device', :'admin_profile', 'conf-admin-1', '"never"');
+
 COMMIT;
+
+-- Requests and servers for the request rows' success paths: creating a request needs TMDB, and saving a server
+-- needs its plugin. The servers stay disabled, so nothing submits to them.
+INSERT INTO request_integrations (id, name, enabled, base_url, api_key_ref, capability_id, supported_media_types, plugin_config, updated_at) VALUES
+  ('conf-radarr', 'Conf Radarr', false, 'http://radarr.invalid', 'conf-key', 'arr', '{movie}', '{"service_kind":"radarr","quality_profile_id":4}', '2026-01-01T00:00:00Z'),
+  ('conf-sonarr', 'Conf Sonarr', false, 'http://sonarr.invalid', '', 'arr', '{series}', '{"service_kind":"sonarr","ratio":1.5}', '2026-01-01T00:00:00Z'),
+  ('conf-drop-vone', 'Conf drop one', false, '', '', 'arr', '{}', '{}', '2026-01-01T00:00:00Z'),
+  ('conf-drop-vtwo', 'Conf drop two', false, '', '', 'seerr', '{}', '{}', '2026-01-01T00:00:00Z');
+
+INSERT INTO media_requests (id, media_type, tmdb_id, tvdb_id, imdb_id, title, year, overview, poster_path, backdrop_path, status, outcome, requested_by_user_id, requested_by_profile_id, last_error, outcome_reason, seasons, source, created_at, updated_at, approved_at, completed_at) VALUES
+  ('conf-req-pending', 'movie', 9100001, NULL, 'tt9100001', 'Conf Pending', 2001, 'Waiting', '/p.jpg', '/b.jpg', 'pending', 'active', 2, :'user_profile', '', '', '{}', 'direct', '2020-01-01T00:00:01Z', '2020-01-01T00:00:01Z', NULL, NULL),
+  ('conf-req-series', 'series', 9100002, 9100022, '', 'Conf Series', 2002, '', '', '', 'completed', 'active', 2, :'user_profile', '', '', '{1,2}', 'watchlist', '2020-01-01T00:00:02Z', '2020-01-01T00:00:02Z', '2020-01-02T00:00:00Z', '2020-01-03T00:00:00Z'),
+  ('conf-req-cancel-vone', 'movie', 9100003, NULL, '', 'Conf Cancel One', NULL, '', '', '', 'pending', 'active', 2, :'user_profile', '', '', '{}', 'direct', '2020-01-01T00:00:03Z', '2020-01-01T00:00:03Z', NULL, NULL),
+  ('conf-req-cancel-vtwo', 'movie', 9100004, NULL, '', 'Conf Cancel Two', NULL, '', '', '', 'pending', 'active', 2, :'user_profile', '', '', '{}', 'direct', '2020-01-01T00:00:04Z', '2020-01-01T00:00:04Z', NULL, NULL),
+  ('conf-req-admin-vone', 'movie', 9100005, NULL, '', 'Conf Admin One', NULL, '', '', '', 'pending', 'active', 2, :'user_profile', '', '', '{}', 'direct', '2020-01-01T00:00:05Z', '2020-01-01T00:00:05Z', NULL, NULL),
+  ('conf-req-admin-vtwo', 'movie', 9100006, NULL, '', 'Conf Admin Two', NULL, '', '', '', 'pending', 'active', 1, :'admin_profile', '', '', '{}', 'direct', '2020-01-01T00:00:06Z', '2020-01-01T00:00:06Z', NULL, NULL),
+  ('conf-req-failed', 'movie', 9100007, NULL, '', 'Conf Failed 50%', NULL, '', '', '', 'approved', 'failed', 2, :'user_profile', 'server gone', '', '{}', 'direct', '2020-01-01T00:00:07Z', '2020-01-01T00:00:07Z', '2020-01-02T00:00:00Z', NULL),
+  ('conf-req-declined', 'series', 9100008, NULL, '', 'Conf Declined', NULL, '', '', '', 'pending', 'declined', 2, :'user_profile', '', 'not now', '{}', 'direct', '2020-01-01T00:00:08Z', '2020-01-01T00:00:08Z', NULL, NULL),
+  ('conf-req-queued', 'movie', 9100009, NULL, '', 'Conf Queued', NULL, '', '', '', 'downloading', 'active', 2, :'user_profile', '', '', '{}', 'direct', '2020-01-01T00:00:09Z', '2020-01-01T00:00:09Z', '2020-01-02T00:00:00Z', NULL);
+
+INSERT INTO media_request_targets (id, request_id, integration_id, integration_kind, quality, external_id, external_status, status, last_error, route_name, download_phase, download_bytes_total, download_bytes_left, download_count, download_updated_at, created_at, updated_at) VALUES
+  (9100001, 'conf-req-series', 'conf-sonarr', 'sonarr', '1080p', 'ext-1', 'done', 'completed', '', 'Everything else', NULL, NULL, NULL, NULL, NULL, '2020-01-02T00:00:00Z', '2020-01-02T00:00:00Z'),
+  (9100002, 'conf-req-queued', 'conf-radarr', 'radarr', '1080p', 'ext-2', 'downloading', 'downloading', 'slow', 'Everything else', 'stalled', 1000, 250, 2, '2020-01-03T00:00:00Z', '2020-01-02T00:00:00Z', '2020-01-02T00:00:00Z'),
+  (9100003, 'conf-req-queued', 'conf-radarr', 'radarr', '2160p', 'ext-3', 'queued', 'queued', '', '', 'queued', 4000, 4000, 1, '2020-01-02T00:00:00Z', '2020-01-02T00:00:00Z', '2020-01-02T00:00:00Z');
+
+INSERT INTO media_request_events (request_id, event_type, actor_user_id, actor_profile_id, message, created_at) VALUES
+  ('conf-req-pending', 'created', 2, :'user_profile', '', '2020-01-01T00:00:01Z'),
+  ('conf-req-series', 'created', 2, :'user_profile', '', '2020-01-01T00:00:02Z'),
+  ('conf-req-series', 'approved', NULL, '', 'auto approved', '2020-01-02T00:00:00Z');
+
+INSERT INTO media_request_follows (request_id, media_type, tmdb_id, user_id, profile_id)
+VALUES ('conf-req-pending', 'movie', 9100001, 2, :'user_profile');

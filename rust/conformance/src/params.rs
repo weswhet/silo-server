@@ -140,6 +140,7 @@ fn literal_for(surface: Surface, prev: &str, name: &str) -> Option<&'static str>
     }
     Some(match n.as_str() {
         "num" | "version" => "1",
+        "session_id" if prev == "api-clients" => "conf-usage-session",
         "media_type" => "movie",
         "tmdb_id" => "9000001",
         "track" => "0",

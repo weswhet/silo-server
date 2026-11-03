@@ -86,6 +86,11 @@ rust/target/debug/silo-conformance run \
   --reset-candidate '<reset for the second stack>'
 ```
 
+The front outlives each reset of its stack, and two of its writers run on their own clocks: the machine ID lease
+renewal, which claims again in the restored table, and log batch retries for inserts that failed while the database
+was gone. `front-compare.sh` therefore passes `CONF_DIGEST_SKIP='idgen_machine_leases|operational_logs'` to the
+candidate's `reset.sh`, which leaves those tables out of the seed digest check.
+
 `SILO_FRONT_FORCE_GO=all` sends every native row to Go too, which is the proxy-all run: every route
 is then `not_ported`, and any difference at all is the front's.
 
@@ -299,7 +304,14 @@ rust/conformance/scripts/mutation-test.sh --baseline rust/conformance/baseline/e
   none reserialize refuse_401 drop_field rule_out_of_format rule_in_format
 ```
 
-Results go to `.run/mutation/<fault>/` as `check.txt` and `check.json`. `none` and
+Results go to `.run/mutation/<fault>/` as `check.txt` and `check.json`. The proxy's listeners are new, so each run
+first waits out a local client's one-time sweep of them, which would otherwise land in the candidate's stage counts.
+`CONF_PROJECT`, `CONF_B_PROJECT`, `CONF_B_RUN`, the `CONF_*_PORT` and `CONF_B_*_PORT` variables, and
+`CONF_MUT_*_PORT` put a run on its own pair of stacks, so faults can be split across pairs. Each run takes about
+half an hour on one pair. Pairs running at once disturb each other: a few requests per run then fail at the
+transport level on both sides, and a fault applied to such a case counts as escaped although the differ never saw
+it. Rerun a fault alone when its only escapes are such cases (`body_skip_reason` in `cases.jsonl`), and run `none`
+and `reserialize` alone. `none` and
 `reserialize` are controls and must report nothing. `all` applies a different fault per case
 in one run, which is the quick way to try all of them. `rule_out_of_format` and
 `rule_in_format` change every value a normalizer covers. A value a rule is meant to accept,

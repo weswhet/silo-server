@@ -105,3 +105,14 @@ conf_wait_listener_sweep() {
   done
   sleep 3
 }
+
+# The same sweep through a proxy that keeps no origin log: the candidate Go logs the sweep's jellycompat requests
+# under Go's own client name. conf_wait_proxy_sweep <compose project> <UTC start time>
+conf_wait_proxy_sweep() {
+  local deadline=$((SECONDS + 45))
+  until docker logs --since "$2" "$1-silo-1" 2>&1 | grep -q 'msg="jellycompat request".*user_agent=Go-http-client'; do
+    [ "$SECONDS" -lt "$deadline" ] || return 0
+    sleep 0.5
+  done
+  sleep 3
+}

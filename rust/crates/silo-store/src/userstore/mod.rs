@@ -9,6 +9,7 @@
 //!
 //! Scope actually ported, and what is deferred, is documented on [`pgstore`].
 
+pub mod collections;
 pub mod pgstore;
 pub mod prefs;
 pub mod profiles;

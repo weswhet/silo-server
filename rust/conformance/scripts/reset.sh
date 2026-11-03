@@ -118,8 +118,15 @@ case "${1:-}" in
     conf_quiet conf_compose up -d --wait postgres redis edge
     fast_reset
     # The restored database must be the snapshot, byte for byte in seed terms.
+    # CONF_DIGEST_SKIP names tables that a process outliving the reset writes on its own clock, such as the
+    # front's machine ID lease renewal and its log batch retries (front-compare.sh). Their lines and the total
+    # are left out on both sides.
+    digest_filter() {
+      if [ -n "${CONF_DIGEST_SKIP:-}" ]; then grep -v -E "^(seq:)?(${CONF_DIGEST_SKIP})[|_]|^TOTAL[|]"; else cat; fi
+    }
     if [ -f "$CONF_RUN/seed-digest.txt" ] &&
-      ! "$CONF_SCRIPTS_DIR/seed-digest.sh" | cmp -s - "$CONF_RUN/seed-digest.txt"; then
+      ! cmp -s <("$CONF_SCRIPTS_DIR/seed-digest.sh" | digest_filter) <(digest_filter <"$CONF_RUN/seed-digest.txt"); then
+      diff <(digest_filter <"$CONF_RUN/seed-digest.txt") <("$CONF_SCRIPTS_DIR/seed-digest.sh" | digest_filter) >&2 || true
       conf_die "restored database does not match the recorded seed digest"
     fi
     ;;

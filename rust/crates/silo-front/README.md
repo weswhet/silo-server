@@ -134,6 +134,66 @@ any server. Without `REDIS_URL` no event reaches another process. These rows sta
   fetcher, card rendering, and the smart collection executor.
 - Every library read while a deployment uses S3: posters need presigned URLs.
 
+`src/native/notifications.rs` serves the inbox, preferences, capability, email mode, and Discord preference reads.
+These stay on Go:
+
+- Webhooks, web push, and server channels: their rows need the outbound URL guard and sign-and-send paths, not yet ported.
+- Discord writes and linking, email verification and unsubscribe, push devices and relay, and the Apple display token
+  chain.
+- The series list and mute: they need catalog cards and access checks not yet ported.
+- Every notification row while a deployment uses S3: posters need presigned URLs.
+
+`src/native/personal.rs` serves ratings, favorites and watchlist membership, watch progress, home dismissals, devices,
+and the static capabilities. `src/native/interest.rs` is `InterestUpdater` for those writes. Every one of these rows
+goes to Go while a watch provider connection or a watchlist title entry exists, because Go's provider fan-out and title
+promotion need the plugin host and the watchlist service. These stay on Go:
+
+- The favorites and watchlist listings, and `/watchlist/titles`: they need catalog cards.
+- `/watched`, `clearResumePosition`, and progress snapshots: they need the watched-state and snapshot services.
+- `/home/layout` and `/home/sections`, and `/profile/sections`: they need the sections service.
+- Marker reads: `Populate` can reach a marker provider through the plugin host, and the view queues thumbnails.
+- `/capabilities/ratings`, `trailers`, `metadata-ai`, `downloads`, and `ebooks`: they read services not yet ported.
+
+`src/native/admin_stats.rs` serves the dashboard aggregates with Go's TTLs and bus invalidation. `/admin/stats` goes to
+Go while a non-builtin plugin is installed, because the watch provider registry needs the plugin host.
+
+`src/native/catalog.rs` serves the administrator's item files and the administrator and search capabilities. Search
+capabilities go to Go while `catalog.search.provider` names Meilisearch. These stay on Go:
+
+- `/catalog`, `/catalog/query`, `/catalog/letters`, `/catalog/filters*`, `/catalog/audiobook-groups`, and item, season,
+  episode, version, manga file, work, and people reads: they need the query builder, the section fetcher, and card
+  rendering, which are not ported.
+- `/admin/catalog/items`, `/admin/items/{id}/images`, `/admin/items/{id}/trickplay`, translation jobs, import sources,
+  and search status: they need the catalog listing, metadata providers, the blob store identity, the translation
+  service, the blob store, and the in-process search service.
+- `/catalog/themes/capabilities` and theme audio: they need the theme song service.
+
+`src/native/collections.rs` serves the personal member listing, the profile order, the item order read, sort
+preferences, the capabilities,
+the bundled templates (`src/native/collection_templates`, written by `rust/conformance/vectors/generators/collections`),
+the removed group operations, and the administrator's collection group reads. These stay on Go:
+
+- Personal collection list, create, read, update, delete, item page, preview, and server collections: they count or page
+  through the smart query executor, and `poster_url` needs the artwork resolver and collage service.
+- Imports, MDBList discovery, sync, and poster upload and removal: they need outbound fetches, TMDB clients, and the
+  blob store.
+- Library and administrator collection rows, and administrator group writes: they need the executor, card rendering,
+  the service's sync, and the ID generator lease.
+
+- Adding, removing, and reordering personal members: each asks for a collage build, which only Go's process composes.
+
+`src/native/requests.rs` serves reading and cancelling requests, the unfollow, the queue counts and history, route
+administration, and reading and deleting servers. `/requests/status` goes to Go while a server is enabled, because
+`missing_seasons_requestable` asks its plugin. These stay on Go:
+
+- Search, discovery, title detail, the follow, the route preview, and route title search: they need TMDB.
+- Creating, approving, and retrying a request: they submit through the router plugin.
+- Declining a request: it dispatches through the notification system.
+- Saving a server and loading its options: they call the router plugin's validation and option RPCs.
+
+The capability reads the stored VAPID key and does not provision one. Go generates a keypair on first use, so a fresh
+server answers `web_push.available: false` here until Go has run that path.
+
 `SILO_FRONT_GO_WORKDIR` names Go's working directory, which schema messages print. `SILO_FRONT_GO_REDIS_URL` names
 the `REDIS_URL` Go runs with when the front reaches Redis another way, because the administrator settings validator
 covers it. Without them the front uses its own values, which is right for a front beside Go.

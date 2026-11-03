@@ -99,3 +99,7 @@ VALUES
   ('series-tvdb-9000003', 'imdb', 'tt0000999', '2026-01-01T00:00:00Z', '2026-01-01T00:00:02Z');
 
 COMMIT;
+
+-- A session with API usage, in an hour no window ends before, so the API client reads have a row whatever the date.
+INSERT INTO api_client_usage_hourly (hour, session_id, user_id, user_agent, requests, refused)
+VALUES ('2099-01-01T00:00:00Z', 'conf-usage-session', 2, 'conformance-agent', 5, 1);

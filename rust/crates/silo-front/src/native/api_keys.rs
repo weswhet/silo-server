@@ -889,6 +889,10 @@ fn mount_v1(stack: &Arc<Stack>, api: &Mux) {
         ),
     );
     super::admin_settings::mount_v1(stack, &admin_mux);
+    super::admin_stats::mount_v1(stack, &admin_mux);
+    super::catalog::mount_v1(stack, &admin_mux);
+    super::collections::mount_v1_admin(stack, &admin_mux);
+    super::requests::mount_v1_admin(stack, &admin_mux);
     api.mount("/api/v1/admin", admin_mux);
 }
 

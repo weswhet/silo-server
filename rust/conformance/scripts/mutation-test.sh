@@ -14,7 +14,7 @@
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 B_PROJECT="${CONF_B_PROJECT:-silo-conformance-b}"
-B_RUN="$CONF_ROOT/.run/stack-b"
+B_RUN="${CONF_B_RUN:-$CONF_ROOT/.run/stack-b}"
 B_API="${CONF_B_API_PORT:-38080}"
 B_JF="${CONF_B_JF_PORT:-38096}"
 B_ABS="${CONF_B_ABS_PORT:-38378}"
@@ -100,10 +100,14 @@ for fault in "${faults[@]}"; do
     --listen "$P_ABS=127.0.0.1:$B_ABS" --listen "$P_METRICS=127.0.0.1:$B_METRICS" \
     --mutation "$fault" --salt "$salt" --log "$dir/applied.jsonl" &
   proxy_pid=$!
+  proxy_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   # Wait on the listener rather than a fixed delay.
   until curl -s -o /dev/null "http://127.0.0.1:$P_METRICS/"; do
     kill -0 "$proxy_pid" 2>/dev/null || conf_die "the proxy did not start for $fault"
   done
+  # The proxy's listeners are new, so a local client's one-time sweep of them reaches the candidate's request
+  # log only (conf_wait_listener_sweep). Wait for it before the first reset, so it stays out of the stage counts.
+  conf_wait_proxy_sweep "$B_PROJECT" "$proxy_started"
 
   started=$SECONDS
   set +e
@@ -115,7 +119,7 @@ for fault in "${faults[@]}"; do
     --surface "metrics=http://127.0.0.1:$CONF_METRICS_PORT,http://127.0.0.1:$P_METRICS" \
     --reset-reference "$CONF_SCRIPTS_DIR/reset.sh --fast >/dev/null" \
     --reset-candidate "env ${b_env[*]} $CONF_SCRIPTS_DIR/reset.sh --fast >/dev/null" \
-    --empty-users-reference "$CONF_SCRIPTS_DIR/empty-users.sh silo-conformance" \
+    --empty-users-reference "$CONF_SCRIPTS_DIR/empty-users.sh $CONF_PROJECT" \
     --empty-users-candidate "$CONF_SCRIPTS_DIR/empty-users.sh $B_PROJECT" \
     --effects-reference "pg=postgres://silo:silo@127.0.0.1:$CONF_PG_PORT/silo?sslmode=disable,redis=127.0.0.1:$CONF_REDIS_PORT" \
     --effects-candidate "pg=postgres://silo:silo@127.0.0.1:${CONF_B_PG_PORT:-35432}/silo?sslmode=disable,redis=127.0.0.1:${CONF_B_REDIS_PORT:-36379}" \

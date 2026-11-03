@@ -1,4 +1,7 @@
 {
+  "timer_tables": {
+    "profile_series_interest": "Go vs Go: InterestUpdater flushes every 2 seconds, so rows land in whichever case is running (front-compare.sh --proxy-all, flow personal:v2:sync, one DELETE on one side only). Compared by final contents per stage."
+  },
   "ignored_tables": {
     "activity_log": "Go vs Go: written from a batch or a timer, so a row lands in a later case.",
     "operational_logs": "Go vs Go: written from a batch or a timer, so a row lands in a later case.",

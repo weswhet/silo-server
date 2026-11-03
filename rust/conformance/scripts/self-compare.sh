@@ -9,7 +9,7 @@
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 B_PROJECT="${CONF_B_PROJECT:-silo-conformance-b}"
-B_RUN="$CONF_ROOT/.run/stack-b"
+B_RUN="${CONF_B_RUN:-$CONF_ROOT/.run/stack-b}"
 b_env=(
   "CONF_PROJECT=$B_PROJECT" "CONF_RUN=$B_RUN"
   "CONF_PG_PORT=${CONF_B_PG_PORT:-35432}" "CONF_REDIS_PORT=${CONF_B_REDIS_PORT:-36379}"
@@ -44,7 +44,7 @@ exec rust/target/debug/silo-conformance run \
   --surface "metrics=http://127.0.0.1:$CONF_METRICS_PORT,http://127.0.0.1:$(b_port CONF_METRICS_PORT)" \
   --reset-reference "$CONF_SCRIPTS_DIR/reset.sh --fast >/dev/null" \
   --reset-candidate "env ${b_env[*]} $CONF_SCRIPTS_DIR/reset.sh --fast >/dev/null" \
-  --empty-users-reference "$CONF_SCRIPTS_DIR/empty-users.sh silo-conformance" \
+  --empty-users-reference "$CONF_SCRIPTS_DIR/empty-users.sh $CONF_PROJECT" \
   --empty-users-candidate "$CONF_SCRIPTS_DIR/empty-users.sh $B_PROJECT" \
   --effects-reference "pg=postgres://silo:silo@127.0.0.1:$CONF_PG_PORT/silo?sslmode=disable,redis=127.0.0.1:$CONF_REDIS_PORT" \
   --effects-candidate "pg=postgres://silo:silo@127.0.0.1:$(b_port CONF_PG_PORT)/silo?sslmode=disable,redis=127.0.0.1:$(b_port CONF_REDIS_PORT)" \

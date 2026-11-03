@@ -21,6 +21,16 @@ rows=(
   /api/v1/user/libraries
   /api/v2/user/libraries
   /api/v1/libraries/
+  /api/v1/notifications/unread-count
+  /api/v2/notifications/capabilities
+  /api/v1/ratings/
+  /api/v2/devices
+  /api/v2/progress/capabilities
+  /api/v1/collections/capabilities
+  /api/v2/collections/order
+  /api/v1/requests/mine
+  /api/v2/requests/status
+  /api/v2/catalog/search/capabilities
 )
 fail=0
 
