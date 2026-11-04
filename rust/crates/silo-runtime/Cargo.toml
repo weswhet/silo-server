@@ -11,6 +11,7 @@ base64 = "0.22"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 getrandom = "0.2"
 hmac = "0.12"
+libc = "0.2"
 md-5 = "0.10"
 redis = { version = "0.27.6", default-features = false, features = ["tokio-comp", "script", "sentinel"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "tls12", "std"] }

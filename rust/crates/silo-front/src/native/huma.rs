@@ -160,6 +160,12 @@ fn validate(schema: &Value, path: &str, value: &Value, res: &mut Result_) {
             {
                 res.add(path, format!("expected string to match pattern {pattern}"));
             }
+            // `validateFormat`, for the formats a native row's contract names.
+            if let Some("uri" | "uri-reference" | "iri" | "iri-reference") = s["format"].as_str()
+                && let Err(e) = silo_gocompat::url::parse(text)
+            {
+                res.add(path, format!("expected string to be RFC 3986 uri: {e}"));
+            }
         }
         "array" => {
             let Some(items) = value.as_array() else {
@@ -327,6 +333,21 @@ fn request_id(r: &Request) -> String {
     super::chain::request_id_of(r)
 }
 
+/// `operationBodyLimit`: the `MaxBodyBytes` a native operation declares, else `MaxJSONBodyBytes`.
+fn operation_body_limit(method: &str, path: &str) -> i64 {
+    match (method, path) {
+        ("POST", "/api/v2/notifications/web-push/subscriptions") => 16384,
+        ("POST", "/api/v2/notifications/web-push/unsubscribe") => 4096,
+        ("PUT", p)
+            if p.starts_with("/api/v2/notifications/webhooks/")
+                || p.starts_with("/api/v2/admin/notifications/server-channels/") =>
+        {
+            16384
+        }
+        _ => MAX_JSON_BODY_BYTES,
+    }
+}
+
 /// Reads and judges what the operation declares. The body goes on the request as [`RawBody`].
 pub async fn read_input(
     r: &mut Request,
@@ -387,7 +408,8 @@ pub async fn read_input(
     }
     let mut status = 422;
     if let Some(schema) = body {
-        let limit = MAX_JSON_BODY_BYTES + 1;
+        let cap = operation_body_limit(r.method.as_str(), &String::from_utf8_lossy(&r.url.path));
+        let limit = cap + 1;
         let (bytes, read_error) = r.read_all().await;
         if bytes.len() as i64 >= limit {
             return Err(from_huma_error(
@@ -395,7 +417,7 @@ pub async fn read_input(
                 413,
                 "request body is too large",
                 &[],
-                MAX_JSON_BODY_BYTES,
+                cap,
                 HTTP_MAX_BYTES_MESSAGE,
             ));
         }
@@ -405,7 +427,7 @@ pub async fn read_input(
                 500,
                 "cannot read request body",
                 &[],
-                MAX_JSON_BODY_BYTES,
+                cap,
                 HTTP_MAX_BYTES_MESSAGE,
             ));
         }

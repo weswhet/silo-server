@@ -28,7 +28,22 @@ pub const ROWS: &[NativeRow] = &[
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/catalog/capabilities"),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/items/{id}/files"),
     NativeRow::new(ApiV2, "GET", "/api/v2/catalog/search/capabilities"),
+    NativeRow::new(ApiV2, "GET", "/api/v2/capabilities/trailers"),
 ];
+
+/// `metadata.TrailerRefreshCooldown`, in seconds.
+const TRAILER_REFRESH_COOLDOWN_SECONDS: i64 = 7 * 24 * 60 * 60;
+
+/// `TrailersCapability`, as `ItemsHandler.TrailerRefreshCapability` answers with the metadata service wired.
+#[derive(Serialize)]
+struct TrailersCapability<'a> {
+    revision: &'a str,
+    state: &'static str,
+    allowed: bool,
+    cooldown_seconds: i64,
+    statuses: [&'static str; 3],
+    supported_types: [&'static str; 2],
+}
 
 /// Go serves search capabilities from its own provider, which Meilisearch replaces.
 pub const SEARCH_CAPABILITIES: &str = "/api/v2/catalog/search/capabilities";
@@ -281,6 +296,29 @@ pub fn mount_v2(stack: &Arc<Stack>, v2: &Mux) {
                             item_listing: true,
                             item_listing_max_content_ids: ITEM_LISTING_MAX_CONTENT_IDS,
                             item_change_events: true,
+                        })
+                    })
+                    .await;
+                })
+            }),
+        ),
+    );
+    let path = "/api/v2/capabilities/trailers";
+    v2.get(
+        path,
+        stack.v2(
+            path,
+            V2Class::ProfileScoped,
+            handler_fn(|w, r| {
+                Box::pin(async move {
+                    write_capability(w, r, "getTrailersCapability", |revision| {
+                        capability_json(&TrailersCapability {
+                            revision,
+                            state: "available",
+                            allowed: true,
+                            cooldown_seconds: TRAILER_REFRESH_COOLDOWN_SECONDS,
+                            statuses: ["queued", "cooldown", "disabled"],
+                            supported_types: ["movie", "series"],
                         })
                     })
                     .await;

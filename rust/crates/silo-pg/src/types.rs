@@ -12,7 +12,7 @@ use tokio_postgres::types::{FromSql, IsNull, ToSql, Type, to_sql_checked};
 type BoxError = Box<dyn StdError + Sync + Send>;
 
 /// A Go `int` parameter or column: binds to `int2`, `int4`, or `int8`, with a range check.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct AnyInt(pub i64);
 
 impl ToSql for AnyInt {

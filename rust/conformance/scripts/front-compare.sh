@@ -116,6 +116,6 @@ if [ -n "${CONF_FRONT_AFTER:-}" ]; then
   sleep 3
   "$CONF_SCRIPTS_DIR/reset.sh" --fast >/dev/null
   env "${b_env[@]}" CONF_DIGEST_SKIP="$digest_skip" "$CONF_SCRIPTS_DIR/reset.sh" --fast >/dev/null
-  $CONF_FRONT_AFTER || rc=1
+  CONF_FRONT_ORIGIN_LOG="$origin" $CONF_FRONT_AFTER || rc=1
 fi
 exit "$rc"

@@ -3039,6 +3039,7 @@ dependencies = [
  "futures-util",
  "getrandom 0.2.17",
  "hmac 0.12.1",
+ "libc",
  "md-5 0.10.6",
  "redis",
  "rustls",

@@ -3,8 +3,9 @@
 //! SQL is Go's (`silo_store::userstore::collections`).
 //!
 //! The rows that render a collection (list, create, read, update) need the smart query executor to count, and
-//! imports, sync, and artwork need outbound fetches and the blob store. Membership writes ask for a collage build,
-//! which is composed in Go's process. They all stay on Go.
+//! imports, sync, and artwork need outbound fetches and the blob store. Personal membership writes ask Go's process
+//! for a collage build (`refreshCollage`), which only Go composes. They all stay on Go. An administrator
+//! collection's membership writes start no build, so they are here.
 
 use std::sync::Arc;
 
@@ -45,6 +46,17 @@ pub const ROWS: &[NativeRow] = &[
     NativeRow::new(ApiV1, "PUT", "/api/v1/collections/order"),
     NativeRow::new(ApiV1, "GET", "/api/v1/collections/{id}/items"),
     NativeRow::new(ApiV1, "GET", "/api/v1/admin/collections/templates"),
+    NativeRow::new(ApiV1, "PUT", "/api/v1/admin/collections/{id}/items/order"),
+    NativeRow::new(
+        ApiV1,
+        "PUT",
+        "/api/v1/admin/collections/{id}/items/{item_id}",
+    ),
+    NativeRow::new(
+        ApiV1,
+        "DELETE",
+        "/api/v1/admin/collections/{id}/items/{item_id}",
+    ),
     NativeRow::new(ApiV1, "GET", "/api/v1/admin/collections/template-bundles"),
     NativeRow::new(ApiV2, "GET", "/api/v2/collections/capabilities"),
     NativeRow::new(ApiV2, "GET", "/api/v2/collections/templates"),
@@ -60,6 +72,16 @@ pub const ROWS: &[NativeRow] = &[
     NativeRow::new(ApiV2, "PUT", "/api/v2/collections/order"),
     NativeRow::new(ApiV2, "GET", "/api/v2/collections/{id}/items/order"),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/collections/templates"),
+    NativeRow::new(
+        ApiV2,
+        "PUT",
+        "/api/v2/admin/collections/{id}/items/{item_id}",
+    ),
+    NativeRow::new(
+        ApiV2,
+        "DELETE",
+        "/api/v2/admin/collections/{id}/items/{item_id}",
+    ),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/collections/template-bundles"),
     NativeRow::new(
         ApiV1,
@@ -94,6 +116,13 @@ const V2_WRITE: &[Step] = &[
     Step::Profile,
 ];
 const V1_ACTING_ADMIN: &[Step] = &[Step::ActingAdmin];
+const V2_ADMIN_WRITE: &[Step] = &[
+    Step::Auth,
+    Step::DemoRestricted,
+    Step::RateLimit,
+    Step::Viewer,
+    Step::ActingAdmin,
+];
 
 const V1_CATALOG: &[u8] = include_bytes!("collection_templates/v1_catalog.json");
 const V1_BUNDLES: &[u8] = include_bytes!("collection_templates/v1_bundles.json");
@@ -416,6 +445,101 @@ async fn reorder_own(
         })
 }
 
+/// `requireManualCollection`.
+async fn require_manual(s: &Stack, r: &Request) -> Result<String, ApiError> {
+    let id = r.url_param("id").to_owned();
+    if id.is_empty() {
+        return Err(api(400, "bad_request", "Collection ID is required"));
+    }
+    match store::library_collection_kind(&s.pool, &id).await {
+        Ok(Some((kind, _))) if kind == MANUAL => Ok(id),
+        Ok(Some(_)) => Err(admin_not_manual()),
+        Ok(None) => Err(not_found()),
+        Err(_) => Err(api(500, "internal_error", "Failed to load collection")),
+    }
+}
+
+fn admin_not_manual() -> ApiError {
+    api(
+        409,
+        "collection_not_manual",
+        "Only manual collections support manual items",
+    )
+}
+
+/// `adminManualCollection`: the collection's libraries.
+async fn admin_manual(s: &Stack, id: &str) -> Result<Vec<i32>, Problem> {
+    match store::library_collection_kind(&s.pool, id).await {
+        Ok(Some((kind, libraries))) if kind == MANUAL => Ok(libraries),
+        Ok(Some(_)) => Err(problem_of(&admin_not_manual())),
+        Ok(None) => Err(admin_gone()),
+        Err(_) => Err(internal()),
+    }
+}
+
+fn admin_gone() -> Problem {
+    Problem::new(problem_type("not_found"), "Collection or group not found.")
+}
+
+/// `adminCollectionError` for a membership write.
+fn admin_member_problem(e: &store::LibraryMemberError) -> Problem {
+    use store::LibraryMemberError as E;
+    match e {
+        E::NotManual => Problem::new(
+            problem_type("conflict"),
+            "Only manual collections support manual items.",
+        ),
+        E::ItemNotFound => Problem::new(
+            problem_type("not_found"),
+            "Item not found in collection libraries.",
+        ),
+        E::OrderedMismatch => Problem::new(
+            problem_type("validation_failed"),
+            "ordered_ids must include every current entry exactly once.",
+        ),
+        E::NotFound => admin_gone(),
+        E::Duplicates | E::Db(_) => internal(),
+    }
+}
+
+/// `AddAdminCollectionItem`.
+async fn admin_add_member(s: &Stack, r: &Request, position: i64) -> Result<(), Problem> {
+    let (id, item) = (
+        r.url_param("id").to_owned(),
+        r.url_param("item_id").to_owned(),
+    );
+    let libraries = admin_manual(s, &id).await?;
+    let filter = AccessFilter {
+        allowed: Some(libraries),
+        ..Default::default()
+    };
+    let visible = visible_items(&s.pool, std::slice::from_ref(&item), &filter)
+        .await
+        .map_err(|_| internal())?;
+    if visible.is_empty() {
+        return Err(problem_of(&api(
+            404,
+            "not_found",
+            "Item not found in collection libraries",
+        )));
+    }
+    store::library_add_item_if_absent(&s.pool, &id, &item, AnyInt(position))
+        .await
+        .map_err(|e| admin_member_problem(&e))
+}
+
+/// `RemoveAdminCollectionItem`.
+async fn admin_remove_member(s: &Stack, r: &Request) -> Result<(), Problem> {
+    let (id, item) = (
+        r.url_param("id").to_owned(),
+        r.url_param("item_id").to_owned(),
+    );
+    admin_manual(s, &id).await?;
+    store::library_remove_manual_item(&s.pool, &id, &item)
+        .await
+        .map_err(|e| admin_member_problem(&e))
+}
+
 /// `collectionFeatureError(store, "groups")`.
 fn groups_unsupported() -> ApiError {
     api(
@@ -430,6 +554,13 @@ fn groups_unsupported() -> ApiError {
 struct Order {
     ordered_ids: Option<Vec<String>>,
     group_id: Option<String>,
+}
+
+/// `collectionItemRequest`, and the v2 add body.
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct ItemPosition {
+    position: i64,
 }
 
 #[derive(Deserialize, Default)]
@@ -942,6 +1073,92 @@ pub fn mount_v1_admin(stack: &Arc<Stack>, admin: &Mux) {
             route!(stack, |_s, w, _r| { write_raw(w, V1_BUNDLES).await }),
         ),
     );
+    sub.put(
+        "/{id}/items/order",
+        stack.v1(
+            "/api/v1/admin/collections/{id}/items/order",
+            &[],
+            route!(stack, |s, w, r| {
+                let id = match require_manual(&s, r).await {
+                    Ok(id) => id,
+                    Err(e) => return write_api(w, &e).await,
+                };
+                let Some(req) = decode_v1::<Order>(r).await else {
+                    return write_api(w, &api(400, "bad_request", "Invalid request body")).await;
+                };
+                let ids = req.ordered_ids.unwrap_or_default();
+                match store::library_reorder_items(&s.pool, &id, &ids).await {
+                    Ok(()) => w.write_header(204).await,
+                    Err(e) => write_api(w, &api(400, "bad_request", e.message())).await,
+                }
+            }),
+        ),
+    );
+    let p = "/api/v1/admin/collections/{id}/items/{item_id}";
+    sub.put(
+        "/{id}/items/{item_id}",
+        stack.v1(
+            p,
+            &[],
+            route!(stack, |s, w, r| {
+                let id = match require_manual(&s, r).await {
+                    Ok(id) => id,
+                    Err(e) => return write_api(w, &e).await,
+                };
+                let item = r.url_param("item_id").to_owned();
+                if item.is_empty() {
+                    return write_api(w, &api(400, "bad_request", "item ID is required")).await;
+                }
+                let (bytes, _) = r.read_all().await;
+                let mut stream = Decoder::new().stream(&bytes[..]);
+                let position = match stream.decode::<ItemPosition>() {
+                    Ok(b) => b.position,
+                    Err(e) if e.is_eof() => 0,
+                    Err(_) => {
+                        return write_api(w, &api(400, "bad_request", "Invalid request body"))
+                            .await;
+                    }
+                };
+                match store::library_add_item(&s.pool, &id, &item, AnyInt(position)).await {
+                    Ok(()) => w.write_header(204).await,
+                    Err(_) => {
+                        write_api(
+                            w,
+                            &api(500, "internal_error", "Failed to add collection item"),
+                        )
+                        .await
+                    }
+                }
+            }),
+        ),
+    );
+    sub.delete(
+        "/{id}/items/{item_id}",
+        stack.v1(
+            p,
+            &[],
+            route!(stack, |s, w, r| {
+                let id = match require_manual(&s, r).await {
+                    Ok(id) => id,
+                    Err(e) => return write_api(w, &e).await,
+                };
+                let item = r.url_param("item_id").to_owned();
+                if item.is_empty() {
+                    return write_api(w, &api(400, "bad_request", "item ID is required")).await;
+                }
+                match store::library_remove_item(&s.pool, &id, &item).await {
+                    Ok(()) => w.write_header(204).await,
+                    Err(_) => {
+                        write_api(
+                            w,
+                            &api(500, "internal_error", "Failed to remove collection item"),
+                        )
+                        .await
+                    }
+                }
+            }),
+        ),
+    );
     admin.mount("/collections", sub);
     let groups = Mux::new();
     groups.use_middleware([stack.v1_group(V1_ACTING_ADMIN)]);
@@ -1432,6 +1649,35 @@ fn mount_v2(stack: &Arc<Stack>, v2: &Mux) {
             p,
             V2Class::ProfileScoped,
             route!(stack, |s, w, r| { write_items_order(&s, w, r).await }),
+        ),
+    );
+    let p = "/api/v2/admin/collections/{id}/items/{item_id}";
+    v2.put(
+        p,
+        stack.v2_steps(
+            p,
+            V2_ADMIN_WRITE,
+            route!(stack, |s, w, r| {
+                let position = silo_gocompat::json::unmarshal::<ItemPosition>(&raw_body(r))
+                    .map_or(0, |b| b.position);
+                match admin_add_member(&s, r, position).await {
+                    Ok(()) => w.write_header(204).await,
+                    Err(p) => write_problem(w, r, p).await,
+                }
+            }),
+        ),
+    );
+    v2.delete(
+        p,
+        stack.v2_steps(
+            p,
+            V2_ADMIN_WRITE,
+            route!(stack, |s, w, r| {
+                match admin_remove_member(&s, r).await {
+                    Ok(()) => w.write_header(204).await,
+                    Err(p) => write_problem(w, r, p).await,
+                }
+            }),
         ),
     );
 }

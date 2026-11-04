@@ -134,25 +134,35 @@ any server. Without `REDIS_URL` no event reaches another process. These rows sta
   fetcher, card rendering, and the smart collection executor.
 - Every library read while a deployment uses S3: posters need presigned URLs.
 
-`src/native/notifications.rs` serves the inbox, preferences, capability, email mode, and Discord preference reads.
-These stay on Go:
+`src/native/notifications.rs` serves the inbox, preferences, capability, email mode, and Discord preference reads, and
+its submodules serve the rest of the notification management rows: `notifications/destinations.rs` (profile webhooks
+and browser push subscriptions), `notifications/channels.rs` (server channels), `notifications/push.rs` (bridge Android
+registration, ordered Android registration and removal, and the two push registration capabilities), and
+`notifications/addresses.rs` (clearing the email address, Discord mode, and unlinking). Destination URLs pass the
+outbound address guard, `silo_runtime::netguard` (`internal/netguard`), and URLs, signing secrets, and push tokens are
+sealed with the at-rest cipher under the AAD builders in `silo_core::secret::aad`. These stay on Go:
 
-- Webhooks, web push, and server channels: their rows need the outbound URL guard and sign-and-send paths, not yet ported.
-- Discord writes and linking, email verification and unsubscribe, push devices and relay, and the Apple display token
-  chain.
-- The series list and mute: they need catalog cards and access checks not yet ported.
+- Webhook and server channel test sends, the admin Discord test, and the Apple, FCM, and relay test sends and relay
+  registration: they send through the webhook sender, payload renderers, and provider credentials, which are not ported.
+- Apple registration on v1 and v2, and Apple and Android retirement: registration answers a display token minted by the
+  JWT service's Apple display issuer, and retirement is a public operation with its own rate-limit bucket, which the v2
+  chain does not model.
+- Requesting a verification email, the email verification capability, the verify and unsubscribe pages, and Discord
+  linking: they send mail, run the durable verification outbox, and call Discord's OAuth endpoints.
+- The Apple display token chain and the series list: they need the display issuer and catalog cards.
 - Every notification row while a deployment uses S3: posters need presigned URLs.
 
 `src/native/personal.rs` serves ratings, favorites and watchlist membership, watch progress, home dismissals, devices,
 and the static capabilities. `src/native/interest.rs` is `InterestUpdater` for those writes. Every one of these rows
 goes to Go while a watch provider connection or a watchlist title entry exists, because Go's provider fan-out and title
-promotion need the plugin host and the watchlist service. These stay on Go:
+promotion need the plugin host and the watchlist service. The front reads that condition on each such request, as Go does, because no
+event announces those tables changing; the request status rows read the enabled request server the same way. These stay on Go:
 
 - The favorites and watchlist listings, and `/watchlist/titles`: they need catalog cards.
 - `/watched`, `clearResumePosition`, and progress snapshots: they need the watched-state and snapshot services.
 - `/home/layout` and `/home/sections`, and `/profile/sections`: they need the sections service.
 - Marker reads: `Populate` can reach a marker provider through the plugin host, and the view queues thumbnails.
-- `/capabilities/ratings`, `trailers`, `metadata-ai`, `downloads`, and `ebooks`: they read services not yet ported.
+- `/capabilities/ratings`, `metadata-ai`, `downloads`, and `ebooks`: they read services not yet ported. `/capabilities/trailers` is served by `src/native/catalog.rs`.
 
 `src/native/admin_stats.rs` serves the dashboard aggregates with Go's TTLs and bus invalidation. `/admin/stats` goes to
 Go while a non-builtin plugin is installed, because the watch provider registry needs the plugin host.
@@ -169,18 +179,20 @@ capabilities go to Go while `catalog.search.provider` names Meilisearch. These s
 - `/catalog/themes/capabilities` and theme audio: they need the theme song service.
 
 `src/native/collections.rs` serves the personal member listing, the profile order, the item order read, sort
-preferences, the capabilities,
-the bundled templates (`src/native/collection_templates`, written by `rust/conformance/vectors/generators/collections`),
-the removed group operations, and the administrator's collection group reads. These stay on Go:
+preferences, the capabilities, the bundled templates (`src/native/collection_templates`, written by
+`rust/conformance/vectors/generators/collections`), the removed group operations, the administrator's collection
+group reads, and adding and removing an administrator collection's manual members (v1 and v2) and reordering them
+(v1). These stay on Go:
 
 - Personal collection list, create, read, update, delete, item page, preview, and server collections: they count or page
   through the smart query executor, and `poster_url` needs the artwork resolver and collage service.
 - Imports, MDBList discovery, sync, and poster upload and removal: they need outbound fetches, TMDB clients, and the
   blob store.
-- Library and administrator collection rows, and administrator group writes: they need the executor, card rendering,
-  the service's sync, and the ID generator lease.
-
-- Adding, removing, and reordering personal members: each asks for a collage build, which only Go's process composes.
+- Library and administrator collection rows other than the manual member writes, and administrator group writes: they
+  need the executor, card rendering, the service's sync, and the ID generator lease. The v2 administrator item order
+  read and write wait on the item page's continuation.
+- Adding, removing, and reordering personal members: each asks Go's process for a collage build 2 seconds later, and
+  the next `/api/v2` read shows it. Asking Go through a request of its own would log a request Go's write does not.
 
 `src/native/requests.rs` serves reading and cancelling requests, the unfollow, the queue counts and history, route
 administration, and reading and deleting servers. `/requests/status` goes to Go while a server is enabled, because

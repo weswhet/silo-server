@@ -1,0 +1,291 @@
+[
+  {
+    "input": "8.8.8.8",
+    "valid": true,
+    "class": "public"
+  },
+  {
+    "input": "1.1.1.1",
+    "valid": true,
+    "class": "public"
+  },
+  {
+    "input": "93.184.215.14",
+    "valid": true,
+    "class": "public"
+  },
+  {
+    "input": "10.1.2.3",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "100.64.0.1",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "100.127.255.255",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "100.128.0.1",
+    "valid": true,
+    "class": "public"
+  },
+  {
+    "input": "127.0.0.1",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "172.16.0.1",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "172.31.255.255",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "172.32.0.1",
+    "valid": true,
+    "class": "public"
+  },
+  {
+    "input": "192.0.0.8",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "192.0.2.1",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "192.88.99.1",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "192.168.1.1",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "198.18.0.1",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "198.19.255.255",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "198.20.0.1",
+    "valid": true,
+    "class": "public"
+  },
+  {
+    "input": "198.51.100.7",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "203.0.113.9",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "169.254.169.254",
+    "valid": true,
+    "class": "blocked"
+  },
+  {
+    "input": "0.0.0.0",
+    "valid": true,
+    "class": "blocked"
+  },
+  {
+    "input": "0.1.2.3",
+    "valid": true,
+    "class": "blocked"
+  },
+  {
+    "input": "100.100.100.200",
+    "valid": true,
+    "class": "blocked"
+  },
+  {
+    "input": "100.100.100.201",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "224.0.0.1",
+    "valid": true,
+    "class": "blocked"
+  },
+  {
+    "input": "239.255.255.250",
+    "valid": true,
+    "class": "blocked"
+  },
+  {
+    "input": "240.0.0.1",
+    "valid": true,
+    "class": "blocked"
+  },
+  {
+    "input": "255.255.255.255",
+    "valid": true,
+    "class": "blocked"
+  },
+  {
+    "input": "::",
+    "valid": true,
+    "class": "blocked"
+  },
+  {
+    "input": "::1",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "::2",
+    "valid": true,
+    "class": "blocked"
+  },
+  {
+    "input": "::7f00:1",
+    "valid": true,
+    "class": "blocked"
+  },
+  {
+    "input": "::a9fe:a9fe",
+    "valid": true,
+    "class": "blocked"
+  },
+  {
+    "input": "::ffff:127.0.0.1",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "::ffff:169.254.1.1",
+    "valid": true,
+    "class": "blocked"
+  },
+  {
+    "input": "::ffff:8.8.8.8",
+    "valid": true,
+    "class": "public"
+  },
+  {
+    "input": "fe80::1",
+    "valid": true,
+    "class": "blocked"
+  },
+  {
+    "input": "fe80::1%eth0",
+    "valid": true,
+    "class": "blocked"
+  },
+  {
+    "input": "febf::1",
+    "valid": true,
+    "class": "blocked"
+  },
+  {
+    "input": "fec0::1",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "ff02::1",
+    "valid": true,
+    "class": "blocked"
+  },
+  {
+    "input": "fd00:ec2::254",
+    "valid": true,
+    "class": "blocked"
+  },
+  {
+    "input": "fd00:ec2::253",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "fd00::1",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "fc00::1",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "64:ff9b::a9fe:a9fe",
+    "valid": true,
+    "class": "blocked"
+  },
+  {
+    "input": "64:ff9b::808:808",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "64:ff9b::a00:1",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "64:ff9b:1::1",
+    "valid": true,
+    "class": "blocked"
+  },
+  {
+    "input": "2001:db8::1",
+    "valid": true,
+    "class": "private"
+  },
+  {
+    "input": "2606:4700::1111",
+    "valid": true,
+    "class": "public"
+  },
+  {
+    "input": "2001:4860:4860::8888",
+    "valid": true,
+    "class": "public"
+  },
+  {
+    "input": "01.2.3.4",
+    "valid": false
+  },
+  {
+    "input": "1.2.3",
+    "valid": false
+  },
+  {
+    "input": "256.1.1.1",
+    "valid": false
+  },
+  {
+    "input": "fe80::1%",
+    "valid": false
+  },
+  {
+    "input": "example.com",
+    "valid": false
+  },
+  {
+    "input": "",
+    "valid": false
+  }
+]

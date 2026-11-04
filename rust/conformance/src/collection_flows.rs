@@ -449,6 +449,512 @@ fn admin_groups(f: &mut Flows) {
     });
 }
 
+/// Manual membership of an administrator collection, made through the v1 create row.
+fn admin_membership(f: &mut Flows) {
+    let step = |surface: Surface,
+                method: &'static str,
+                route: &'static str,
+                name: &'static str,
+                at: Option<&'static str>,
+                body: Option<&'static str>,
+                capture: &'static [(&'static str, &'static str)]| Step {
+        identity: Identity::Admin,
+        profile: Some("${admin_profile_id}"),
+        at,
+        body,
+        capture,
+        ..Step::new(surface, method, route, name)
+    };
+    const V1_ITEM: &str = "/api/v1/admin/collections/{id}/items/{item_id}";
+    const V2_ITEM: &str = "/api/v2/admin/collections/{id}/items/{item_id}";
+    const V1_ORDER: &str = "/api/v1/admin/collections/{id}/items/order";
+    f.step(step(
+        ApiV1,
+        "POST",
+        "/api/v1/admin/collections/",
+        "collections:v1:admin_create",
+        None,
+        Some("{\"library_id\":1,\"title\":\"Flow admin\",\"collection_type\":\"manual\"}"),
+        &[("flow_admin_col", "/id")],
+    ));
+    type Row<'a> = (
+        Surface,
+        &'a str,
+        &'a str,
+        &'a str,
+        Option<&'a str>,
+        Option<&'a str>,
+    );
+    let rows: &[Row] = &[
+        (
+            ApiV1,
+            "PUT",
+            V1_ITEM,
+            "collections:v1:admin_add_movie",
+            Some("/api/v1/admin/collections/${flow_admin_col}/items/movie-tmdb-9000001"),
+            Some("{\"position\":0}"),
+        ),
+        (
+            ApiV1,
+            "PUT",
+            V1_ITEM,
+            "collections:v1:admin_add_empty_body",
+            Some("/api/v1/admin/collections/${flow_admin_col}/items/movie-tmdb-9000002"),
+            None,
+        ),
+        (
+            ApiV1,
+            "PUT",
+            V1_ITEM,
+            "collections:v1:admin_add_bad_body",
+            Some("/api/v1/admin/collections/${flow_admin_col}/items/movie-tmdb-9000002"),
+            Some("{"),
+        ),
+        (
+            ApiV1,
+            "PUT",
+            V1_ITEM,
+            "collections:v1:admin_add_missing",
+            Some("/api/v1/admin/collections/nope/items/movie-tmdb-9000001"),
+            Some("{}"),
+        ),
+        (
+            ApiV1,
+            "PUT",
+            V1_ORDER,
+            "collections:v1:admin_reorder",
+            Some("/api/v1/admin/collections/${flow_admin_col}/items/order"),
+            Some("{\"ordered_ids\":[\"movie-tmdb-9000002\",\"movie-tmdb-9000001\"]}"),
+        ),
+        (
+            ApiV1,
+            "PUT",
+            V1_ORDER,
+            "collections:v1:admin_reorder_mismatch",
+            Some("/api/v1/admin/collections/${flow_admin_col}/items/order"),
+            Some("{\"ordered_ids\":[\"movie-tmdb-9000002\"]}"),
+        ),
+        (
+            ApiV1,
+            "DELETE",
+            V1_ITEM,
+            "collections:v1:admin_remove_movie",
+            Some("/api/v1/admin/collections/${flow_admin_col}/items/movie-tmdb-9000001"),
+            None,
+        ),
+        (
+            ApiV2,
+            "PUT",
+            V2_ITEM,
+            "collections:v2:admin_add_other_library",
+            Some("/api/v2/admin/collections/${flow_admin_col}/items/series-tvdb-9000003"),
+            Some("{\"position\":0}"),
+        ),
+        (
+            ApiV2,
+            "PUT",
+            V2_ITEM,
+            "collections:v2:admin_add_movie",
+            Some("/api/v2/admin/collections/${flow_admin_col}/items/movie-tmdb-9000001"),
+            Some("{\"position\":3}"),
+        ),
+        (
+            ApiV2,
+            "PUT",
+            V2_ITEM,
+            "collections:v2:admin_add_missing",
+            Some("/api/v2/admin/collections/nope/items/movie-tmdb-9000001"),
+            Some("{\"position\":0}"),
+        ),
+        (
+            ApiV2,
+            "DELETE",
+            V2_ITEM,
+            "collections:v2:admin_remove_movie",
+            Some("/api/v2/admin/collections/${flow_admin_col}/items/movie-tmdb-9000001"),
+            None,
+        ),
+    ];
+    for &(surface, method, route, name, at, body) in rows {
+        f.step(step(surface, method, route, name, at, body, &[]));
+    }
+}
+
+/// One step as `identity` with the profile header `profile`, named `collections:kid:<name>`.
+#[allow(clippy::too_many_arguments)]
+fn as_profile(
+    f: &mut Flows,
+    identity: Identity,
+    profile: &str,
+    surface: Surface,
+    method: &str,
+    route: &str,
+    at: &str,
+    name: &str,
+    body: Option<&str>,
+    capture: &[(&str, &str)],
+) {
+    let name = format!("collections:kid:{name}");
+    f.step(Step {
+        identity,
+        profile: Some(profile),
+        at: Some(at),
+        body,
+        capture,
+        headers: if method == "PUT" && surface == ApiV2 {
+            &[("If-Match", "*")]
+        } else {
+            &[]
+        },
+        ..Step::new(surface, method, route, &name)
+    });
+}
+
+/// The seeded kid profile (PG ceiling) reading a shared collection that holds an R title, and the
+/// primary profile reading the kid's shared collection through the owner's ceiling.
+fn kid_collections(f: &mut Flows) {
+    const ABOVE: &str = "movie-tmdb-9000002";
+    #[allow(clippy::too_many_arguments)]
+    fn user(
+        f: &mut Flows,
+        surface: Surface,
+        method: &str,
+        route: &str,
+        at: &str,
+        name: &str,
+        body: Option<&str>,
+        capture: &[(&str, &str)],
+    ) {
+        as_profile(
+            f,
+            Identity::User,
+            "${user_profile_id}",
+            surface,
+            method,
+            route,
+            at,
+            name,
+            body,
+            capture,
+        )
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn kid(
+        f: &mut Flows,
+        surface: Surface,
+        method: &str,
+        route: &str,
+        at: &str,
+        name: &str,
+        body: Option<&str>,
+        capture: &[(&str, &str)],
+    ) {
+        as_profile(
+            f,
+            Identity::Kid,
+            "${kid_profile_id}",
+            surface,
+            method,
+            route,
+            at,
+            name,
+            body,
+            capture,
+        )
+    }
+    let create = "/api/v1/collections/";
+    let item = "/api/v1/collections/{id}/items/{item_id}";
+    let items = "/api/v1/collections/{id}/items";
+    let order = "/api/v2/collections/{id}/items/order";
+    let position = Some("{\"position\":0}");
+    user(
+        f,
+        ApiV1,
+        "POST",
+        create,
+        create,
+        "parent_create",
+        Some("{\"name\":\"Mixed\",\"is_shared\":true}"),
+        &[("flow_kid_mixed", "/id")],
+    );
+    for id in [MOVIE, ABOVE] {
+        let at = format!("/api/v1/collections/${{flow_kid_mixed}}/items/{id}");
+        user(
+            f,
+            ApiV1,
+            "PUT",
+            item,
+            &at,
+            &format!("parent_add_{id}"),
+            position,
+            &[],
+        );
+    }
+    kid(
+        f,
+        ApiV1,
+        "GET",
+        items,
+        "/api/v1/collections/${flow_kid_mixed}/items",
+        "kid_reads_shared",
+        None,
+        &[],
+    );
+    kid(
+        f,
+        ApiV2,
+        "GET",
+        order,
+        "/api/v2/collections/${flow_kid_mixed}/items/order",
+        "kid_order_shared",
+        None,
+        &[],
+    );
+    kid(
+        f,
+        ApiV1,
+        "POST",
+        create,
+        create,
+        "kid_create",
+        Some("{\"name\":\"Kid\",\"is_shared\":true}"),
+        &[("flow_kid_own", "/id")],
+    );
+    for id in [MOVIE, ABOVE] {
+        let at = format!("/api/v1/collections/${{flow_kid_own}}/items/{id}");
+        kid(
+            f,
+            ApiV1,
+            "PUT",
+            item,
+            &at,
+            &format!("kid_add_{id}"),
+            position,
+            &[],
+        );
+    }
+    // An R member, the way a later ceiling leaves one: another profile cannot add to the kid's collection, so
+    // the parent lifts the kid's ceiling, the kid adds the R title, and the parent restores PG.
+    let at = format!("/api/v1/collections/${{flow_kid_own}}/items/{ABOVE}");
+    user(
+        f,
+        ApiV1,
+        "PUT",
+        item,
+        &at,
+        "parent_add_to_kid",
+        position,
+        &[],
+    );
+    let profile = "/api/v2/profiles/{id}";
+    let kid_at = "/api/v2/profiles/${kid_profile_id}";
+    user(
+        f,
+        ApiV2,
+        "PATCH",
+        profile,
+        kid_at,
+        "lift_ceiling",
+        Some("{\"max_content_rating\":null}"),
+        &[],
+    );
+    kid(
+        f,
+        ApiV1,
+        "PUT",
+        item,
+        &at,
+        "kid_add_above_unlimited",
+        position,
+        &[],
+    );
+    user(
+        f,
+        ApiV2,
+        "PATCH",
+        profile,
+        kid_at,
+        "restore_ceiling",
+        Some("{\"max_content_rating\":\"PG\"}"),
+        &[],
+    );
+    kid(
+        f,
+        ApiV1,
+        "GET",
+        items,
+        "/api/v1/collections/${flow_kid_own}/items",
+        "kid_reads_own",
+        None,
+        &[],
+    );
+    kid(
+        f,
+        ApiV2,
+        "GET",
+        order,
+        "/api/v2/collections/${flow_kid_own}/items/order",
+        "kid_order_own",
+        None,
+        &[],
+    );
+    user(
+        f,
+        ApiV1,
+        "GET",
+        items,
+        "/api/v1/collections/${flow_kid_own}/items",
+        "parent_reads_kid",
+        None,
+        &[],
+    );
+    user(
+        f,
+        ApiV2,
+        "GET",
+        order,
+        "/api/v2/collections/${flow_kid_own}/items/order",
+        "parent_order_kid",
+        None,
+        &[],
+    );
+    kid(
+        f,
+        ApiV2,
+        "GET",
+        "/api/v2/collections/order",
+        "/api/v2/collections/order",
+        "kid_order",
+        None,
+        &[],
+    );
+    let reorder = Some("{\"ordered_ids\":[\"${flow_kid_own}\"]}");
+    kid(
+        f,
+        ApiV1,
+        "PUT",
+        "/api/v1/collections/order",
+        "/api/v1/collections/order",
+        "kid_reorder",
+        reorder,
+        &[],
+    );
+    kid(
+        f,
+        ApiV2,
+        "PUT",
+        "/api/v2/collections/order",
+        "/api/v2/collections/order",
+        "kid_reorder",
+        reorder,
+        &[],
+    );
+    // Membership writes under the ceiling: the R title is hidden from the kid, and the v2 order editor refuses
+    // an order the kid cannot see in full.
+    let item_v2 = "/api/v2/collections/{id}/items/{item_id}";
+    for (name, id) in [("kid_add_v2_above", ABOVE), ("kid_add_v2_movie", MOVIE)] {
+        kid(
+            f,
+            ApiV2,
+            "PUT",
+            item_v2,
+            &format!("/api/v2/collections/${{flow_kid_own}}/items/{id}"),
+            name,
+            position,
+            &[],
+        );
+    }
+    kid(
+        f,
+        ApiV2,
+        "PUT",
+        item_v2,
+        &format!("/api/v2/collections/${{flow_kid_mixed}}/items/{MOVIE}"),
+        "kid_add_v2_shared",
+        position,
+        &[],
+    );
+    let items_body = format!("{{\"ordered_ids\":[\"{ABOVE}\",\"{MOVIE}\"]}}");
+    kid(
+        f,
+        ApiV1,
+        "PUT",
+        "/api/v1/collections/{id}/items/order",
+        "/api/v1/collections/${flow_kid_own}/items/order",
+        "kid_items_reorder_v1",
+        Some(&items_body),
+        &[],
+    );
+    f.step(Step {
+        identity: Identity::Kid,
+        profile: Some("${kid_profile_id}"),
+        at: Some("/api/v2/collections/${flow_kid_own}/items/order"),
+        body: Some(&items_body),
+        headers: &[("If-Match", "*")],
+        ..Step::new(ApiV2, "PUT", order, "collections:kid:kid_items_reorder_v2")
+    });
+    kid(
+        f,
+        ApiV1,
+        "DELETE",
+        item,
+        &format!("/api/v1/collections/${{flow_kid_own}}/items/{ABOVE}"),
+        "kid_remove_v1_above",
+        None,
+        &[],
+    );
+    kid(
+        f,
+        ApiV2,
+        "PUT",
+        order,
+        "/api/v2/collections/${flow_kid_own}/items/order",
+        "kid_items_reorder_v2_visible",
+        Some(&format!("{{\"ordered_ids\":[\"{MOVIE}\"]}}")),
+        &[],
+    );
+    kid(
+        f,
+        ApiV2,
+        "DELETE",
+        item_v2,
+        &format!("/api/v2/collections/${{flow_kid_own}}/items/{MOVIE}"),
+        "kid_remove_v2_movie",
+        None,
+        &[],
+    );
+    for (surface, v) in [(ApiV1, "v1"), (ApiV2, "v2")] {
+        let pref = format!("/api/{v}/collections/sort-preference");
+        for (name, id) in [("own", "${flow_kid_own}"), ("shared", "${flow_kid_mixed}")] {
+            let body = format!("{{\"collection_kind\":\"user\",\"collection_id\":\"{id}\",\"field\":\"title\",\"order\":\"desc\"}}");
+            kid(
+                f,
+                surface,
+                "PUT",
+                &pref,
+                &pref,
+                &format!("kid_sort_{name}_{v}"),
+                Some(&body),
+                &[],
+            );
+        }
+        f.step(Step {
+            identity: Identity::Kid,
+            profile: Some("${kid_profile_id}"),
+            query: &[
+                ("collection_kind", "user"),
+                ("collection_id", "${flow_kid_own}"),
+            ],
+            ..Step::new(
+                surface,
+                "DELETE",
+                &pref,
+                &format!("collections:kid:kid_sort_clear_{v}"),
+            )
+        });
+    }
+}
+
 pub(crate) fn add(b: &mut Builder) {
     let mut flows = Flows {
         b,
@@ -458,8 +964,10 @@ pub(crate) fn add(b: &mut Builder) {
     let f = &mut flows;
     own_order(f);
     admin_groups(f);
+    admin_membership(f);
     membership(f, ApiV1, "/api/v1/collections", "v1");
     membership(f, ApiV2, "/api/v2/collections", "v2");
+    kid_collections(f);
     go(
         f,
         ApiV1,

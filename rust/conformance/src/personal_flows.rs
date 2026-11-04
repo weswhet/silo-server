@@ -9,6 +9,8 @@ use Surface::{ApiV1, ApiV2};
 const MOVIE: &str = "movie-tmdb-9000001";
 const SERIES: &str = "series-tvdb-9000003";
 const EPISODE: &str = "episode-tvdb-9000003-1-1";
+/// Rated R, above the seeded kid profile's PG ceiling; `MOVIE` is PG.
+const ABOVE: &str = "movie-tmdb-9000002";
 
 struct Call<'a> {
     method: &'a str,
@@ -477,6 +479,180 @@ fn device_flow(f: &mut Flows) {
     );
 }
 
+/// The seeded kid profile (PG ceiling) on the user account, so every personal row binds the maturity filter.
+fn kid(
+    f: &mut Flows,
+    surface: Surface,
+    method: &str,
+    route: &str,
+    at: &str,
+    name: &str,
+    body: Option<&str>,
+) {
+    let v1 = surface == ApiV1;
+    let name = format!("personal:kid:{}:{name}", if v1 { "v1" } else { "v2" });
+    let (at, query) = at.split_once('?').unwrap_or((at, ""));
+    let pairs: Vec<(&str, &str)> = query.split('&').filter_map(|p| p.split_once('=')).collect();
+    f.step(Step {
+        query: &pairs,
+        identity: Identity::Kid,
+        at: Some(at),
+        body,
+        profile: Some("${kid_profile_id}"),
+        ..Step::new(surface, method, route, &name)
+    });
+}
+
+fn kid_flow(f: &mut Flows) {
+    for (surface, v) in [(ApiV1, "v1"), (ApiV2, "v2")] {
+        // Progress first, so the listings below have rows to filter.
+        let sync = format!("/api/{v}/sync/progress");
+        let body = if surface == ApiV1 {
+            format!("{{\"items\":[{{\"media_item_id\":\"{MOVIE}\",\"position\":600,\"duration\":3000}},{{\"media_item_id\":\"{ABOVE}\",\"position\":600,\"duration\":3000}},{{\"media_item_id\":\"{EPISODE}\",\"position\":60,\"duration\":3000}}]}}")
+        } else {
+            format!("{{\"items\":[{{\"media_item_id\":\"{MOVIE}\",\"position_ms\":700000,\"duration_ms\":3000000}},{{\"media_item_id\":\"{ABOVE}\",\"position_ms\":1,\"duration_ms\":2}},{{\"media_item_id\":\"{EPISODE}\",\"position_ms\":70000,\"duration_ms\":3000000}}]}}")
+        };
+        kid(f, surface, "POST", &sync, &sync, "sync", Some(&body));
+        let list = if surface == ApiV1 {
+            "/api/v1/progress/"
+        } else {
+            "/api/v2/progress"
+        };
+        kid(f, surface, "GET", list, list, "progress", None);
+        kid(
+            f,
+            surface,
+            "GET",
+            list,
+            &format!("{list}?library_id=1"),
+            "progress_library",
+            None,
+        );
+        for (base, label) in [("favorites", "favorite"), ("watchlist", "watchlist")] {
+            let route = format!("/api/{v}/{base}/{{item_id}}");
+            let at = |id: &str| format!("/api/{v}/{base}/{id}");
+            let n = |s: &str| format!("{label}_{s}");
+            kid(f, surface, "PUT", &route, &at(MOVIE), &n("add"), None);
+            kid(f, surface, "GET", &route, &at(MOVIE), &n("present"), None);
+            kid(f, surface, "PUT", &route, &at(ABOVE), &n("add_above"), None);
+            kid(f, surface, "GET", &route, &at(ABOVE), &n("get_above"), None);
+            kid(
+                f,
+                surface,
+                "PUT",
+                &route,
+                &at(EPISODE),
+                &n("add_episode"),
+                None,
+            );
+            if surface == ApiV2 {
+                let member = format!("{route}/membership");
+                kid(
+                    f,
+                    surface,
+                    "GET",
+                    &member,
+                    &format!("{}/membership", at(MOVIE)),
+                    &n("member"),
+                    None,
+                );
+                kid(
+                    f,
+                    surface,
+                    "GET",
+                    &member,
+                    &format!("{}/membership", at(ABOVE)),
+                    &n("member_above"),
+                    None,
+                );
+            }
+            kid(f, surface, "DELETE", &route, &at(MOVIE), &n("remove"), None);
+            kid(
+                f,
+                surface,
+                "DELETE",
+                &route,
+                &at(EPISODE),
+                &n("remove_episode"),
+                None,
+            );
+        }
+        let route = format!("/api/{v}/ratings/{{item_id}}");
+        let at = |id: &str| format!("/api/{v}/ratings/{id}");
+        kid(
+            f,
+            surface,
+            "PUT",
+            &route,
+            &at(MOVIE),
+            "rating_set",
+            Some("{\"rating\":4}"),
+        );
+        kid(
+            f,
+            surface,
+            "PUT",
+            &route,
+            &at(ABOVE),
+            "rating_above",
+            Some("{\"rating\":4}"),
+        );
+        kid(f, surface, "GET", &route, &at(MOVIE), "rating_get", None);
+        let root = if surface == ApiV1 {
+            "/api/v1/ratings/"
+        } else {
+            "/api/v2/ratings"
+        };
+        kid(f, surface, "GET", root, root, "rating_list", None);
+        kid(
+            f,
+            surface,
+            "DELETE",
+            &route,
+            &at(MOVIE),
+            "rating_delete",
+            None,
+        );
+        let route = format!("/api/{v}/home/dismissals/{{surface}}/{{item_id}}");
+        let at = |id: &str| format!("/api/{v}/home/dismissals/continue_watching/{id}");
+        let stamp = Some("{\"progress_updated_at\":\"2026-01-02T03:04:05Z\"}");
+        kid(
+            f,
+            surface,
+            "PUT",
+            &route,
+            &at(EPISODE),
+            "dismiss_episode",
+            stamp,
+        );
+        kid(f, surface, "PUT", &route, &at(MOVIE), "dismiss", stamp);
+        kid(
+            f,
+            surface,
+            "PUT",
+            &route,
+            &at(ABOVE),
+            "dismiss_above",
+            stamp,
+        );
+        kid(
+            f,
+            surface,
+            "DELETE",
+            &route,
+            &at(EPISODE),
+            "undismiss_episode",
+            None,
+        );
+        let devices = if surface == ApiV1 {
+            "/api/v1/devices/"
+        } else {
+            "/api/v2/devices"
+        };
+        kid(f, surface, "GET", devices, devices, "devices", None);
+    }
+}
+
 pub(crate) fn add(b: &mut Builder) {
     let mut flows = Flows {
         b,
@@ -494,6 +670,7 @@ pub(crate) fn add(b: &mut Builder) {
     dismissal_flow(f, ApiV1, "/api/v1/home/dismissals");
     dismissal_flow(f, ApiV2, "/api/v2/home/dismissals");
     device_flow(f);
+    kid_flow(f);
     go(
         f,
         ApiV2,

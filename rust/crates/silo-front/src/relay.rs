@@ -510,11 +510,15 @@ impl Conn {
 
     /// Runs one request and response. True when the connection can take another.
     async fn exchange(&mut self, head: RequestHead) -> bool {
+        let fresh = match self.ctx.native.as_ref() {
+            Some((_, gate)) => gate.refresh_for(&head).await,
+            None => Default::default(),
+        };
         let native = self
             .ctx
             .native
             .as_ref()
-            .filter(|(_, gate)| gate.is_native(&head))
+            .filter(|(_, gate)| gate.is_native_with(&head, fresh))
             .map(|(server, _)| server.clone());
         let which = if native.is_some() {
             Which::Native

@@ -31,6 +31,10 @@ rows=(
   /api/v1/requests/mine
   /api/v2/requests/status
   /api/v2/catalog/search/capabilities
+  /api/v1/notifications/web-push/subscriptions
+  /api/v2/notifications/webhooks
+  /api/v2/admin/notifications/server-channels
+  /api/v2/notifications/push/devices/capabilities
 )
 fail=0
 
@@ -275,5 +279,31 @@ for condition in 'i.profile_allowed_library_ids == null' 'i.disabled_library_ids
   unpolicy
   sleep 3
 done
+
+# The personal rows go to Go from the first request after a watch provider connection appears, and come back
+# once it is gone: Go checks the table on each write, and no event announces it (M4 review, M1).
+if [ -n "${CONF_FRONT_ORIGIN_LOG:-}" ]; then
+  kid_ids="$(psql_b "select user_id||' '||id from user_profiles where id='$CONF_USER_PROFILE_ID'")"
+  read -r wp_user wp_profile <<<"$kid_ids"
+  last_origin() { tail -n 1 "$CONF_FRONT_ORIGIN_LOG" | python3 -c 'import json,sys;print(json.load(sys.stdin)["origin"])'; }
+  for state in connected disconnected; do
+    if [ "$state" = connected ]; then
+      psql_b "insert into watch_provider_connections(provider,user_id,profile_id) values ('traits-check',$wp_user,'$wp_profile')"
+      want=go
+    else
+      psql_b "delete from watch_provider_connections where provider='traits-check'"
+      want=native
+    fi
+    curl -s -o /dev/null -X PUT -H "$K" -H "$PROF" "$cand/api/v2/favorites/movie-tmdb-9000001"
+    got="$(last_origin)"
+    if [ "$got" = "$want" ]; then
+      echo "ok   watch_provider_routing $state $got"
+    else
+      echo "DIFF watch_provider_routing $state: $got, want $want"
+      fail=1
+    fi
+  done
+  curl -s -o /dev/null -X DELETE -H "$K" -H "$PROF" "$cand/api/v2/favorites/movie-tmdb-9000001"
+fi
 
 exit "$fail"

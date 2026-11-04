@@ -3,8 +3,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use silo_pg::Pool;
 use silo_pg::ToSql;
+use silo_pg::{AnyInt, Pool};
 
 use crate::access::Scope;
 use crate::rating::{age_for_ceiling, has_ceiling};
@@ -19,6 +19,10 @@ pub struct AccessFilter {
     pub max_advisory_age: i32,
     pub require_advisory_age: bool,
 }
+
+/// The ceiling and advisory ages a bound filter's arguments borrow.
+#[derive(Default)]
+struct Ages(Option<AnyInt>, AnyInt);
 
 /// The positional arguments and SQL conditions the filter adds, numbered after `first`.
 struct Bound<'a> {
@@ -59,9 +63,10 @@ impl AccessFilter {
         self.allowed.as_ref().is_some_and(Vec::is_empty)
     }
 
-    /// `appendLibraryAccessConditions` and `ApplyMaturityLimits` for alias `mi`. `ceiling` holds the
-    /// resolved age the arguments borrow.
-    fn bind<'a>(&'a self, first: usize, ceiling: &'a mut Option<i32>) -> Bound<'a> {
+    /// `appendLibraryAccessConditions` and `ApplyMaturityLimits` for alias `mi`. `ages` holds the
+    /// resolved ceiling age and the advisory age the arguments borrow. Both columns are `smallint`, so
+    /// they bind as `AnyInt`, the way pgx encodes a Go `int` into `int2`.
+    fn bind<'a>(&'a self, first: usize, ages: &'a mut Ages) -> Bound<'a> {
         let mut args: Vec<&'a (dyn ToSql + Sync)> = Vec::new();
         let mut next = first;
         let mut allowed_at = 0;
@@ -78,8 +83,8 @@ impl AccessFilter {
         }
         let mut maturity = Vec::new();
         if has_ceiling(&self.max_content_rating) {
-            *ceiling = age_for_ceiling(&self.max_content_rating);
-            if ceiling.is_none() {
+            ages.0 = age_for_ceiling(&self.max_content_rating).map(|a| AnyInt(i64::from(a)));
+            if ages.0.is_none() {
                 maturity.push("1 = 0".to_owned());
                 return Bound {
                     args,
@@ -95,8 +100,9 @@ impl AccessFilter {
             });
             next += 1;
         }
-        let ceiling: &'a Option<i32> = ceiling;
-        if let Some(age) = ceiling {
+        ages.1 = AnyInt(i64::from(self.max_advisory_age));
+        let ages: &'a Ages = ages;
+        if let Some(age) = &ages.0 {
             args.push(age);
         }
         if self.max_advisory_age > 0 {
@@ -105,7 +111,7 @@ impl AccessFilter {
             } else {
                 format!("(mi.advisory_age IS NULL OR mi.advisory_age <= ${next})")
             });
-            args.push(&self.max_advisory_age);
+            args.push(&ages.1);
         }
         Bound {
             args,
@@ -146,8 +152,8 @@ pub async fn ensure_accessible(
     if filter.nothing_allowed() {
         return Ok(false);
     }
-    let mut ceiling = None;
-    let bound = filter.bind(2, &mut ceiling);
+    let mut ages = Ages::default();
+    let bound = filter.bind(2, &mut ages);
     let mut conditions = vec!["mi.content_id = $1".to_owned()];
     conditions.extend(library_conditions(
         "mi.content_id",
@@ -181,8 +187,8 @@ pub async fn filter_accessible(
         return Ok(result);
     }
     let ids = content_ids.to_vec();
-    let mut ceiling = None;
-    let bound = filter.bind(2, &mut ceiling);
+    let mut ages = Ages::default();
+    let bound = filter.bind(2, &mut ages);
     let mut item = vec!["mi.content_id = req.content_id".to_owned()];
     let mut episode = vec!["e.content_id = req.content_id".to_owned()];
     item.extend(library_conditions(
@@ -270,8 +276,8 @@ pub async fn visible_items(
         return Ok(result);
     }
     let ids = content_ids.to_vec();
-    let mut ceiling = None;
-    let bound = filter.bind(2, &mut ceiling);
+    let mut ages = Ages::default();
+    let bound = filter.bind(2, &mut ages);
     let mut sql =
         "SELECT mi.content_id, mi.title FROM media_items mi WHERE mi.content_id = ANY($1)"
             .to_owned();

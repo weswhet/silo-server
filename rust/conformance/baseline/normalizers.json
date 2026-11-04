@@ -478,7 +478,7 @@
     },
     {
       "id": "generated-ulid-ids",
-      "why": "ULID ids for push devices. The pair is remembered.",
+      "why": "ULID ids for push devices, and the registration id an ordered registration answers (a Go vs Go run differs on flow:destinations:*:v2:ordered_register). The pair is remembered.",
       "route": "POST /api/v[12]/(devices/push/.*|notifications/push/devices)",
       "format": {
         "kind": "regex",
@@ -486,7 +486,8 @@
       },
       "json_paths": [
         "$.id",
-        "$.server_device_id"
+        "$.server_device_id",
+        "$.registration_id"
       ],
       "alias": true
     },
@@ -936,6 +937,32 @@
       "json_paths": [
         "$.updated_at",
         "$.settings[*].updated_at"
+      ]
+    },
+    {
+      "id": "notification-signing-secrets",
+      "why": "Webhook and server channel signing secrets are 32 random bytes, shown once. A Go vs Go run differs on every create and rotation (flow:destinations:*:hook_create, hook_rotate).",
+      "route": "POST /api/v[12]/(notifications/webhooks/?(\\{id\\}/rotate-secret)?|admin/notifications/server-channels/?(\\{id\\}/rotate-secret)?)",
+      "format": {
+        "kind": "regex",
+        "pattern": "^([A-Za-z0-9+/]{43}=)$"
+      },
+      "json_paths": [
+        "$.signing_secret"
+      ]
+    },
+    {
+      "id": "notification-webhook-etags",
+      "why": "A webhook's validator hashes its random ULID and its revision. A Go vs Go run differs on every listed webhook it did not capture (flow:destinations:*:v2:hooks_page).",
+      "route": "(GET|PUT) /api/v2/notifications/webhooks(/\\{id\\})?",
+      "format": {
+        "kind": "regex",
+        "pattern": "^\"([0-9a-f]{24}\\.[0-9a-z]+)\"$",
+        "any_length": true
+      },
+      "json_paths": [
+        "$.etag",
+        "$.items[*].etag"
       ]
     }
   ]

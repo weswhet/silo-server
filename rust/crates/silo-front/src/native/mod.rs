@@ -292,7 +292,19 @@ fn domain_row(path: &str) -> Option<&'static NativeRow> {
     if literal_elsewhere {
         return None;
     }
-    rows().find(|r| r.path.contains('{') && matches_template(r.path, path))
+    // chi takes the template with a literal where another has a parameter, so a path that a Go row spells with
+    // more literals is Go's (`PUT /admin/collections/{id}/items/order` beside a native `.../items/{item_id}`).
+    let params = |p: &str| p.matches('{').count();
+    let native = rows()
+        .filter(|r| r.path.contains('{') && matches_template(r.path, path))
+        .min_by_key(|r| params(r.path))?;
+    let go_more_literal = ROWS.iter().any(|r| {
+        r.surface == native.surface
+            && params(r.path) < params(native.path)
+            && matches_template(r.path, path)
+            && !DOMAINS.iter().any(|d| d.iter().any(|n| n.path == r.path))
+    });
+    (!go_more_literal).then_some(native)
 }
 
 /// Rows that need no credential: these work without the chain.
@@ -317,6 +329,13 @@ fn spa_path(path: &[u8]) -> bool {
         && path != b"/favicon.ico"
 }
 
+/// Routing conditions read on the request path; `None` uses the last reload's value.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Fresh {
+    pub personal_needs_go: Option<bool>,
+    pub request_server_enabled: Option<bool>,
+}
+
 impl Gate {
     pub fn new(inputs: &NativeInputs, force_go: Vec<Surface>) -> Self {
         Self {
@@ -327,6 +346,29 @@ impl Gate {
         }
     }
 
+    /// Re-reads, on the request path, the database conditions Go checks on each request before a row's
+    /// routing depends on them: a watch provider connection or watchlist title for the personal rows, and
+    /// an enabled request server for the request status rows. The admin reload alone would lag them by
+    /// up to its poll interval, because no event announces those tables changing.
+    /// The values read decide this request, so a concurrent request's older read cannot.
+    pub async fn refresh_for(&self, head: &RequestHead) -> Fresh {
+        let mut fresh = Fresh::default();
+        let Some(stack) = self.stack.as_ref() else {
+            return fresh;
+        };
+        let Some(path) = head.origin_path().and_then(|p| std::str::from_utf8(p).ok()) else {
+            return fresh;
+        };
+        let bare = path.strip_suffix('/').unwrap_or(path);
+        if requests::STATUS_PATHS.contains(&bare) {
+            fresh.request_server_enabled = Some(stack.refresh_request_server().await);
+        }
+        if domain_row(bare).is_some_and(|row| personal::ROWS.contains(row)) {
+            fresh.personal_needs_go = Some(stack.refresh_personal_needs_go().await);
+        }
+        fresh
+    }
+
     fn enabled(&self, surface: Surface) -> bool {
         !self.force_go.contains(&surface)
     }
@@ -335,6 +377,11 @@ impl Gate {
     /// and every method the table does not list there, because the router's own 404 and 405 answers for
     /// them are ported too. A method the table lists as Go's goes to Go.
     pub fn is_native(&self, head: &RequestHead) -> bool {
+        self.is_native_with(head, Fresh::default())
+    }
+
+    /// `is_native`, with the conditions `refresh_for` read for this request.
+    pub fn is_native_with(&self, head: &RequestHead, fresh: Fresh) -> bool {
         let Some(path) = head.origin_path() else {
             return false;
         };
@@ -396,16 +443,20 @@ impl Gate {
             }
             // `missing_seasons_requestable` asks an enabled server's plugin.
             if requests::STATUS_PATHS.contains(&bare)
-                && self
-                    .stack
-                    .as_ref()
-                    .is_some_and(|s| s.request_server_enabled())
+                && self.stack.as_ref().is_some_and(|s| {
+                    fresh
+                        .request_server_enabled
+                        .unwrap_or(s.request_server_enabled())
+                })
             {
                 return false;
             }
             // Watch provider fan-out and title promotion need the plugin host and watchlist service.
             if personal::ROWS.contains(row)
-                && self.stack.as_ref().is_some_and(|s| s.personal_needs_go())
+                && self
+                    .stack
+                    .as_ref()
+                    .is_some_and(|s| fresh.personal_needs_go.unwrap_or(s.personal_needs_go()))
             {
                 return false;
             }

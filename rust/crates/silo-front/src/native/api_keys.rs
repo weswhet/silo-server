@@ -893,6 +893,7 @@ fn mount_v1(stack: &Arc<Stack>, api: &Mux) {
     super::catalog::mount_v1(stack, &admin_mux);
     super::collections::mount_v1_admin(stack, &admin_mux);
     super::requests::mount_v1_admin(stack, &admin_mux);
+    super::notifications::mount_v1_admin(stack, &admin_mux);
     api.mount("/api/v1/admin", admin_mux);
 }
 

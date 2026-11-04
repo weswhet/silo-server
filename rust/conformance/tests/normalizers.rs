@@ -106,6 +106,29 @@ fn row_for(id: &str) -> Option<Row> {
             json!("172.19.*.*"),
             vec![json!("not masked"), json!("172.18.0.1")],
         ),
+        "notification-signing-secrets" => row(
+            "api_v2",
+            "POST /api/v2/notifications/webhooks",
+            json!("emsq9ixNNxNLivU7ScJKlz3pzzg6o1x60Z4q85zFSd0="),
+            json!("WeYHqcJgKAedQhrSNEZ0jJRDU5m1BwXhoL1kOUWJ96Y="),
+            vec![
+                json!("WeYHqcJgKAedQhrSNEZ0jJRDU5m1BwXhoL1kOUWJ96Y"),
+                json!("short="),
+                json!(""),
+                Value::Null,
+            ],
+        ),
+        "notification-webhook-etags" => row(
+            "api_v2",
+            "GET /api/v2/notifications/webhooks",
+            json!("\"f82d797d96cd4addf55109be.2qmf70mdc3wb3\""),
+            json!("\"f6c99ed5e31df9e832d0ecb2.nnzkrmic9rw2\""),
+            vec![
+                json!("W/\"f6c99ed5e31df9e832d0ecb2.nnzkrmic9rw2\""),
+                json!("f6c99ed5e31df9e832d0ecb2.nnzkrmic9rw2"),
+                json!("\"f6c99ed5e31df9e832d0ecb2\""),
+            ],
+        ),
         "legacy-device-setting-updated-at" => row(
             "api_v1",
             "GET /api/v1/settings/effective",

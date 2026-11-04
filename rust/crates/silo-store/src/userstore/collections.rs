@@ -324,6 +324,139 @@ pub async fn reorder_collections(
     }
 }
 
+/// `AddCollectionItem`: an existing member keeps its position and added time. `position` is Go's `int`, so a
+/// value past `int4` fails the bind as pgx does.
+pub async fn add_item(
+    pool: &Pool,
+    user: AnyInt,
+    id: &str,
+    item: &str,
+    position: AnyInt,
+) -> Result<(), PgError> {
+    pool.execute(
+        "INSERT INTO user_personal_collection_items (user_id, collection_id, media_item_id, position, added_at)
+		 VALUES ($1, $2, $3, $4, $5::text::timestamptz)
+		 ON CONFLICT (user_id, collection_id, media_item_id, sub_item_id)
+		   DO NOTHING",
+        &[&user, &id, &item, &position, &now_utc()],
+    )
+    .await?;
+    Ok(())
+}
+
+/// `RemoveCollectionItem`.
+pub async fn remove_item(pool: &Pool, user: AnyInt, id: &str, item: &str) -> Result<(), PgError> {
+    pool.execute(
+        "DELETE FROM user_personal_collection_items WHERE user_id = $1 AND collection_id = $2 AND media_item_id = $3 AND sub_item_id = ''",
+        &[&user, &id, &item],
+    )
+    .await?;
+    Ok(())
+}
+
+async fn reorder_items_attempt(
+    pool: &Pool,
+    user: AnyInt,
+    id: &str,
+    ids: &[String],
+    expected: Option<i64>,
+) -> Result<(), MutationError> {
+    let mut session = pool.acquire().await?;
+    let mut tx = session.begin().await?;
+    if expected.is_some() {
+        tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+            .await?;
+    }
+    tx.execute(
+        "SELECT 1 FROM user_personal_collections WHERE user_id = $1 AND id = $2 FOR UPDATE",
+        &[&user, &id],
+    )
+    .await?;
+    if let Some(expected) = expected {
+        let rows = tx
+            .query(
+                "SELECT r.revision FROM user_collection_revisions r JOIN user_personal_collections c ON c.user_id=r.user_id AND c.id=r.collection_id WHERE r.user_id=$1 AND r.collection_id=$2",
+                &[&user, &id],
+            )
+            .await?;
+        let Some(current) = rows.first().map(|r| r.get::<_, i64>(0)) else {
+            return Err(MutationError::RevisionMismatch);
+        };
+        if expected != -1 && current != expected {
+            return Err(MutationError::RevisionMismatch);
+        }
+    }
+    let owned = ids.to_vec();
+    let args: [&(dyn ToSql + Sync); 3] = [&owned, &user, &id];
+    let row = tx
+        .query_one(
+            "
+		WITH supplied AS (
+		  SELECT id, pos FROM unnest($1::text[]) WITH ORDINALITY AS u(id, pos)
+		),
+		upd AS (
+		  UPDATE user_personal_collection_items t
+		  SET position = supplied.pos - 1
+		  FROM supplied
+		  WHERE t.user_id = $2 AND t.collection_id = $3 AND t.media_item_id = supplied.id AND t.sub_item_id = ''
+		  RETURNING 1
+		)
+		SELECT (SELECT count(*) FROM upd),
+		       (SELECT count(*) FROM user_personal_collection_items
+		         WHERE user_id = $2 AND collection_id = $3 AND sub_item_id = '')
+	",
+            &args,
+        )
+        .await?;
+    let (updated, total): (i64, i64) = (row.get(0), row.get(1));
+    if updated as usize != ids.len() || updated != total {
+        return Err(MutationError::OrderedMismatch);
+    }
+    tx.execute(
+        "UPDATE user_personal_collections SET updated_at = $1::text::timestamptz
+		 WHERE user_id = $2 AND id = $3",
+        &[&now_utc(), &user, &id],
+    )
+    .await?;
+    if expected.is_some() {
+        tx.execute(
+            "UPDATE user_collection_revisions SET revision=revision+1 WHERE user_id=$1 AND collection_id=$2",
+            &[&user, &id],
+        )
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+/// `ReorderCollectionItems` and `ReorderCollectionItemsIfRevision`.
+pub async fn reorder_items(
+    pool: &Pool,
+    user: AnyInt,
+    id: &str,
+    ids: &[String],
+    expected: Option<i64>,
+) -> Result<(), MutationError> {
+    if has_duplicates(ids) {
+        return Err(MutationError::Duplicates);
+    }
+    match expected {
+        None => reorder_items_attempt(pool, user, id, ids, None).await,
+        Some(expected) => {
+            for attempt in 0..3 {
+                let Err(e) = reorder_items_attempt(pool, user, id, ids, Some(expected)).await
+                else {
+                    return Ok(());
+                };
+                if let Some(last) = after_failure(pool, user, id, expected, attempt, e).await? {
+                    return Err(last);
+                }
+            }
+            unreachable!("the third attempt returns")
+        }
+    }
+}
+
 /// `SetCollectionSortPreference`.
 pub async fn set_sort_preference(
     pool: &Pool,
@@ -375,7 +508,7 @@ pub async fn library_collection_scope(
 ) -> Result<Option<(String, Vec<i32>)>, PgError> {
     let rows = pool
         .query(
-            "SELECT lc.visibility, COALESCE(ARRAY_AGG(DISTINCT lcl.library_id) FILTER (WHERE lcl.library_id IS NOT NULL), ARRAY[]::integer[])
+            "SELECT lc.visibility, COALESCE(ARRAY_AGG(DISTINCT lcl.library_id) FILTER (WHERE lcl.library_id IS NOT NULL), ARRAY[]::integer[]), lc.library_id
              FROM library_collections lc
              LEFT JOIN library_collection_libraries lcl ON lcl.collection_id = lc.id
              WHERE lc.id = $1
@@ -383,7 +516,271 @@ pub async fn library_collection_scope(
             &[&id],
         )
         .await?;
-    Ok(rows.first().map(|r| (r.get(0), r.get(1))))
+    Ok(rows.first().map(|r| {
+        let (visibility, libraries, legacy): (String, Vec<i32>, i32) =
+            (r.get(0), r.get(1), r.get(2));
+        (visibility, with_legacy_library(libraries, legacy))
+    }))
+}
+
+/// `LibraryCollectionRepository.GetByID`, the type and library scope the manual membership rows read. `None`
+/// is `ErrLibraryCollectionNotFound`.
+pub async fn library_collection_kind(
+    pool: &Pool,
+    id: &str,
+) -> Result<Option<(String, Vec<i32>)>, PgError> {
+    let rows = pool
+        .query(
+            "SELECT lc.collection_type, COALESCE(ARRAY_AGG(DISTINCT lcl.library_id) FILTER (WHERE lcl.library_id IS NOT NULL), ARRAY[]::integer[]), lc.library_id
+             FROM library_collections lc
+             LEFT JOIN library_collection_libraries lcl ON lcl.collection_id = lc.id
+             WHERE lc.id = $1
+             GROUP BY lc.id",
+            &[&id],
+        )
+        .await?;
+    Ok(rows.first().map(|r| {
+        let (kind, libraries, legacy): (String, Vec<i32>, i32) = (r.get(0), r.get(1), r.get(2));
+        (kind, with_legacy_library(libraries, legacy))
+    }))
+}
+
+/// What a library collection membership write can come to.
+#[derive(Debug)]
+pub enum LibraryMemberError {
+    /// `ErrLibraryCollectionNotFound`.
+    NotFound,
+    /// `ErrLibraryCollectionNotManual`.
+    NotManual,
+    /// `ErrLibraryCollectionItemNotFound`.
+    ItemNotFound,
+    /// `fmt.Errorf("ordered_ids contains duplicates")`.
+    Duplicates,
+    /// `collectionutil.ErrOrderedIDsMismatch`.
+    OrderedMismatch,
+    Db(PgError),
+}
+
+impl From<PgError> for LibraryMemberError {
+    fn from(e: PgError) -> Self {
+        LibraryMemberError::Db(e)
+    }
+}
+
+impl LibraryMemberError {
+    /// `err.Error()`.
+    pub fn message(&self) -> String {
+        match self {
+            LibraryMemberError::NotFound => "library collection not found".to_owned(),
+            LibraryMemberError::NotManual => "library collection is not manual".to_owned(),
+            LibraryMemberError::ItemNotFound => "item not found in collection libraries".to_owned(),
+            LibraryMemberError::Duplicates => DUPLICATES.to_owned(),
+            LibraryMemberError::OrderedMismatch => ORDERED_MISMATCH.to_owned(),
+            LibraryMemberError::Db(e) => e.to_string(),
+        }
+    }
+}
+
+/// `lockLibraryCollectionParent`.
+async fn lock_library_parent(
+    tx: &mut silo_pg::Session,
+    id: &str,
+) -> Result<(), LibraryMemberError> {
+    let rows = tx
+        .query(
+            "SELECT id FROM library_collections WHERE id=$1 FOR NO KEY UPDATE",
+            &[&id],
+        )
+        .await?;
+    if rows.is_empty() {
+        return Err(LibraryMemberError::NotFound);
+    }
+    Ok(())
+}
+
+/// `lockManualLibraryCollection`: the legacy library ID.
+async fn lock_manual_library(
+    tx: &mut silo_pg::Session,
+    id: &str,
+) -> Result<i32, LibraryMemberError> {
+    let rows = tx
+        .query(
+            "SELECT collection_type,library_id FROM library_collections WHERE id=$1 FOR NO KEY UPDATE",
+            &[&id],
+        )
+        .await?;
+    let Some(row) = rows.first() else {
+        return Err(LibraryMemberError::NotFound);
+    };
+    if row.get::<_, String>(0) != "manual" {
+        return Err(LibraryMemberError::NotManual);
+    }
+    Ok(row.get(1))
+}
+
+/// `LibraryCollectionRepository.AddItem`: the legacy upsert.
+pub async fn library_add_item(
+    pool: &Pool,
+    id: &str,
+    item: &str,
+    position: AnyInt,
+) -> Result<(), LibraryMemberError> {
+    let mut session = pool.acquire().await?;
+    let mut tx = session.begin().await?;
+    lock_library_parent(&mut tx, id).await?;
+    tx.execute(
+        "
+		INSERT INTO library_collection_items (collection_id, media_item_id, position, source_rank)
+		VALUES ($1, $2, $3, 0)
+		ON CONFLICT (collection_id, media_item_id)
+		  DO UPDATE SET position = EXCLUDED.position
+	",
+        &[&id, &item, &position],
+    )
+    .await?;
+    tx.execute(
+        "UPDATE library_collections SET updated_at = NOW() WHERE id = $1",
+        &[&id],
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// `LibraryCollectionRepository.RemoveItem`.
+pub async fn library_remove_item(
+    pool: &Pool,
+    id: &str,
+    item: &str,
+) -> Result<(), LibraryMemberError> {
+    let mut session = pool.acquire().await?;
+    let mut tx = session.begin().await?;
+    lock_library_parent(&mut tx, id).await?;
+    tx.execute(
+        "
+		DELETE FROM library_collection_items
+		WHERE collection_id = $1 AND media_item_id = $2
+	",
+        &[&id, &item],
+    )
+    .await?;
+    tx.execute(
+        "UPDATE library_collections SET updated_at = NOW() WHERE id = $1",
+        &[&id],
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// `LibraryCollectionRepository.AddItemIfAbsent`.
+pub async fn library_add_item_if_absent(
+    pool: &Pool,
+    id: &str,
+    item: &str,
+    position: AnyInt,
+) -> Result<(), LibraryMemberError> {
+    let mut session = pool.acquire().await?;
+    let mut tx = session.begin().await?;
+    let legacy = lock_manual_library(&mut tx, id).await?;
+    let row = tx
+        .query_one(
+            "WITH eligible AS MATERIALIZED (
+   SELECT $2::text AS media_item_id
+   WHERE EXISTS (
+    SELECT 1 FROM media_item_libraries mil JOIN media_items mi ON mi.content_id=mil.content_id
+    WHERE mil.content_id=$2 AND (
+     EXISTS(SELECT 1 FROM library_collection_libraries l WHERE l.collection_id=$1 AND l.library_id=mil.media_folder_id)
+     OR (NOT EXISTS(SELECT 1 FROM library_collection_libraries l WHERE l.collection_id=$1) AND mil.media_folder_id=$4)
+    )
+   )
+  ), inserted AS (
+   INSERT INTO library_collection_items(collection_id,media_item_id,position,source_rank)
+   SELECT $1,media_item_id,$3,0 FROM eligible
+   ON CONFLICT(collection_id,media_item_id) DO NOTHING
+   RETURNING 1
+  ) SELECT EXISTS(SELECT 1 FROM eligible)",
+            &[&id, &item, &position, &AnyInt(i64::from(legacy))],
+        )
+        .await?;
+    if !row.get::<_, bool>(0) {
+        return Err(LibraryMemberError::ItemNotFound);
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+/// `LibraryCollectionRepository.RemoveManualItem`.
+pub async fn library_remove_manual_item(
+    pool: &Pool,
+    id: &str,
+    item: &str,
+) -> Result<(), LibraryMemberError> {
+    let mut session = pool.acquire().await?;
+    let mut tx = session.begin().await?;
+    lock_manual_library(&mut tx, id).await?;
+    tx.execute(
+        "DELETE FROM library_collection_items WHERE collection_id=$1 AND media_item_id=$2",
+        &[&id, &item],
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// `LibraryCollectionRepository.ReorderItems`, unguarded.
+pub async fn library_reorder_items(
+    pool: &Pool,
+    id: &str,
+    ids: &[String],
+) -> Result<(), LibraryMemberError> {
+    if has_duplicates(ids) {
+        return Err(LibraryMemberError::Duplicates);
+    }
+    let mut session = pool.acquire().await?;
+    let mut tx = session.begin().await?;
+    lock_library_parent(&mut tx, id).await?;
+    let owned = ids.to_vec();
+    let row = tx
+        .query_one(
+            "
+		WITH supplied AS (
+		  SELECT id, pos FROM unnest($1::text[]) WITH ORDINALITY AS u(id, pos)
+		),
+		upd AS (
+		  UPDATE library_collection_items t
+		  SET position = supplied.pos - 1
+		  FROM supplied
+		  WHERE t.collection_id = $2 AND t.media_item_id = supplied.id
+		  RETURNING 1
+		)
+		SELECT (SELECT count(*) FROM upd),
+		       (SELECT count(*) FROM library_collection_items WHERE collection_id = $2)
+	",
+            &[&owned, &id],
+        )
+        .await?;
+    let (updated, total): (i64, i64) = (row.get(0), row.get(1));
+    if updated as usize != ids.len() || updated != total {
+        return Err(LibraryMemberError::OrderedMismatch);
+    }
+    tx.execute(
+        "UPDATE library_collections SET updated_at = NOW() WHERE id = $1",
+        &[&id],
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// `scanLibraryCollection`: a collection with no `library_collection_libraries` rows is scoped to its
+/// own `library_id`.
+fn with_legacy_library(libraries: Vec<i32>, legacy: i32) -> Vec<i32> {
+    if libraries.is_empty() && legacy > 0 {
+        vec![legacy]
+    } else {
+        libraries
+    }
 }
 
 /// `models.LibraryCollectionGroup`, what the admin reads show.

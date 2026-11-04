@@ -699,6 +699,21 @@ impl Stack {
         self.request_server_enabled.load(Ordering::Relaxed)
     }
 
+    /// `personal_needs_go`, read now. A failed read routes to Go.
+    pub async fn refresh_personal_needs_go(&self) -> bool {
+        let needs_go = personal_needs_go(&self.pool).await.unwrap_or(true);
+        self.personal_needs_go.store(needs_go, Ordering::Relaxed);
+        needs_go
+    }
+
+    /// `request_server_enabled`, read now. A failed read routes to Go.
+    pub async fn refresh_request_server(&self) -> bool {
+        let enabled = request_server_enabled(&self.pool).await.unwrap_or(true);
+        self.request_server_enabled
+            .store(enabled, Ordering::Relaxed);
+        enabled
+    }
+
     pub fn personal_needs_go(&self) -> bool {
         self.personal_needs_go.load(Ordering::Relaxed)
     }
@@ -1984,6 +1999,7 @@ fn structured_media_type_ok(content_type: &str) -> bool {
 /// sit on or above its mount run before the subrouter matches, and so do its own 404 and 405.
 const V1_MOUNTS: &[&str] = &[
     "/api/v1/admin/collections",
+    "/api/v1/admin/notifications/server-channels",
     "/api/v1/admin",
     "/api/v1/api-keys",
     "/api/v1/auth",

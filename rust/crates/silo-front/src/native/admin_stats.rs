@@ -1193,9 +1193,19 @@ fn v2_int(r: &Request, key: &str, fallback: i64) -> i64 {
     query_param(r, key).parse().unwrap_or(fallback)
 }
 
+/// The v2 `refresh` query, a Huma `bool` the validator already judged: `strconv.ParseBool`'s true spellings.
+fn v2_refresh_requested(r: &Request) -> bool {
+    parse_bool_true(&query_param(r, "refresh"))
+}
+
+/// `strconv.ParseBool` returning true.
+fn parse_bool_true(raw: &str) -> bool {
+    matches!(raw, "1" | "t" | "T" | "TRUE" | "true" | "True")
+}
+
 /// `cacheRefresh`.
 fn v2_refresh(r: &Request) -> bool {
-    query_param(r, "refresh") == "true" && get_claims(r).is_none_or(|c| c.api_key_scopes.is_empty())
+    v2_refresh_requested(r) && get_claims(r).is_none_or(|c| c.api_key_scopes.is_empty())
 }
 
 #[derive(Serialize)]
@@ -1769,7 +1779,7 @@ pub fn mount_v2(stack: &Arc<Stack>, v2: &Mux) {
             path,
             V2Class::ActingAdmin,
             h!(stack, |s, w, r| {
-                match read_stats(&s, query_param(r, "refresh") == "true").await {
+                match read_stats(&s, v2_refresh_requested(r)).await {
                     Ok(v) => write_v2_json(w, &v2_stats(&v)).await,
                     Err(_) => {
                         write_problem(
@@ -1785,4 +1795,20 @@ pub fn mount_v2(stack: &Arc<Stack>, v2: &Mux) {
     );
     mount_v2_insights(stack, v2);
     mount_v2_clients(stack, v2);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_bool_true;
+
+    /// Huma parses the v2 `refresh` query with `strconv.ParseBool` (M4 review, L3).
+    #[test]
+    fn refresh_takes_every_parse_bool_true_spelling() {
+        for raw in ["1", "t", "T", "TRUE", "true", "True"] {
+            assert!(parse_bool_true(raw), "{raw}");
+        }
+        for raw in ["", "0", "f", "false", "False", "yes", "tRUE"] {
+            assert!(!parse_bool_true(raw), "{raw}");
+        }
+    }
 }

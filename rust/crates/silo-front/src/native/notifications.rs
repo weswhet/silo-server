@@ -28,6 +28,7 @@ use super::chain::{
 use super::huma::RawBody;
 use crate::rows::NativeRow;
 use crate::rows::Surface::{ApiV1, ApiV2};
+use silo_store::catalog::access::ensure_accessible;
 
 pub const ROWS: &[NativeRow] = &[
     NativeRow::new(ApiV1, "GET", "/api/v1/notifications/"),
@@ -54,14 +55,134 @@ pub const ROWS: &[NativeRow] = &[
     NativeRow::new(ApiV2, "GET", "/api/v2/notifications/{id}"),
     NativeRow::new(ApiV2, "POST", "/api/v2/notifications/{id}/read"),
     NativeRow::new(ApiV2, "GET", "/api/v2/notifications/discord-preferences"),
+    NativeRow::new(
+        ApiV2,
+        "PUT",
+        "/api/v2/notifications/series/{series_id}/mute",
+    ),
+    NativeRow::new(
+        ApiV2,
+        "DELETE",
+        "/api/v2/notifications/series/{series_id}/mute",
+    ),
+    NativeRow::new(ApiV1, "GET", "/api/v1/notifications/webhooks/"),
+    NativeRow::new(ApiV1, "POST", "/api/v1/notifications/webhooks/"),
+    NativeRow::new(ApiV1, "PUT", "/api/v1/notifications/webhooks/{id}"),
+    NativeRow::new(ApiV1, "DELETE", "/api/v1/notifications/webhooks/{id}"),
+    NativeRow::new(
+        ApiV1,
+        "POST",
+        "/api/v1/notifications/webhooks/{id}/rotate-secret",
+    ),
+    NativeRow::new(ApiV1, "GET", "/api/v1/notifications/web-push/subscriptions"),
+    NativeRow::new(
+        ApiV1,
+        "POST",
+        "/api/v1/notifications/web-push/subscriptions",
+    ),
+    NativeRow::new(
+        ApiV1,
+        "DELETE",
+        "/api/v1/notifications/web-push/subscriptions/{id}",
+    ),
+    NativeRow::new(ApiV1, "POST", "/api/v1/notifications/web-push/unsubscribe"),
+    NativeRow::new(ApiV2, "GET", "/api/v2/notifications/webhooks"),
+    NativeRow::new(ApiV2, "POST", "/api/v2/notifications/webhooks"),
+    NativeRow::new(ApiV2, "PUT", "/api/v2/notifications/webhooks/{id}"),
+    NativeRow::new(ApiV2, "DELETE", "/api/v2/notifications/webhooks/{id}"),
+    NativeRow::new(
+        ApiV2,
+        "POST",
+        "/api/v2/notifications/webhooks/{id}/rotate-secret",
+    ),
+    NativeRow::new(ApiV2, "GET", "/api/v2/notifications/web-push/subscriptions"),
+    NativeRow::new(
+        ApiV2,
+        "POST",
+        "/api/v2/notifications/web-push/subscriptions",
+    ),
+    NativeRow::new(
+        ApiV2,
+        "DELETE",
+        "/api/v2/notifications/web-push/subscriptions/{id}",
+    ),
+    NativeRow::new(ApiV2, "POST", "/api/v2/notifications/web-push/unsubscribe"),
+    NativeRow::new(
+        ApiV1,
+        "DELETE",
+        "/api/v1/notifications/email-preferences/address",
+    ),
+    NativeRow::new(
+        ApiV2,
+        "DELETE",
+        "/api/v2/notifications/email-preferences/address",
+    ),
+    NativeRow::new(ApiV1, "PUT", "/api/v1/notifications/discord-preferences"),
+    NativeRow::new(ApiV1, "DELETE", "/api/v1/notifications/discord-link"),
+    NativeRow::new(ApiV2, "PUT", "/api/v2/notifications/discord-preferences"),
+    NativeRow::new(ApiV2, "DELETE", "/api/v2/notifications/discord-link"),
+    NativeRow::new(ApiV1, "POST", "/api/v1/notifications/push/devices"),
+    NativeRow::new(
+        ApiV2,
+        "GET",
+        "/api/v2/notifications/push/devices/capabilities",
+    ),
+    NativeRow::new(ApiV2, "POST", "/api/v2/notifications/push/devices"),
+    NativeRow::new(
+        ApiV2,
+        "DELETE",
+        "/api/v2/notifications/push/devices/{device_id}",
+    ),
+    NativeRow::new(ApiV2, "GET", "/api/v2/devices/push/apple/capabilities"),
+    NativeRow::new(
+        ApiV1,
+        "DELETE",
+        "/api/v1/notifications/push/devices/{device_id}",
+    ),
+    NativeRow::new(ApiV1, "GET", "/api/v1/admin/notifications/server-channels/"),
+    NativeRow::new(
+        ApiV1,
+        "POST",
+        "/api/v1/admin/notifications/server-channels/",
+    ),
+    NativeRow::new(
+        ApiV1,
+        "PUT",
+        "/api/v1/admin/notifications/server-channels/{id}",
+    ),
+    NativeRow::new(
+        ApiV1,
+        "DELETE",
+        "/api/v1/admin/notifications/server-channels/{id}",
+    ),
+    NativeRow::new(
+        ApiV1,
+        "POST",
+        "/api/v1/admin/notifications/server-channels/{id}/rotate-secret",
+    ),
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/notifications/server-channels"),
+    NativeRow::new(ApiV2, "POST", "/api/v2/admin/notifications/server-channels"),
+    NativeRow::new(
+        ApiV2,
+        "PUT",
+        "/api/v2/admin/notifications/server-channels/{id}",
+    ),
+    NativeRow::new(
+        ApiV2,
+        "DELETE",
+        "/api/v2/admin/notifications/server-channels/{id}",
+    ),
+    NativeRow::new(
+        ApiV2,
+        "POST",
+        "/api/v2/admin/notifications/server-channels/{id}/rotate-secret",
+    ),
 ];
 
 /// Go's subrouters under `/notifications`. These rows stay on Go, and `/{id}` must not take their
 /// bare paths.
 pub fn is_go_subtree(bare: &str) -> bool {
-    bare == "/api/v1/notifications/webhooks"
-        || bare == "/api/v1/notifications/web-push"
-        || bare == "/api/v1/notifications/push"
+    bare == "/api/v1/notifications/push"
         || bare == "/api/v1/notifications/email"
         || bare == "/api/v1/notifications/discord"
 }
@@ -91,6 +212,11 @@ macro_rules! route {
         })
     }};
 }
+
+mod addresses;
+mod channels;
+mod destinations;
+mod push;
 
 fn go_time(t: SystemTime) -> String {
     GoTime::from_system_time(t).format(silo_gocompat::time::RFC3339_NANO)
@@ -185,6 +311,13 @@ struct Cursor {
 }
 
 impl Cursor {
+    /// `through.CreatedAt.UTC().Format(time.RFC3339Nano)`: a cursor minted where `time.Local` is not UTC
+    /// carries an offset, and the event names the instant in UTC.
+    fn created_at_utc(&self) -> String {
+        silo_gocompat::time::parse(silo_gocompat::time::RFC3339_NANO, &self.created_at)
+            .map(|t| t.to_utc().rfc3339_nano())
+            .unwrap_or_else(|_| self.created_at.clone())
+    }
     fn at(&self) -> Option<SystemTime> {
         silo_gocompat::time::parse(silo_gocompat::time::RFC3339_NANO, &self.created_at)
             .ok()
@@ -1301,6 +1434,9 @@ fn mount_v1(stack: &Arc<Stack>, api: &Mux) {
             }
         }),
     );
+    destinations::mount_v1(stack, &mux);
+    push::mount_v1(stack, &mux);
+    addresses::mount_v1_subrouter(stack, &mux);
     api.mount("/api/v1/notifications", mux);
 
     // Outside the `RequireProfile` subrouter, as Go's static paths are.
@@ -1759,9 +1895,10 @@ fn mount_v2(stack: &Arc<Stack>, v2: &Mux) {
                     match changed {
                         Ok(0) => {}
                         Ok(_) => {
+                            let through_created_at = through.created_at_utc();
                             publish_read(&s, user, &profile, &ReadThrough {
                                 profile_id: &profile,
-                                through_created_at: &through.created_at,
+                                through_created_at: &through_created_at,
                                 through_id: &through.id,
                             })
                             .await;
@@ -1852,11 +1989,125 @@ fn mount_v2(stack: &Arc<Stack>, v2: &Mux) {
     );
 }
 
+/// `muteNotificationSeries` and `unmuteNotificationSeries` (`apiv2/notification_series.go`).
+fn mount_series(stack: &Arc<Stack>, v2: &Mux) {
+    let path = "/api/v2/notifications/series/{series_id}/mute";
+    v2.put(
+        path,
+        stack.v2_steps(
+            path,
+            V2_WRITE,
+            route!(stack, |s, w, r| {
+                let series = r.url_param("series_id").to_owned();
+                let (user, profile) = (user_of(r), get_profile_id(r));
+                match ensure_accessible(&s.pool, &series, &super::personal::access_of(r)).await {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        return write_problem(
+                            w,
+                            r,
+                            Problem::new(problem_type("not_found"), "Series not found."),
+                        )
+                        .await;
+                    }
+                    Err(_) => return write_problem(w, r, internal()).await,
+                }
+                let found = s
+                    .pool
+                    .query(
+                        "
+		WITH series AS (
+			SELECT content_id FROM media_items WHERE content_id = $3 AND type = 'series'
+		), muted AS (
+			INSERT INTO profile_series_notification_mutes (user_id, profile_id, series_id)
+			SELECT $1, $2, content_id FROM series
+			ON CONFLICT (user_id, profile_id, series_id) DO NOTHING
+		)
+		SELECT EXISTS (SELECT 1 FROM series)",
+                        &[&AnyInt(user), &profile, &series],
+                    )
+                    .await
+                    .map_err(|_| ())
+                    .and_then(|rows| {
+                        rows.first()
+                            .and_then(|row| row.try_get::<_, bool>(0).ok())
+                            .ok_or(())
+                    });
+                match found {
+                    Ok(true) => write_v2_empty(w).await,
+                    Ok(false) => {
+                        write_problem(
+                            w,
+                            r,
+                            Problem::new(problem_type("not_found"), "Series not found"),
+                        )
+                        .await
+                    }
+                    Err(_) => write_problem(w, r, internal()).await,
+                }
+            }),
+        ),
+    );
+    v2.delete(
+        path,
+        stack.v2_steps(
+            path,
+            V2_WRITE,
+            route!(stack, |s, w, r| {
+                let series = r.url_param("series_id").to_owned();
+                let (user, profile) = (user_of(r), get_profile_id(r));
+                match s
+                    .pool
+                    .execute(
+                        "DELETE FROM profile_series_notification_mutes WHERE user_id = $1 AND profile_id = $2 AND series_id = $3",
+                        &[&AnyInt(user), &profile, &series],
+                    )
+                    .await
+                {
+                    Ok(_) => write_v2_empty(w).await,
+                    Err(_) => write_problem(w, r, internal()).await,
+                }
+            }),
+        ),
+    );
+}
+
 async fn write_v2_empty(w: &mut dyn ResponseWriter) {
     w.write_header(204).await;
 }
 
+/// The server channel rows on the `/api/v1/admin` subrouter.
+pub fn mount_v1_admin(stack: &Arc<Stack>, admin: &Mux) {
+    channels::mount_v1(stack, admin);
+}
+
 pub fn mount(stack: &Arc<Stack>, api: &Mux, v2: &Mux) {
     mount_v1(stack, api);
+    addresses::mount_v1(stack, api);
     mount_v2(stack, v2);
+    mount_series(stack, v2);
+    destinations::mount_v2(stack, v2);
+    channels::mount_v2(stack, v2);
+    addresses::mount_v2(stack, v2);
+    push::mount_v2(stack, v2);
+    push::mount_v2_ordered(stack, v2);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Cursor;
+
+    #[test]
+    fn read_through_event_names_the_cursor_instant_in_utc() {
+        for (minted, want) in [
+            ("2026-01-02T05:04:05.5+02:00", "2026-01-02T03:04:05.5Z"),
+            ("2026-01-02T03:04:05.123456Z", "2026-01-02T03:04:05.123456Z"),
+        ] {
+            let cursor = Cursor {
+                created_at: minted.to_owned(),
+                id: String::new(),
+            };
+            assert_eq!(cursor.created_at_utc(), want);
+        }
+    }
 }

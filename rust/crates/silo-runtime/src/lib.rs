@@ -1,7 +1,7 @@
 //! Process-bootstrap infrastructure shared by every Silo API replica: Postgres wiring and
 //! migrations, the Redis cache and pub/sub event bus (`internal/cache`), session-level advisory
 //! locks and the storage admission lock (`internal/database/pglock`), and outbound mail
-//! (`internal/mail`) with a hand-written SASL layer.
+//! (`internal/mail`) with a hand-written SASL layer, and the outbound address guard (`internal/netguard`).
 //!
 //! Lower crates already hold the formats that must stay byte-identical with Go: advisory lock
 //! integers and the Lua script texts live in [`silo_core::advisory_locks`] and
@@ -16,4 +16,5 @@ pub mod idgen_lease;
 pub mod locks;
 pub mod logstream;
 pub mod mail;
+pub mod netguard;
 pub mod opslog;

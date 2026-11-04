@@ -390,6 +390,21 @@ pub mod aad {
         row("jellycompat_sessions", column, token)
     }
 
+    /// `webhookURLAAD` and `webhookSecretAAD` (`internal/notifications`), with `part` `url` or `signing_secret`.
+    pub fn notification_webhook(id: &str, part: &str) -> String {
+        format!("notification_webhook:{id}:{part}")
+    }
+
+    /// `serverChannelURLAAD` and `serverChannelSecretAAD`, with `part` `url` or `signing_secret`.
+    pub fn server_channel(id: &str, part: &str) -> String {
+        format!("server_channel:{id}:{part}")
+    }
+
+    /// `pushDeviceAPNsTokenAAD` and `pushDeviceFCMTokenAAD`, with `column` `apns_token` or `fcm_token`.
+    pub fn push_device_token(column: &str, id: &str) -> String {
+        row("push_devices", column, id)
+    }
+
     /// `webhookTokenAAD`.
     pub fn webhook_sync_token(id: &str) -> String {
         row("webhook_sync_connections", "access_token", id)
