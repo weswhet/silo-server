@@ -1021,6 +1021,12 @@ const CHAIN_ROWS: &[(Surface, &str, bool)] = &[
         "/api/v2/admin/storage-transitions/capabilities",
         true,
     ),
+    (Surface::ApiV2, "/api/v2/admin/autoscan/settings", true),
+    (Surface::ApiV2, "/api/v2/admin/autoscan/status", true),
+    (Surface::ApiV2, "/api/v2/admin/autoscan/connections", true),
+    (Surface::ApiV2, "/api/v2/admin/autoscan/sources", true),
+    (Surface::ApiV2, "/api/v2/admin/autoscan/events", true),
+    (Surface::ApiV2, "/api/v2/admin/autoscan/scans", true),
 ];
 
 /// `queryGuard`, Huma's unknown-parameter refusal, and the v2 representation guards.

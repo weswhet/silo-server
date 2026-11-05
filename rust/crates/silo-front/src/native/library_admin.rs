@@ -2,32 +2,65 @@
 //! `autoscan_delivery.go` (`getAutoscanDeliveryCapabilities`), `admin_job_artifact_download.go`
 //! (`getAdminJobCapabilities`), and `admin_storage_transition.go` (`getAdminStorageTransitionCapabilities`).
 //!
+//! The six autoscan inspection reads use Postgres; running-poll elapsed time also uses the clock.
+//! None requires the plugin host, S3, or in-process scheduler state.
+//!
 //! Every scan, autoscan, job, task, and storage transition action stays on Go: each reaches the scanner, the
 //! autoscan ingest path, the job runner, or the blob store. `getAdminJobCapabilities` stays on Go while a
 //! deployment uses S3, because public links need presigning.
 
 use std::sync::Arc;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use silo_api_v2::cursor::CursorScope;
+use silo_api_v2::problem::{Problem, internal_error};
+use silo_api_v2::wire::{Instant, PageInfo, paginated};
+use silo_gate::mw::auth::{get_claims, get_profile_id};
+use silo_gocompat::strings::trim_space;
+use silo_http::Request;
 use silo_http::chi::Mux;
 use silo_http::handler_fn;
+use silo_store::access::Scope as AccessScope;
+use silo_store::autoscan as store;
+use std::collections::BTreeMap;
+use std::time::SystemTime;
 
-use super::chain::{Stack, V2Class, capability_json, v2_public, write_capability};
+use super::chain::{
+    Stack, V2Class, capability_json, v2_public, write_capability, write_problem, write_v2_json,
+};
 use crate::rows::NativeRow;
 use crate::rows::Surface::ApiV2;
 
 pub const ROWS: &[NativeRow] = &[
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/autoscan/settings"),
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/autoscan/status"),
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/autoscan/connections"),
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/autoscan/sources"),
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/autoscan/events"),
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/autoscan/scans"),
     NativeRow::new(ApiV2, "GET", "/api/v2/scan/capabilities"),
     NativeRow::new(ApiV2, "GET", "/api/v2/autoscan/capabilities"),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/jobs/capabilities"),
-    NativeRow::new(ApiV2, "GET", "/api/v2/admin/storage-transitions/capabilities"),
+    NativeRow::new(
+        ApiV2,
+        "GET",
+        "/api/v2/admin/storage-transitions/capabilities",
+    ),
 ];
 
 /// Rows that need no credential.
-pub const PUBLIC_ROWS: &[NativeRow] = &[NativeRow::new(ApiV2, "GET", "/api/v2/autoscan/capabilities")];
+pub const PUBLIC_ROWS: &[NativeRow] = &[NativeRow::new(
+    ApiV2,
+    "GET",
+    "/api/v2/autoscan/capabilities",
+)];
 
 /// Rows whose answer depends on S3 presigning, which is not ported.
-pub const S3_ROWS: &[NativeRow] = &[NativeRow::new(ApiV2, "GET", "/api/v2/admin/jobs/capabilities")];
+pub const S3_ROWS: &[NativeRow] = &[NativeRow::new(
+    ApiV2,
+    "GET",
+    "/api/v2/admin/jobs/capabilities",
+)];
 
 /// `Capability`.
 #[derive(Serialize)]
@@ -65,7 +98,13 @@ struct StorageTransitionCapabilities<'a> {
     resumable_recovery: bool,
 }
 
-fn simple(v2: &Mux, stack: Option<&Arc<Stack>>, path: &'static str, class: V2Class, op: &'static str) {
+fn simple(
+    v2: &Mux,
+    stack: Option<&Arc<Stack>>,
+    path: &'static str,
+    class: V2Class,
+    op: &'static str,
+) {
     let admin = matches!(class, V2Class::ActingAdmin);
     let handler = handler_fn(move |w, r| {
         Box::pin(async move {
@@ -98,6 +137,7 @@ pub fn mount_public(v2: &Mux) {
 }
 
 pub fn mount(stack: &Arc<Stack>, v2: &Mux) {
+    mount_autoscan(stack, v2);
     simple(
         v2,
         Some(stack),
@@ -158,4 +198,830 @@ pub fn mount(stack: &Arc<Stack>, v2: &Mux) {
             }),
         ),
     );
+}
+
+#[derive(Serialize)]
+struct AdminAutoscanSettings {
+    enabled: bool,
+    default_poll_interval_seconds: i64,
+    debounce_seconds: i64,
+}
+
+#[derive(Serialize)]
+struct AdminAutoscanStatusSource {
+    id: String,
+    plugin_id: String,
+    capability_id: String,
+    connection_id: Option<String>,
+    enabled: bool,
+    label: String,
+    path_rewrites: Vec<AdminAutoscanPathRewrite>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_run_at: Option<Instant>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_error: Option<String>,
+}
+
+#[derive(Serialize)]
+struct AdminAutoscanRunningPoll {
+    id: String,
+    source_id: Option<String>,
+    plugin_id: String,
+    capability_id: String,
+    started_at: Instant,
+    elapsed_ms: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    marker_before: Option<String>,
+}
+
+#[derive(Serialize)]
+struct AdminAutoscanStatus {
+    enabled: bool,
+    sources: Vec<AdminAutoscanStatusSource>,
+    running_polls: Vec<AdminAutoscanRunningPoll>,
+    active_scans: i64,
+    accepted_scans: i64,
+    running_scans: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    latest_event_at: Option<Instant>,
+}
+
+#[derive(Serialize)]
+struct AdminAutoscanConnection {
+    id: String,
+    name: String,
+    kind: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    base_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    request_integration_id: Option<String>,
+    has_api_key: bool,
+}
+
+#[derive(Serialize)]
+struct AdminAutoscanPathRewrite {
+    from: String,
+    to: String,
+}
+
+#[derive(Serialize)]
+struct AdminAutoscanSource {
+    id: String,
+    plugin_id: String,
+    capability_id: String,
+    connection_id: Option<String>,
+    enabled: bool,
+    delivery_mode: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    poll_interval_seconds: Option<i64>,
+    path_rewrites: Vec<AdminAutoscanPathRewrite>,
+    source_config: BTreeMap<String, String>,
+    label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_run_at: Option<Instant>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_error: Option<String>,
+    webhook_configured: bool,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    webhook_url: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    webhook_secret_suffix: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    webhook_last_received_at: Option<Instant>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    webhook_last_error_at: Option<Instant>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    webhook_last_error_message: String,
+}
+
+#[derive(Serialize)]
+struct AdminAutoscanEventRun {
+    id: String,
+    library_id: String,
+    mode: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    path: String,
+    trigger: String,
+    status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    requested_at: Option<Instant>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    started_at: Option<Instant>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    completed_at: Option<Instant>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    error_message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    result: Option<AdminAutoscanScanResult>,
+}
+
+#[derive(Serialize)]
+struct AdminAutoscanEventChange {
+    source_path: String,
+    rewritten_path: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    scope: String,
+    outcome: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    reason: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    detail: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    library_id: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    target_mode: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    target_path: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    scan_run_id: String,
+}
+
+#[derive(Serialize)]
+struct AdminAutoscanEvent {
+    id: String,
+    source_id: Option<String>,
+    plugin_id: String,
+    capability_id: String,
+    started_at: Instant,
+    completed_at: Instant,
+    duration_ms: i64,
+    status: String,
+    delivery_mode: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    provider_event_type: String,
+    changes_returned: i64,
+    changes_resolved: i64,
+    targets_claimed: i64,
+    scans_created: i64,
+    scans_reused: i64,
+    scans_suppressed: i64,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    error_message: String,
+    scan_runs: Vec<AdminAutoscanEventRun>,
+    changes: Vec<AdminAutoscanEventChange>,
+    changes_truncated: bool,
+}
+
+#[derive(Serialize)]
+struct AdminAutoscanScan {
+    id: String,
+    library_id: String,
+    mode: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    path: String,
+    trigger: String,
+    status: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    error_message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    requested_at: Option<Instant>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    started_at: Option<Instant>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    completed_at: Option<Instant>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    autoscan_event_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_id: Option<String>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    plugin_id: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    capability_id: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    event_status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    event_completed_at: Option<Instant>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    result: Option<AdminAutoscanScanResult>,
+}
+
+#[derive(Serialize)]
+struct AdminAutoscanScanResult {
+    r#new: i64,
+    updated: i64,
+    unchanged: i64,
+    missing: i64,
+    missing_skipped_protected: i64,
+    files_deleted: i64,
+    items_deleted: i64,
+    memberships_removed: i64,
+    errors: i64,
+    skipped: i64,
+}
+
+fn instant(t: SystemTime) -> Instant {
+    Instant::new(time::OffsetDateTime::from(t))
+}
+fn instant_opt(t: Option<SystemTime>) -> Option<Instant> {
+    t.map(instant)
+}
+fn internal_problem() -> Problem {
+    Problem::new(internal_error(), "An unexpected error occurred.")
+}
+fn query(r: &Request, name: &str) -> String {
+    let (q, _) = silo_gocompat::url::parse_query(&String::from_utf8_lossy(&r.url.raw_query));
+    q.get(name)
+        .and_then(|v| v.first())
+        .cloned()
+        .unwrap_or_default()
+}
+fn viewer_digest(r: &Request) -> String {
+    let scope = r
+        .extensions
+        .get::<Arc<AccessScope>>()
+        .map(|s| silo_core::apiv2::ViewerScope {
+            policy_revision: s.policy_revision,
+            libraries_restricted: s.libraries_restricted,
+            allowed_library_ids: s
+                .libraries_restricted
+                .then(|| s.allowed_library_ids.clone()),
+            disabled_library_ids: (!s.disabled_library_ids.is_empty())
+                .then(|| s.disabled_library_ids.clone()),
+            max_content_rating: s.maturity_limits.max_content_rating.clone(),
+            allow_unrated_content: s.maturity_limits.allow_unrated_content,
+            max_advisory_age: i64::from(s.maturity_limits.max_advisory_age),
+            require_advisory_age: s.maturity_limits.require_advisory_age,
+        });
+    silo_core::apiv2::viewer_scope_digest(scope.as_ref())
+}
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
+struct ConnectionPosition {
+    #[serde(rename = "Name")]
+    name: String,
+    #[serde(rename = "ID")]
+    id: String,
+}
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
+struct SourcePosition {
+    #[serde(rename = "Label")]
+    label: String,
+    #[serde(rename = "ID")]
+    id: String,
+}
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
+struct HistoryPosition {
+    #[serde(rename = "Offset")]
+    offset: i64,
+}
+#[derive(Serialize)]
+struct HistoryPage<T> {
+    items: Vec<T>,
+    page: Option<PageInfo>,
+    total: i64,
+}
+fn scan_result(v: store::ScanResult) -> AdminAutoscanScanResult {
+    AdminAutoscanScanResult {
+        r#new: v.new,
+        updated: v.updated,
+        unchanged: v.unchanged,
+        missing: v.missing,
+        missing_skipped_protected: v.missing_skipped_protected,
+        files_deleted: v.files_deleted,
+        items_deleted: v.items_deleted,
+        memberships_removed: v.memberships_removed,
+        errors: v.errors,
+        skipped: v.skipped,
+    }
+}
+fn rewrites(v: Vec<store::PathRewrite>) -> Vec<AdminAutoscanPathRewrite> {
+    v.into_iter()
+        .map(|p| AdminAutoscanPathRewrite {
+            from: p.from,
+            to: p.to,
+        })
+        .collect()
+}
+fn source(v: store::Source) -> AdminAutoscanSource {
+    AdminAutoscanSource {
+        id: v.id,
+        plugin_id: v.plugin_id,
+        capability_id: v.capability_id,
+        connection_id: v.connection_id,
+        enabled: v.enabled,
+        delivery_mode: if v.delivery_mode.is_empty() {
+            "poll".into()
+        } else {
+            v.delivery_mode
+        },
+        poll_interval_seconds: v.poll_interval_seconds.map(i64::from),
+        path_rewrites: rewrites(v.path_rewrites),
+        source_config: v
+            .source_config
+            .into_iter()
+            .filter_map(|(k, v)| {
+                let k = trim_space(&k);
+                (!k.is_empty()).then(|| (k.to_owned(), trim_space(&v).to_owned()))
+            })
+            .collect(),
+        label: v.label,
+        last_run_at: instant_opt(v.last_run_at),
+        last_error: v.last_error,
+        webhook_configured: false,
+        webhook_url: String::new(),
+        webhook_secret_suffix: String::new(),
+        webhook_last_received_at: None,
+        webhook_last_error_at: None,
+        webhook_last_error_message: String::new(),
+    }
+}
+fn event(v: store::EventWithRuns) -> Result<AdminAutoscanEvent, Problem> {
+    let e = v.event;
+    if e.id <= 0 {
+        return Err(Problem::new(internal_error(), "Invalid event identity."));
+    }
+    let mut scan_runs = Vec::with_capacity(v.runs.len());
+    for r in v.runs {
+        if r.id.is_empty() || r.media_folder_id <= 0 {
+            return Err(Problem::new(
+                internal_error(),
+                "Invalid event scan identity.",
+            ));
+        }
+        scan_runs.push(AdminAutoscanEventRun {
+            id: r.id,
+            library_id: r.media_folder_id.to_string(),
+            mode: r.mode,
+            path: r.path,
+            trigger: r.trigger,
+            status: r.status,
+            requested_at: instant_opt(r.requested_at),
+            started_at: instant_opt(r.started_at),
+            completed_at: instant_opt(r.completed_at),
+            error_message: r.error_message,
+            result: r.result.map(scan_result),
+        });
+    }
+    Ok(AdminAutoscanEvent {
+        id: e.id.to_string(),
+        source_id: e.source_id,
+        plugin_id: e.plugin_id,
+        capability_id: e.capability_id,
+        started_at: instant(e.started_at),
+        completed_at: instant(e.completed_at),
+        duration_ms: e.duration_ms,
+        status: e.status,
+        delivery_mode: e.delivery_mode,
+        provider_event_type: e.provider_event_type,
+        changes_returned: i64::from(e.changes_returned),
+        changes_resolved: i64::from(e.changes_resolved),
+        targets_claimed: i64::from(e.targets_claimed),
+        scans_created: i64::from(e.scans_created),
+        scans_reused: i64::from(e.scans_reused),
+        scans_suppressed: i64::from(e.scans_suppressed),
+        error_message: e.error_message,
+        scan_runs,
+        changes: e
+            .changes
+            .into_iter()
+            .map(|c| AdminAutoscanEventChange {
+                source_path: c.source_path,
+                rewritten_path: c.rewritten_path,
+                scope: c.scope,
+                outcome: c.outcome,
+                reason: c.reason,
+                detail: c.detail,
+                library_id: if c.library_id > 0 {
+                    c.library_id.to_string()
+                } else {
+                    String::new()
+                },
+                target_mode: c.target_mode,
+                target_path: c.target_path,
+                scan_run_id: c.scan_run_id,
+            })
+            .collect(),
+        changes_truncated: e.changes_truncated,
+    })
+}
+fn scan(v: store::ScanWithEvent) -> Result<AdminAutoscanScan, Problem> {
+    let r = v.run;
+    if r.id.is_empty() || r.media_folder_id <= 0 {
+        return Err(Problem::new(
+            internal_error(),
+            "Invalid scan history identity.",
+        ));
+    }
+    Ok(AdminAutoscanScan {
+        id: r.id,
+        library_id: r.media_folder_id.to_string(),
+        mode: r.mode,
+        path: r.path,
+        trigger: r.trigger,
+        status: r.status,
+        error_message: r.error_message,
+        requested_at: instant_opt(r.requested_at),
+        started_at: instant_opt(r.started_at),
+        completed_at: instant_opt(r.completed_at),
+        autoscan_event_id: v.autoscan_event_id.map(|n| n.to_string()),
+        source_id: v.source_id,
+        plugin_id: v.plugin_id,
+        capability_id: v.capability_id,
+        event_status: v.event_status,
+        event_completed_at: instant_opt(v.event_completed_at),
+        result: r.result.map(scan_result),
+    })
+}
+macro_rules! route {
+    ($stack:ident, |$s:ident, $w:ident, $r:ident| $body:block) => {{
+        let stack = $stack.clone();
+        handler_fn(move |$w, $r| {
+            let $s = stack.clone();
+            Box::pin(async move { $body })
+        })
+    }};
+}
+macro_rules! read_db {
+    ($w:ident, $r:ident, $call:expr) => {
+        match $call.await {
+            Ok(v) => v,
+            Err(_) => return write_problem($w, $r, internal_problem()).await,
+        }
+    };
+}
+fn mount_autoscan(stack: &Arc<Stack>, v2: &Mux) {
+    let path = "/api/v2/admin/autoscan/settings";
+    v2.get(
+        path,
+        stack.v2(
+            path,
+            V2Class::ActingAdmin,
+            route!(stack, |s, w, r| {
+                let Some(claims) = get_claims(r) else {
+                    return;
+                };
+                let settings = read_db!(w, r, store::get_settings(&s.pool));
+                let body = AdminAutoscanSettings {
+                    enabled: settings.enabled,
+                    default_poll_interval_seconds: i64::from(
+                        settings.default_poll_interval_seconds,
+                    ),
+                    debounce_seconds: i64::from(settings.debounce_seconds),
+                };
+                let label = format!(
+                    "admin-autoscan-settings:{}:{}:{}",
+                    claims.user_id,
+                    get_profile_id(r),
+                    viewer_digest(r)
+                );
+                let value = format!(
+                    "{}:{}:{}",
+                    body.enabled, body.default_poll_interval_seconds, body.debounce_seconds
+                );
+                let tag = silo_core::apiv2::render_etag(label.as_bytes(), value.as_bytes(), 1);
+                let joined = |name: &str| {
+                    let values = r.header.values(name);
+                    if values.is_empty() {
+                        return String::new();
+                    }
+                    let joined = values
+                        .iter()
+                        .map(|v| String::from_utf8_lossy(v).into_owned())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    if trim_space(&joined).is_empty() {
+                        ",".to_owned()
+                    } else {
+                        joined
+                    }
+                };
+                let (unchanged, problem) = silo_api_v2::precondition::evaluate_read_preconditions(
+                    &joined("If-Match"),
+                    &joined("If-None-Match"),
+                    &tag,
+                );
+                if let Some(p) = problem {
+                    return write_problem(w, r, p).await;
+                }
+                w.header().set("ETag", tag.to_wire());
+                if unchanged {
+                    w.write_header(304).await;
+                    return;
+                }
+                write_v2_json(w, &body).await;
+            }),
+        ),
+    );
+    let path = "/api/v2/admin/autoscan/status";
+    v2.get(
+        path,
+        stack.v2(
+            path,
+            V2Class::ActingAdmin,
+            route!(stack, |s, w, r| {
+                let settings = read_db!(w, r, store::get_settings(&s.pool));
+                let sources = read_db!(w, r, store::list_sources(&s.pool));
+                let queue = read_db!(w, r, store::get_queue_summary(&s.pool));
+                let running = read_db!(w, r, store::list_running_events(&s.pool));
+                let latest = read_db!(w, r, store::latest_event_at(&s.pool));
+                let now = SystemTime::now();
+                let body = AdminAutoscanStatus {
+                    enabled: settings.enabled,
+                    sources: sources
+                        .into_iter()
+                        .map(|v| AdminAutoscanStatusSource {
+                            id: v.id,
+                            plugin_id: v.plugin_id,
+                            capability_id: v.capability_id,
+                            connection_id: v.connection_id,
+                            enabled: v.enabled,
+                            label: v.label,
+                            path_rewrites: rewrites(v.path_rewrites),
+                            last_run_at: instant_opt(v.last_run_at),
+                            last_error: v.last_error,
+                        })
+                        .collect(),
+                    running_polls: running
+                        .into_iter()
+                        .map(|v| AdminAutoscanRunningPoll {
+                            id: v.id.to_string(),
+                            source_id: v.source_id,
+                            plugin_id: v.plugin_id,
+                            capability_id: v.capability_id,
+                            started_at: instant(v.started_at),
+                            elapsed_ms: now
+                                .duration_since(v.started_at)
+                                .unwrap_or_default()
+                                .min(std::time::Duration::from_nanos(i64::MAX as u64))
+                                .as_millis() as i64,
+                            marker_before: v.marker_before,
+                        })
+                        .collect(),
+                    active_scans: i64::from(queue.active),
+                    accepted_scans: i64::from(queue.accepted),
+                    running_scans: i64::from(queue.running),
+                    latest_event_at: instant_opt(latest),
+                };
+                write_v2_json(w, &body).await;
+            }),
+        ),
+    );
+    let path = "/api/v2/admin/autoscan/connections";
+    v2.get(
+        path,
+        stack.v2(
+            path,
+            V2Class::ActingAdmin,
+            route!(stack, |s, w, r| {
+                let Some(claims) = get_claims(r) else {
+                    return;
+                };
+                let limit = query(r, "limit").parse::<usize>().unwrap_or(50);
+                let cursor = query(r, "cursor");
+                let scope = CursorScope {
+                    operation_id: "listAdminAutoscanConnections".into(),
+                    security: format!("{}/{}", claims.user_id, get_profile_id(r)),
+                    filter: limit.to_string(),
+                    sort: "name".into(),
+                    tiebreaker: "id".into(),
+                };
+                let after: ConnectionPosition = if cursor.is_empty() {
+                    ConnectionPosition::default()
+                } else {
+                    match s.cursors.decode(&scope, &cursor) {
+                        Ok(v) => v,
+                        Err(p) => return write_problem(w, r, p).await,
+                    }
+                };
+                let mut rows = read_db!(w, r, store::list_connections(&s.pool, &s.cipher));
+                rows.sort_by(|a, b| (&a.name, &a.id).cmp(&(&b.name, &b.id)));
+                let mut items = Vec::with_capacity(limit);
+                let mut last = ConnectionPosition::default();
+                let mut next = String::new();
+                for row in rows {
+                    if !cursor.is_empty() && (&row.name, &row.id) <= (&after.name, &after.id) {
+                        continue;
+                    }
+                    if items.len() == limit {
+                        next = match s.cursors.encode(&scope, &last) {
+                            Ok(v) => v,
+                            Err(p) => return write_problem(w, r, p).await,
+                        };
+                        break;
+                    }
+                    last = ConnectionPosition {
+                        name: row.name.clone(),
+                        id: row.id.clone(),
+                    };
+                    items.push(AdminAutoscanConnection {
+                        id: row.id,
+                        name: row.name,
+                        kind: row.kind,
+                        base_url: row.base_url,
+                        request_integration_id: row.request_integration_id,
+                        has_api_key: !trim_space(&row.api_key_ref).is_empty(),
+                    });
+                }
+                write_v2_json(w, &paginated(items, next)).await;
+            }),
+        ),
+    );
+    let path = "/api/v2/admin/autoscan/sources";
+    v2.get(path, stack.v2(path,V2Class::ActingAdmin,route!(stack,|s,w,r| {
+        let Some(claims) = get_claims(r) else { return; };
+        let limit = query(r,"limit").parse::<usize>().unwrap_or(50);
+        let cursor = query(r,"cursor");
+        let scope = CursorScope { operation_id:"listAdminAutoscanSources".into(),security:format!("{}/{}",claims.user_id,get_profile_id(r)),
+            filter:limit.to_string(),sort:"label".into(),tiebreaker:"id".into() };
+        let after: SourcePosition = if cursor.is_empty() { SourcePosition::default() } else { match s.cursors.decode(&scope,&cursor) {
+            Ok(v)=>v,Err(p)=>return write_problem(w,r,p).await,
+        }};
+        let rows = read_db!(w,r,store::list_sources(&s.pool));
+        let endpoints = read_db!(w,r,store::list_webhook_endpoints(&s.pool));
+        let public_url = s.settings.get("server.public_url").await.unwrap_or_default();
+        let public_url = trim_space(&public_url).trim_end_matches('/');
+        let mut rows: Vec<_> = rows.into_iter().map(source).collect();
+        // Go decorates the full enumeration before sorting or selecting a page.
+        for row in &mut rows {
+            if let Some(endpoint) = endpoints.iter().find(|e| e.source_id == row.id) {
+                row.webhook_configured = true;
+                row.webhook_secret_suffix = endpoint.secret_suffix.clone();
+                row.webhook_last_received_at = instant_opt(endpoint.last_received_at);
+                row.webhook_last_error_at = instant_opt(endpoint.last_error_at);
+                row.webhook_last_error_message = endpoint.last_error_message.clone();
+                match store::reveal_webhook_token(&s.pool,&s.cipher,&endpoint.source_id).await {
+                    Ok(token) => row.webhook_url = format!("{public_url}/api/v2/autoscan/webhooks/{token}"),
+                    Err(error) => tracing::warn!(%error, source_id = %endpoint.source_id, "autoscan: reveal webhook token failed"),
+                }
+            }
+        }
+        rows.sort_by(|a,b| (&a.label,&a.id).cmp(&(&b.label,&b.id)));
+        let mut items = Vec::with_capacity(limit);
+        let mut last = SourcePosition::default();
+        let mut next = String::new();
+        for row in rows {
+            if !cursor.is_empty() && (&row.label,&row.id) <= (&after.label,&after.id) { continue; }
+            if items.len() == limit {
+                next = match s.cursors.encode(&scope,&last) { Ok(v)=>v,Err(p)=>return write_problem(w,r,p).await }; break;
+            }
+            last = SourcePosition { label:row.label.clone(),id:row.id.clone() }; items.push(row);
+        }
+        write_v2_json(w,&paginated(items,next)).await;
+    })));
+    for (path, events) in [
+        ("/api/v2/admin/autoscan/events", true),
+        ("/api/v2/admin/autoscan/scans", false),
+    ] {
+        v2.get(
+            path,
+            stack.v2(
+                path,
+                V2Class::ActingAdmin,
+                route!(stack, |s, w, r| {
+                    let Some(claims) = get_claims(r) else {
+                        return;
+                    };
+                    let limit = query(r, "limit").parse::<i64>().unwrap_or(50);
+                    let cursor = query(r, "cursor");
+                    let status = query(r, "status");
+                    let search = trim_space(&query(r, "q")).to_owned();
+                    let source_id = trim_space(&query(r, "source_id")).to_owned();
+                    let filter = if events {
+                        serde_json::json!([source_id, status, search, limit])
+                    } else {
+                        serde_json::json!([status, search, limit])
+                    };
+                    let filter = String::from_utf8(
+                        silo_gocompat::json::marshal(&filter).expect("cursor filter serializes"),
+                    )
+                    .expect("JSON is UTF-8");
+                    let scope = CursorScope {
+                        operation_id: if events {
+                            "listAdminAutoscanEvents"
+                        } else {
+                            "listAdminAutoscanScans"
+                        }
+                        .into(),
+                        security: format!(
+                            "{}/{}/{}",
+                            claims.user_id,
+                            get_profile_id(r),
+                            viewer_digest(r)
+                        ),
+                        filter,
+                        sort: if events {
+                            "completed_desc"
+                        } else {
+                            "lifecycle_desc"
+                        }
+                        .into(),
+                        tiebreaker: "id_desc".into(),
+                    };
+                    let mut pos: HistoryPosition = if cursor.is_empty() {
+                        HistoryPosition::default()
+                    } else {
+                        match s.cursors.decode(&scope, &cursor) {
+                            Ok(v) => v,
+                            Err(p) => return write_problem(w, r, p).await,
+                        }
+                    };
+                    if !(0..=1_000_000_000).contains(&pos.offset) {
+                        return write_problem(
+                            w,
+                            r,
+                            Problem::new(
+                                silo_api_v2::problem::invalid_cursor(),
+                                if events {
+                                    "Invalid event history position."
+                                } else {
+                                    "Invalid scan history position."
+                                },
+                            ),
+                        )
+                        .await;
+                    }
+                    if events {
+                        let filter = store::EventListFilter {
+                            source_id,
+                            status,
+                            search,
+                            limit,
+                            offset: pos.offset,
+                        };
+                        let rows = read_db!(w, r, store::list_events(&s.pool, &filter));
+                        let total = read_db!(w, r, store::count_events(&s.pool, &filter));
+                        if total < 0 || rows.len() as i64 > limit {
+                            return write_problem(
+                                w,
+                                r,
+                                Problem::new(internal_error(), "Invalid event history page."),
+                            )
+                            .await;
+                        }
+                        let mut items = Vec::with_capacity(rows.len());
+                        for row in rows {
+                            match event(row) {
+                                Ok(v) => items.push(v),
+                                Err(p) => return write_problem(w, r, p).await,
+                            }
+                        }
+                        let next = if items.len() as i64 == limit {
+                            pos.offset += items.len() as i64;
+                            match s.cursors.encode(&scope, &pos) {
+                                Ok(v) => v,
+                                Err(p) => return write_problem(w, r, p).await,
+                            }
+                        } else {
+                            String::new()
+                        };
+                        let page = paginated(items, next);
+                        write_v2_json(
+                            w,
+                            &HistoryPage {
+                                items: page.items,
+                                page: page.page,
+                                total,
+                            },
+                        )
+                        .await;
+                    } else {
+                        let filter = store::ScanListFilter {
+                            status,
+                            search,
+                            limit,
+                            offset: pos.offset,
+                        };
+                        let rows = read_db!(w, r, store::list_autoscan_scans(&s.pool, &filter));
+                        let total = read_db!(w, r, store::count_autoscan_scans(&s.pool, &filter));
+                        if total < 0 || rows.len() as i64 > limit {
+                            return write_problem(
+                                w,
+                                r,
+                                Problem::new(internal_error(), "Invalid scan history page."),
+                            )
+                            .await;
+                        }
+                        let mut items = Vec::with_capacity(rows.len());
+                        for row in rows {
+                            match scan(row) {
+                                Ok(v) => items.push(v),
+                                Err(p) => return write_problem(w, r, p).await,
+                            }
+                        }
+                        let next = if items.len() as i64 == limit {
+                            pos.offset += items.len() as i64;
+                            match s.cursors.encode(&scope, &pos) {
+                                Ok(v) => v,
+                                Err(p) => return write_problem(w, r, p).await,
+                            }
+                        } else {
+                            String::new()
+                        };
+                        let page = paginated(items, next);
+                        write_v2_json(
+                            w,
+                            &HistoryPage {
+                                items: page.items,
+                                page: page.page,
+                                total,
+                            },
+                        )
+                        .await;
+                    }
+                }),
+            ),
+        );
+    }
 }
