@@ -23,6 +23,7 @@ pub mod goid;
 pub mod gourl;
 pub mod hexgo;
 pub mod idgen;
+pub mod imagesize;
 pub mod jcs;
 pub mod jellycompat;
 pub mod keyframes;
