@@ -1,0 +1,282 @@
+// overlay-package: internal/catalog
+//
+// Export shims for the catalogquery vector generator. They expose the query engine's unexported
+// plan builders under new names so the generator, an ordinary package main, can record their
+// output. The file is substituted in only through `go build -overlay`; internal/catalog on disk is
+// unchanged.
+
+package catalog
+
+import (
+	"fmt"
+	"strings"
+	"time"
+)
+
+// VecTerm is a queryCursorTerm with exported fields.
+type VecTerm struct {
+	Expression string `json:"expression"`
+	Kind       string `json:"kind"`
+	Descending bool   `json:"descending"`
+	NullsLast  bool   `json:"nulls_last"`
+	NotNull    bool   `json:"not_null"`
+	SQLType    string `json:"sql_type"`
+}
+
+func vecTerms(terms []queryCursorTerm) []VecTerm {
+	out := make([]VecTerm, len(terms))
+	for i, t := range terms {
+		out[i] = VecTerm{t.expression, t.kind, t.descending, t.nullsLast, t.notNull, t.sqlType}
+	}
+	return out
+}
+
+func fromVecTerms(terms []VecTerm) []queryCursorTerm {
+	out := make([]queryCursorTerm, len(terms))
+	for i, t := range terms {
+		out[i] = queryCursorTerm{expression: t.Expression, kind: t.Kind, descending: t.Descending, nullsLast: t.NullsLast, notNull: t.NotNull, sqlType: t.SQLType}
+	}
+	return out
+}
+
+// VecExecutor is the plan-relevant part of a QueryExecutor.
+type VecExecutor struct {
+	GroupByWork     bool      `json:"group_by_work"`
+	SourceWhere     string    `json:"source_where"`
+	SourceArgs      []any     `json:"source_args"`
+	SourceOrder     []VecTerm `json:"source_order"`
+	SourceCTE       string    `json:"source_cte"`
+	SourceJoin      string    `json:"source_join"`
+	Scope           string    `json:"scope"`
+	BaseRelationSQL string     `json:"base_relation_sql"`
+	SnapshotAt      *time.Time `json:"snapshot_at"`
+}
+
+func (v VecExecutor) executor() *QueryExecutor {
+	return &QueryExecutor{
+		GroupByWork: v.GroupByWork, SourceWhere: v.SourceWhere, SourceArgs: v.SourceArgs,
+		SourceOrder: fromVecTerms(v.SourceOrder), SourceCTE: v.SourceCTE, SourceJoin: v.SourceJoin,
+		Scope: v.Scope, BaseRelationSQL: v.BaseRelationSQL, SnapshotAt: v.SnapshotAt,
+	}
+}
+
+// VecPlanSQL is every statement one preview plan renders.
+type VecPlanSQL struct {
+	Terms         []VecTerm `json:"terms"`
+	PagedSQL      string    `json:"paged_sql"`
+	PagedArgs     []any     `json:"paged_args"`
+	PagedTotalSQL string    `json:"paged_total_sql"`
+	CountSQL      string    `json:"count_sql"`
+	CountArgs     []any     `json:"count_args"`
+	CursorSQL     string    `json:"cursor_sql"`
+	CursorArgs    []any     `json:"cursor_args"`
+	AfterSQL      string    `json:"after_sql"`
+	AfterArgs     []any     `json:"after_args"`
+	AfterError    string    `json:"after_error"`
+	TupleSQL      string    `json:"tuple_sql"`
+	TupleArgs     []any     `json:"tuple_args"`
+	TitleKey      string    `json:"title_key"`
+	AnchorSQL     string    `json:"anchor_sql"`
+	AnchorArgs    []any     `json:"anchor_args"`
+}
+
+// VecPlan renders buildPreviewPagePlan's statements. after, when set, is a cursor whose keys
+// are built from the plan's own terms.
+func VecPlan(v VecExecutor, def QueryDefinition, access AccessFilter, limit, offset int, afterValue *string) (*VecPlanSQL, error) {
+	e := v.executor()
+	plan, err := e.buildPreviewPagePlan(def, access, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	out := &VecPlanSQL{Terms: vecTerms(plan.cursorTerms), TitleKey: plan.titleKey}
+	out.AnchorSQL, out.AnchorArgs = plan.seekAnchorSQL()
+	out.PagedSQL, out.PagedArgs = plan.pagedSQL(false)
+	out.PagedTotalSQL, _ = plan.pagedSQL(true)
+	out.CountSQL, out.CountArgs = plan.countSQL()
+	out.CursorSQL, out.CursorArgs, err = plan.cursorSQL(nil)
+	if err != nil {
+		return nil, err
+	}
+	after := &QueryCursor{Keys: make([]QueryCursorValue, len(plan.cursorTerms)), Consumed: 3}
+	for i, term := range plan.cursorTerms {
+		after.Keys[i].Kind = term.kind
+		if i%2 == 0 || afterValue == nil {
+			after.Keys[i].Value = afterValue
+		}
+	}
+	sql, args, err := plan.cursorSQL(after)
+	if err != nil {
+		out.AfterError = err.Error()
+	} else {
+		out.AfterSQL, out.AfterArgs = sql, args
+	}
+	where, targs, err := plan.whereAfter(nil)
+	if err == nil {
+		targs = append(targs, 4)
+		out.TupleArgs = targs
+		cols := make([]string, len(plan.cursorTerms))
+		for i, term := range plan.cursorTerms {
+			cols[i] = "(" + term.expression + ")::text"
+		}
+		out.TupleSQL = plan.withClause() + "SELECT " + strings.Join(cols, ", ") + " " + plan.fromClausePaged + " " + where + " " + plan.orderBy + " LIMIT 1 OFFSET $" + itoa(len(targs))
+	}
+	return out, nil
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var b []byte
+	for n > 0 {
+		b = append([]byte{byte('0' + n%10)}, b...)
+		n /= 10
+	}
+	return string(b)
+}
+
+// VecCount calls buildCountQuery.
+func VecCount(v VecExecutor, def QueryDefinition, access AccessFilter) (string, []any, error) {
+	return v.executor().buildCountQuery(def, access)
+}
+
+// VecSeek calls cursorSeekSQL.
+func VecSeek(terms []VecTerm, after *QueryCursor, start int) (string, []any, error) {
+	return cursorSeekSQL(fromVecTerms(terms), after, start)
+}
+
+// VecSortPlan is a QuerySortPlan with its terms exported.
+type VecSortPlan struct {
+	Terms   []VecTerm `json:"terms"`
+	Joins   []string  `json:"joins"`
+	OrderBy string    `json:"order_by"`
+	Args    []any     `json:"args"`
+}
+
+// VecBuilder is a QueryBuilder's configuration.
+type VecBuilder struct {
+	Alias      string `json:"alias"`
+	UserID     int    `json:"user_id"`
+	ProfileID  string `json:"profile_id"`
+	LibraryIDs []int  `json:"library_ids"`
+	MediaScope string `json:"media_scope"`
+	MediaItems bool   `json:"media_items"`
+	ArgIdx     int    `json:"arg_idx"`
+}
+
+func (v VecBuilder) builder() *QueryBuilder {
+	qb := NewQueryBuilder(v.Alias).WithUserScope(v.UserID, v.ProfileID).WithLibraryScope(v.LibraryIDs).WithMediaScope(v.MediaScope).WithArgIdx(v.ArgIdx)
+	if v.MediaItems {
+		qb.WithMediaItemsRelation()
+	}
+	return qb
+}
+
+// VecBuild calls QueryBuilder.Build and reports whether it requested the history CTE.
+func VecBuild(v VecBuilder, def QueryDefinition) (string, []any, bool, int, error) {
+	qb := v.builder()
+	sql, args, err := qb.Build(def)
+	return sql, args, qb.RequiresUserHistoryCTE(), qb.ArgIdx(), err
+}
+
+// VecSort calls QueryBuilder.BuildSortPlan.
+func VecSort(v VecBuilder, sort QuerySort) (*VecSortPlan, error) {
+	plan, err := v.builder().BuildSortPlan(sort)
+	if err != nil {
+		return nil, err
+	}
+	return &VecSortPlan{Terms: vecTerms(plan.terms), Joins: plan.Joins, OrderBy: plan.OrderBy, Args: plan.Args}, nil
+}
+
+// VecParseDuration calls parseDuration.
+func VecParseDuration(s string) (string, error) { return parseDuration(s) }
+
+// VecLibraryScope calls AccessFilter.LibraryScope.
+func VecLibraryScope(f AccessFilter, requested []int) ([]int, bool) { return f.LibraryScope(requested) }
+
+// VecListColumns is the select list every preview statement reads.
+func VecListColumns() string { return qualifiedListItemColumns("mi") + ", " + mangaCountColumns("mi") }
+
+// VecEpisodeBaseRelation is the unscoped episode relation.
+func VecEpisodeBaseRelation() string { return episodeCatalogBaseRelation }
+
+// VecItemColumns is itemColumns and its qualified forms.
+func VecItemColumns() []string {
+	return []string{itemColumns, qualifiedItemColumns("mi"), qualifiedItemColumnRefs("mi"), qualifiedListItemColumns("x")}
+}
+
+// VecWithSeekAnchors gives an executor a fresh seek anchor cache.
+func VecWithSeekAnchors(e *QueryExecutor) *QueryExecutor {
+	e.SeekAnchors = newSeekAnchorCache()
+	return e
+}
+
+// VecEpisodeQuery is an episodeCatalogQuery with exported fields.
+type VecEpisodeQuery struct {
+	Empty    bool   `json:"empty"`
+	WithCTEs string `json:"with_ctes"`
+	From     string `json:"from"`
+	SortJoin string `json:"sort_join"`
+	Where    string `json:"where"`
+	OrderBy  string `json:"order_by"`
+	Args     []any  `json:"args"`
+	Gate     bool   `json:"requires_full_page_gate"`
+	PageSQL  string `json:"page_sql"`
+	PageArgs []any  `json:"page_args"`
+	SeekSQL  string `json:"seek_sql"`
+	SeekArgs []any  `json:"seek_args"`
+}
+
+// VecEpisodeQueries renders episodeCatalogUserStateQuery (page form) and episodeCatalogEntriesQuery,
+// each with the page statement episodeCatalogPreviewPage builds and episodeCatalogSeek's statement.
+func VecEpisodeQueries(v VecExecutor, def QueryDefinition, access AccessFilter, limit, offset int) (userState *VecEpisodeQuery, userOK bool, userErr error, entries *VecEpisodeQuery, entriesOK bool, entriesErr error) {
+	e := v.executor()
+	conv := func(q episodeCatalogQuery) *VecEpisodeQuery {
+		out := &VecEpisodeQuery{q.empty, q.withCTEs, q.from, q.sortJoin, q.where, q.orderBy, q.args, q.requiresFullPageGate, "", nil, "", nil}
+		if q.empty {
+			return out
+		}
+		lim, off, maxResults := normalizePreviewPageBounds(def.Normalize(), limit, offset)
+		pageLimit := lim
+		if maxResults <= 0 || off+lim < maxResults {
+			pageLimit++
+		}
+		pageArgs := append([]any{}, q.args...)
+		limitArgIdx := len(pageArgs) + 1
+		pageArgs = append(pageArgs, pageLimit)
+		offsetClause := ""
+		if off > 0 {
+			offsetClause = fmt.Sprintf(" OFFSET $%d", limitArgIdx+1)
+			pageArgs = append(pageArgs, off)
+		}
+		withClause := ""
+		if q.withCTEs != "" {
+			withClause = "WITH " + q.withCTEs + "\n"
+		}
+		out.PageSQL = fmt.Sprintf(`%sSELECT ece.episode_id, ece.added_at
+		%s%s
+		%s
+		%s
+		LIMIT $%d%s`, withClause, q.from, q.sortJoin, q.where, q.orderBy, limitArgIdx, offsetClause)
+		out.PageArgs = pageArgs
+		seekArgs := append(append([]any{}, q.args...), 9)
+		out.SeekSQL = fmt.Sprintf("%sSELECT ece.episode_id %s%s %s %s LIMIT 1 OFFSET $%d", withClause, q.from, q.sortJoin, q.where, q.orderBy, len(seekArgs))
+		out.SeekArgs = seekArgs
+		return out
+	}
+	us, ok, err := e.episodeCatalogUserStateQuery(def, access, false)
+	if ok && err == nil {
+		userState = conv(us)
+	}
+	userOK, userErr = ok, err
+	en, ok, err := e.episodeCatalogEntriesQuery(def, access)
+	if ok && err == nil {
+		entries = conv(en)
+	}
+	return userState, userOK, userErr, entries, ok, err
+}
+
+// VecEpisodeHydrateSQL is hydrateEpisodeCatalogEntryPage's statement.
+func VecEpisodeHydrateSQL() string {
+	return "SELECT " + qualifiedListItemColumns("mi") + " FROM " + fmt.Sprintf(episodeCatalogSelectBody, "e.content_id = ANY($1)")
+}

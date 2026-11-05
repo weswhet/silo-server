@@ -157,6 +157,22 @@
         "ValueMismatch $[0].last_health_check"
       ],
       "why": "Go's node health loop stamps a new node on its own tick, so a node created just before a tick has last_health_check set on one server and null on the other. Seen Go vs Go: scripts/nodes-flake-repro.sh, with one stack restarted so the 30-second tickers run at different phases, read a stamp on one stack and null on the other in 4 of 15 rounds, in both directions."
+    },
+    {
+      "cases": [
+        "api_v1 POST /api/v1/collections/#flow:collections:v1:create_second",
+        "api_v1 POST /api/v1/collections/#flow:collections:kid:parent_create",
+        "api_v1 POST /api/v1/collections/#flow:collections:kid:kid_create"
+      ],
+      "signatures": [
+        "ValueMismatch $.allowed_profile_ids[0]",
+        "ValueMismatch $.allowed_profile_ids[1]",
+        "ValueMismatch $.allowed_profile_ids[2]",
+        "ValueMismatch $.allowed_profile_ids[3]",
+        "ValueMismatch $.allowed_profile_ids[4]",
+        "ValueMismatch $.allowed_profile_ids[5]"
+      ],
+      "why": "A shared collection's v1 allowed_profile_ids lists every profile on the login sorted by ID (`v1CollectionAudience`, `slices.Sort`). Profiles created earlier in the plan get random UUIDs on each stack, so where they sort against the fixed seed IDs differs. Seen Go vs Go: `self-compare.sh --only 'flow:collections|flow:settings|scenario:profiles_create'` differed on these three cases at $.allowed_profile_ids[0..3] in 5 of 6 runs; the M6 proxy-all run showed create_second and parent_create at [1] and [2]."
     }
   ]
 }

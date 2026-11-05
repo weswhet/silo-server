@@ -1,0 +1,28 @@
+// overlay-package: internal/catalog
+//
+// Export shims for the catalogsearch vector generator, substituted in only through
+// `go build -overlay`; internal/catalog on disk is unchanged.
+
+package catalog
+
+// VecSearchQuery is parseSearchQuery's result plus the predicates over it.
+type VecSearchQuery struct {
+	Raw            string `json:"raw"`
+	Text           string `json:"text"`
+	Phrase         string `json:"phrase"`
+	ExactTitleHint string `json:"exact_title_hint"`
+	NormalizedText string `json:"normalized_text"`
+	Year           *int   `json:"year"`
+	Fuzzy          bool   `json:"fuzzy"`
+	ExactShort     bool   `json:"exact_short"`
+	LeadingShort   bool   `json:"leading_short"`
+	PrefixTsQuery  string `json:"prefix_tsquery"`
+	Fold           string `json:"fold"`
+}
+
+func VecParseSearchQuery(raw string) VecSearchQuery {
+	p := parseSearchQuery(raw)
+	return VecSearchQuery{p.Raw, p.Text, p.Phrase, p.ExactTitleHint, p.NormalizedText, p.Year,
+		eligibleForFuzzy(p), useExactShortTitleSearch(p), useLeadingShortTitleSearch(p),
+		buildTitlePrefixTsQuery(raw), foldSearchDiacritics(raw)}
+}

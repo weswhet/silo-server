@@ -203,6 +203,28 @@ fn dest(
     });
 }
 
+/// Host spellings `getaddrinfo` reads as numbers or answers from its own hosts rules, which Go's
+/// resolver sends to DNS as names and fails: Go answers "could not be resolved" for each, offline.
+const NUMERIC_HOSTS: &[(&str, &str)] = &[
+    ("octal_loopback", "0177.0.0.1"),
+    ("octal_private", "010.8.8.8"),
+    ("hex_loopback", "0x7f000001"),
+    ("decimal_loopback", "2130706433"),
+    ("short_loopback", "127.1"),
+    ("upper_localhost_dot", "LOCALHOST."),
+];
+
+/// A destination body naming `host`: a web push subscription when `push`, else a webhook.
+fn numeric_body(host: &str, push: bool) -> String {
+    if push {
+        format!(
+            "{{\"endpoint\":\"https://{host}/push\",\"keys\":{{\"p256dh\":\"k\",\"auth\":\"a\"}}}}"
+        )
+    } else {
+        format!("{{\"name\":\"n\",\"url\":\"https://{host}/x\"}}")
+    }
+}
+
 /// Webhook and browser push management. Destinations are IP literals or reserved names, so no case
 /// depends on what the host running each side can resolve.
 fn destinations(f: &mut Flows) {
@@ -292,6 +314,27 @@ fn destinations(f: &mut Flows) {
         ] {
             d(f, "POST", list, list, name, Some(body), &[]);
         }
+        for (slug, host) in NUMERIC_HOSTS {
+            let body = numeric_body(host, false);
+            d(
+                f,
+                "POST",
+                list,
+                list,
+                &format!("hook_{slug}"),
+                Some(&body),
+                &[],
+            );
+            d(
+                f,
+                "PUT",
+                one,
+                &at_hook,
+                &format!("hook_update_{slug}"),
+                Some(&body),
+                &[],
+            );
+        }
         d(f, "GET", list, list, "hooks", None, &[]);
         d(
             f,
@@ -365,6 +408,18 @@ fn destinations(f: &mut Flows) {
             ("push_bad_json", "[]"),
         ] {
             d(f, "POST", subs, subs, name, Some(body), &[]);
+        }
+        for (slug, host) in NUMERIC_HOSTS {
+            let body = numeric_body(host, true);
+            d(
+                f,
+                "POST",
+                subs,
+                subs,
+                &format!("push_{slug}"),
+                Some(&body),
+                &[],
+            );
         }
         d(f, "GET", subs, subs, "push_list", None, &[]);
         d(f, "DELETE", sub, &at_sub, "push_delete", None, &[]);
@@ -503,6 +558,13 @@ fn destinations(f: &mut Flows) {
             &[("If-Match", &if_match)],
             &[],
         );
+        for (slug, host) in NUMERIC_HOSTS {
+            let body = numeric_body(host, false);
+            let (create, update) = (format!("hook_{slug}"), format!("hook_update_{slug}"));
+            d(f, "POST", list, list, &create, Some(&body), &[], &[]);
+            let im = [("If-Match", if_match.as_str())];
+            d(f, "PUT", one, &at_hook, &update, Some(&body), &im, &[]);
+        }
         d(
             f,
             "PUT",
@@ -583,6 +645,19 @@ fn destinations(f: &mut Flows) {
             &[(&sub_var, "/id")],
         );
         d(f, "POST", subs, subs, "push_private", Some("{\"endpoint\":\"https://127.0.0.1/push\",\"keys\":{\"p256dh\":\"k\",\"auth\":\"a\"}}"), &[], &[]);
+        for (slug, host) in NUMERIC_HOSTS {
+            let body = numeric_body(host, true);
+            d(
+                f,
+                "POST",
+                subs,
+                subs,
+                &format!("push_{slug}"),
+                Some(&body),
+                &[],
+                &[],
+            );
+        }
         d(
             f,
             "POST",
@@ -768,6 +843,12 @@ fn server_channels(f: &mut Flows) {
             Some("{\"url\":\"https://10.9.9.9/\"}"),
             &[],
         );
+        for (slug, host) in NUMERIC_HOSTS {
+            let body = numeric_body(host, false);
+            let (create, update) = (format!("create_{slug}"), format!("update_{slug}"));
+            d(f, admin, "POST", list, list, &create, Some(&body), &[]);
+            d(f, admin, "PUT", one, &at, &update, Some(&body), &[]);
+        }
         let at_second = format!("{base}/${{{second}}}");
         d(
             f,

@@ -1,6 +1,8 @@
 //! Exercises the advisory-lock, storage-admission, database-bootstrap, and idgen-lease code against
 //! a real Postgres. Set `SILO_RUNTIME_TEST_DATABASE_URL` to run these; each test clears the lock and
 //! lease tables it touches first so repeated runs on the same throwaway database stay independent.
+//! Point it at a database no server runs on: a running Go or Rust server holds the storage admission
+//! lock shared, so the exclusive upgrade test fails against a live stack's own database.
 //!
 //! Run with `-- --test-threads=1`: several tests inspect `pg_stat_activity` or rely on a lock key
 //! being uncontended by anything else, which a second test running at the same time would break.

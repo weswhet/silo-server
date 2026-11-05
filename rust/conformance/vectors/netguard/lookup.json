@@ -1,0 +1,197 @@
+[
+  {
+    "host": "0177.0.0.1",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "010.8.8.8",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "0x7f000001",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "2130706433",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "127.1",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "127.0.1",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "1.2.3.04",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "0x08.0x08.0x08.0x08",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "0X7F.1",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "134744072",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "08.8.8.8",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "017700000001",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "0x7f.0.0.1",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "0",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "0x",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "00",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "1.2.3",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "1.2.3.4.5",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "4294967296",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "99999999999",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "256.1.1.1",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "1e2",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "0xg",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "-1",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "8.8.8.8.",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "127.0.0.1.",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "LOCALHOST.",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "localhost",
+    "parsed_ip": false,
+    "resolved": true,
+    "addrs": [
+      "::1",
+      "::ffff:127.0.0.1"
+    ]
+  },
+  {
+    "host": "localhost.",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "LocalHost",
+    "parsed_ip": false,
+    "resolved": true,
+    "addrs": [
+      "::1",
+      "::ffff:127.0.0.1"
+    ]
+  },
+  {
+    "host": "LOCALHOST",
+    "parsed_ip": false,
+    "resolved": true,
+    "addrs": [
+      "::1",
+      "::ffff:127.0.0.1"
+    ]
+  },
+  {
+    "host": "foo.localhost",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "ip6-localhost",
+    "parsed_ip": false,
+    "resolved": true,
+    "addrs": [
+      "::1"
+    ]
+  },
+  {
+    "host": "a.invalid",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "example.test",
+    "parsed_ip": false,
+    "resolved": false
+  },
+  {
+    "host": "0177.0.0.1.",
+    "parsed_ip": false,
+    "resolved": false
+  }
+]

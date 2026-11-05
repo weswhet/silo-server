@@ -18,6 +18,16 @@ pub struct AccessFilter {
     pub allow_unrated_content: bool,
     pub max_advisory_age: i32,
     pub require_advisory_age: bool,
+    /// `AllowedContentIDs`: `Some` limits a query-engine read to these items (an empty list matches
+    /// nothing). The fields from here on are read only by `silo-catalog`'s query engine.
+    pub allowed_content_ids: Option<Vec<String>>,
+    /// `UserID` and `ProfileID`: the viewer, for personalized rules and sorts.
+    pub user_id: i64,
+    pub profile_id: String,
+    /// `NamePrefix`: restricts a listing to titles whose sort key starts with it.
+    pub name_prefix: String,
+    /// `ExcludedMediaTypes`: `media_items.type` values the surface never exposes.
+    pub excluded_media_types: Vec<String>,
 }
 
 /// The ceiling and advisory ages a bound filter's arguments borrow.
@@ -48,6 +58,7 @@ impl AccessFilter {
             allow_unrated_content: scope.maturity_limits.allow_unrated_content,
             max_advisory_age: scope.maturity_limits.max_advisory_age,
             require_advisory_age: scope.maturity_limits.require_advisory_age,
+            ..Self::default()
         }
     }
 
