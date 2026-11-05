@@ -964,6 +964,19 @@
         "$.etag",
         "$.items[*].etag"
       ]
+    },
+    {
+      "id": "download-subscription-etags",
+      "why": "A series monitor's validator is a SHA-256 of its whole row, including the random id and creation time. A Go vs Go run differs on it in flow:downloads:*:create, which Go serves on both sides.",
+      "route": "(GET|POST|PATCH) /api/v2/downloads/subscriptions(/\\{id\\})?",
+      "format": {
+        "kind": "regex",
+        "pattern": "^\"([0-9a-f]{64})\"$"
+      },
+      "json_paths": [
+        "$.etag",
+        "$.items[*].etag"
+      ]
     }
   ]
 }

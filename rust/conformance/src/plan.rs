@@ -452,6 +452,7 @@ pub fn build(src: &Sources) -> Plan {
     crate::notification_flows::add(&mut b);
     crate::personal_flows::add(&mut b);
     crate::series_pref_flows::add(&mut b);
+    crate::download_flows::add(&mut b);
     crate::collection_flows::add(&mut b);
     crate::request_flows::add(&mut b);
     crate::auth_flows::add(&mut b);
@@ -1007,6 +1008,8 @@ const CHAIN_ROWS: &[(Surface, &str, bool)] = &[
     (Surface::ApiV2, "/api/v2/ratings", true),
     (Surface::ApiV2, "/api/v2/audio-prefs/{series_id}", true),
     (Surface::ApiV2, "/api/v2/subtitle-prefs/{series_id}", true),
+    (Surface::ApiV2, "/api/v2/downloads/subscriptions", true),
+    (Surface::ApiV2, "/api/v2/downloads/subscriptions/{id}", true),
     (Surface::ApiV2, "/api/v2/progress", true),
     (Surface::ApiV2, "/api/v2/devices", true),
     (Surface::ApiV2, "/api/v2/capabilities/personal-lists", true),

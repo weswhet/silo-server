@@ -16,6 +16,7 @@ pub mod catalog;
 pub mod chain;
 pub mod collections;
 pub mod discovery;
+pub mod downloads;
 pub mod huma;
 pub mod interest;
 pub mod libraries;
@@ -58,6 +59,7 @@ pub const DOMAINS: &[&[NativeRow]] = &[
     collections::ROWS,
     requests::ROWS,
     series_prefs::ROWS,
+    downloads::ROWS,
 ];
 
 const fn all_in_table() -> bool {
@@ -233,6 +235,7 @@ pub fn main_handler(inputs: &NativeInputs) -> BoxHandler {
         collections::mount(stack, &api, &v2);
         requests::mount(stack, &api, &v2);
         series_prefs::mount(stack, &api, &v2);
+        downloads::mount(stack, &api, &v2);
         discovery::mount(stack, &api, &v2);
     }
 

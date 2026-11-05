@@ -5,6 +5,7 @@ pub mod auth_flows;
 pub mod baseline;
 pub mod collection_flows;
 pub mod diff;
+pub mod download_flows;
 pub mod effects;
 pub mod http;
 pub mod lanes;
