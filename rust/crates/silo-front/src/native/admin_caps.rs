@@ -16,7 +16,29 @@ use crate::rows::Surface::ApiV2;
 pub const ROWS: &[NativeRow] = &[
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/dashboard/capabilities"),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/system/resources/capabilities"),
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/markers/capabilities"),
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/rating-sources/capabilities"),
 ];
+
+/// `AdminMarkerCapabilities` (`internal/apiv2/admin_catalog_intro.go`), static in Go.
+#[derive(Serialize)]
+struct AdminMarkerCapabilities<'a> {
+    revision: &'a str,
+    state: &'static str,
+    allowed: bool,
+    movie_credits: bool,
+    redetect_markers: bool,
+    detection_kind_settings: bool,
+}
+
+/// `AdminRatingSourceCapabilities` (`internal/apiv2/admin_rating_sources.go`), static in Go.
+#[derive(Serialize)]
+struct AdminRatingSourceCapabilities<'a> {
+    revision: &'a str,
+    state: &'static str,
+    allowed: bool,
+    plugin_declared_sources: bool,
+}
 
 #[derive(Serialize)]
 struct AdminDashboardCapabilities<'a> {
@@ -97,6 +119,52 @@ pub fn mount(stack: &Arc<Stack>, v2: &Mux) {
                             process_resources: true,
                             cgroup_resources: true,
                             sample_freshness: true,
+                        })
+                    })
+                    .await;
+                })
+            }),
+        ),
+    );
+
+    const MARKERS: &str = "/api/v2/admin/markers/capabilities";
+    v2.get(
+        MARKERS,
+        stack.v2(
+            MARKERS,
+            V2Class::ActingAdmin,
+            handler_fn(|w, r| {
+                Box::pin(async move {
+                    write_capability(w, r, "getAdminMarkerCapabilities", |revision| {
+                        capability_json(&AdminMarkerCapabilities {
+                            revision,
+                            state: "available",
+                            allowed: true,
+                            movie_credits: true,
+                            redetect_markers: true,
+                            detection_kind_settings: true,
+                        })
+                    })
+                    .await;
+                })
+            }),
+        ),
+    );
+
+    const RATING_SOURCES: &str = "/api/v2/admin/rating-sources/capabilities";
+    v2.get(
+        RATING_SOURCES,
+        stack.v2(
+            RATING_SOURCES,
+            V2Class::ActingAdmin,
+            handler_fn(|w, r| {
+                Box::pin(async move {
+                    write_capability(w, r, "getAdminRatingSourceCapabilities", |revision| {
+                        capability_json(&AdminRatingSourceCapabilities {
+                            revision,
+                            state: "available",
+                            allowed: true,
+                            plugin_declared_sources: true,
                         })
                     })
                     .await;
