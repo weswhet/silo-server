@@ -19,6 +19,7 @@ pub mod discovery;
 pub mod huma;
 pub mod interest;
 pub mod libraries;
+pub mod library_admin;
 pub mod notifications;
 pub mod personal;
 pub mod profiles;
@@ -56,6 +57,7 @@ pub const DOMAINS: &[&[NativeRow]] = &[
     catalog::ROWS,
     collections::ROWS,
     requests::ROWS,
+    library_admin::ROWS,
 ];
 
 const fn all_in_table() -> bool {
@@ -216,6 +218,7 @@ pub fn main_handler(inputs: &NativeInputs) -> BoxHandler {
 
     system::mount(&api, &v2, inputs);
     discovery::mount_public(&api, &v2);
+    library_admin::mount_public(&v2);
     if let Some(stack) = &inputs.stack {
         account::mount(stack, &api, &v2);
         auth::mount(stack, &api, &v2);
@@ -231,6 +234,7 @@ pub fn main_handler(inputs: &NativeInputs) -> BoxHandler {
         collections::mount(stack, &api, &v2);
         requests::mount(stack, &api, &v2);
         discovery::mount(stack, &api, &v2);
+        library_admin::mount(stack, &v2);
     }
 
     api.handle("/api/v2/*", Arc::new(v2));
@@ -309,7 +313,9 @@ fn domain_row(path: &str) -> Option<&'static NativeRow> {
 
 /// Rows that need no credential: these work without the chain.
 fn is_public(row: &NativeRow) -> bool {
-    system::ROWS.contains(row) || discovery::PUBLIC_ROWS.contains(row)
+    system::ROWS.contains(row)
+        || discovery::PUBLIC_ROWS.contains(row)
+        || library_admin::PUBLIC_ROWS.contains(row)
 }
 
 /// The raw path is one `ServeMux` keeps as is and routes to the frontend.
@@ -421,7 +427,8 @@ impl Gate {
             // Avatars and library posters in S3 need presigned URLs, which are not ported.
             if (profiles::ROWS.contains(row)
                 || libraries::ROWS.contains(row)
-                || notifications::ROWS.contains(row))
+                || notifications::ROWS.contains(row)
+                || library_admin::S3_ROWS.contains(row))
                 && self
                     .stack
                     .as_ref()
