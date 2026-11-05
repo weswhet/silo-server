@@ -67,7 +67,7 @@ for pid in "${pids[@]}"; do
   wait "$pid" || conf_die "a lane did not come up; see $out/lane*.up.log"
 done
 lane_args=()
-for lane in $(seq 1 $((lanes - 1))); do
+for ((lane = 1; lane < lanes; lane++)); do
   lane_args+=(--lane "$(lane_dir "$lane")/lane.json")
 done
 

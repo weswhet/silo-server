@@ -8,6 +8,7 @@
 #![allow(clippy::result_large_err)]
 
 pub mod account;
+pub mod admin_caps;
 pub mod admin_settings;
 pub mod admin_stats;
 pub mod api_keys;
@@ -16,6 +17,7 @@ pub mod catalog;
 pub mod chain;
 pub mod collections;
 pub mod discovery;
+pub mod history_caps;
 pub mod huma;
 pub mod interest;
 pub mod libraries;
@@ -25,6 +27,7 @@ pub mod profiles;
 pub mod requests;
 pub mod settings;
 pub mod system;
+pub mod user_caps;
 
 use std::sync::Arc;
 
@@ -56,6 +59,9 @@ pub const DOMAINS: &[&[NativeRow]] = &[
     catalog::ROWS,
     collections::ROWS,
     requests::ROWS,
+    user_caps::ROWS,
+    admin_caps::ROWS,
+    history_caps::ROWS,
 ];
 
 const fn all_in_table() -> bool {
@@ -231,6 +237,9 @@ pub fn main_handler(inputs: &NativeInputs) -> BoxHandler {
         collections::mount(stack, &api, &v2);
         requests::mount(stack, &api, &v2);
         discovery::mount(stack, &api, &v2);
+        user_caps::mount(stack, &v2);
+        admin_caps::mount(stack, &v2);
+        history_caps::mount(stack, &v2);
     }
 
     api.handle("/api/v2/*", Arc::new(v2));
