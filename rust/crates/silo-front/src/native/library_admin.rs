@@ -96,9 +96,11 @@ pub const PUBLIC_ROWS: &[NativeRow] = &[NativeRow::new(
 )];
 
 /// Rows whose answer depends on S3 presigning, which is not ported.
-pub const S3_ROWS: &[NativeRow] = &[
-    NativeRow::new(ApiV2, "GET", "/api/v2/admin/jobs/capabilities"),
-];
+pub const S3_ROWS: &[NativeRow] = &[NativeRow::new(
+    ApiV2,
+    "GET",
+    "/api/v2/admin/jobs/capabilities",
+)];
 
 /// `Capability`.
 #[derive(Serialize)]
@@ -1917,7 +1919,7 @@ mod jobs {
                 "/api/v2/admin/jobs/job-1/artifact?exp=1700001000&sig=GVRM_sv4T2NR6F8UfXfY6w"
             );
             assert_eq!(
-                serde_json::to_string(&expiry).unwrap(),
+                String::from_utf8(silo_gocompat::json::marshal(&expiry).unwrap()).unwrap(),
                 "\"2023-11-14T22:30:00.000Z\""
             );
         }
@@ -1926,7 +1928,7 @@ mod jobs {
             let mut job = job("item_refresh");
             job.result_payload=Some(r#"{"requested_content_id":"a","refresh_content_id":"b","scan_path":"private","artwork_cache_warning":"private","scan_result":{"new":3},"matched_files":4}"#.into());
             let out = task_job(&job, false, "secret", SystemTime::UNIX_EPOCH);
-            let json = serde_json::to_string(&out).unwrap();
+            let json = String::from_utf8(silo_gocompat::json::marshal(&out).unwrap()).unwrap();
             assert!(!json.contains("private"));
             assert!(!json.contains("download_url"));
             assert!(!json.contains("library_name"));

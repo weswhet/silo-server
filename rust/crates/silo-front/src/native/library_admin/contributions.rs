@@ -202,17 +202,21 @@ mod tests {
             updated_at: GoTime::ZERO.to_system_time(),
         };
         assert_eq!(
-            serde_json::to_string(&Contribution::from(row)).unwrap(),
+            String::from_utf8(silo_gocompat::json::marshal(&Contribution::from(row)).unwrap())
+                .unwrap(),
             r#"{"id":"audit","media_file_id":"9","provider":"provider","segment":"intro","source":"manual","submitted_start_ms":0,"content_hash":"hash","submission_id":"","status":"accepted","http_status":0}"#
         );
         let pos: Position = serde_json::from_str("{}").unwrap();
         assert!(pos.updated_at.is_zero());
         assert!(pos.id.is_empty());
         assert_eq!(
-            serde_json::to_string(&Position {
-                updated_at: GoTime::from_unix(0, 0),
-                id: "audit".into(),
-            })
+            String::from_utf8(
+                silo_gocompat::json::marshal(&Position {
+                    updated_at: GoTime::from_unix(0, 0),
+                    id: "audit".into(),
+                })
+                .unwrap()
+            )
             .unwrap(),
             r#"{"UpdatedAt":"1970-01-01T00:00:00Z","ID":"audit"}"#
         );
