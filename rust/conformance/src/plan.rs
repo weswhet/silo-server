@@ -944,6 +944,12 @@ const CHAIN_ROWS: &[(Surface, &str, bool)] = &[
         true,
     ),
     (Surface::ApiV2, "/api/v2/onboarding/capabilities", true),
+    (Surface::ApiV2, "/api/v2/admin/dashboard/capabilities", true),
+    (
+        Surface::ApiV2,
+        "/api/v2/admin/system/resources/capabilities",
+        true,
+    ),
     (Surface::ApiV1, "/api/v1/api-keys/", false),
     (Surface::ApiV1, "/api/v1/api-keys/scopes", false),
     (Surface::ApiV2, "/api/v2/api-keys", false),
