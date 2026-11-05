@@ -21,6 +21,8 @@
 //! Ported but not in `ROWS` (still Go's): `GET /admin/jobs` and `GET /admin/jobs/{id}`, and
 //! `PUT .../collection-groups/order`. The conformance plan has no compared success for them yet
 //! (the job list is a feed, no admin job is seeded, and no reorder case carries a valid `If-Match`).
+//! The seven autoscan connection, source-deletion, and webhook writes are also ported but not in `ROWS`:
+//! the plan seeds no autoscan connection or source, so none of them reaches a success.
 
 mod autoscan_writes;
 mod contributions;
@@ -52,21 +54,6 @@ use crate::rows::NativeRow;
 use crate::rows::Surface::ApiV2;
 
 pub const ROWS: &[NativeRow] = &[
-    NativeRow::new(ApiV2, "POST", "/api/v2/admin/autoscan/connections"),
-    NativeRow::new(ApiV2, "PUT", "/api/v2/admin/autoscan/connections/{id}"),
-    NativeRow::new(ApiV2, "DELETE", "/api/v2/admin/autoscan/connections/{id}"),
-    NativeRow::new(ApiV2, "DELETE", "/api/v2/admin/autoscan/sources/{id}"),
-    NativeRow::new(ApiV2, "POST", "/api/v2/admin/autoscan/sources/{id}/webhook"),
-    NativeRow::new(
-        ApiV2,
-        "DELETE",
-        "/api/v2/admin/autoscan/sources/{id}/webhook",
-    ),
-    NativeRow::new(
-        ApiV2,
-        "POST",
-        "/api/v2/admin/autoscan/sources/{id}/webhook/rotate",
-    ),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/trickplay/libraries"),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/files/{fileId}/contributions"),
     NativeRow::new(
