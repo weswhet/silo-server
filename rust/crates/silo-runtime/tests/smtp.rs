@@ -50,6 +50,10 @@ async fn scripted_server(listener: TcpListener, greeting: &'static [u8]) -> Vec<
                 in_data = false;
                 write.write_all(b"250 queued\r\n").await.unwrap();
             }
+        } else if line.starts_with(b"QUIT") {
+            // The client hangs up without reading the reply, so a reply could race its close
+            // and turn the next read into a reset.
+            return all;
         } else if line.starts_with(b"DATA") {
             in_data = true;
             write.write_all(b"354 go\r\n").await.unwrap();
