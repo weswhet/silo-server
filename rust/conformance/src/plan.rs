@@ -1038,8 +1038,6 @@ const CHAIN_ROWS: &[(Surface, &str, bool)] = &[
         true,
     ),
     (Surface::ApiV2, "/api/v2/admin/unmatched", true),
-    (Surface::ApiV2, "/api/v2/admin/jobs", true),
-    (Surface::ApiV2, "/api/v2/admin/jobs/{id}", true),
     (Surface::ApiV2, "/api/v2/admin/trickplay/libraries", true),
     (
         Surface::ApiV2,

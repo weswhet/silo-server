@@ -17,6 +17,10 @@
 //! writes below. All seven use persisted state only: connection update does not probe, source
 //! deletion does not stop running work, and webhook changes do not contact a provider.
 //! None publishes events or signals the scheduler/poller; no requested write row is excluded.
+//!
+//! Ported but not in `ROWS` (still Go's): `GET /admin/jobs` and `GET /admin/jobs/{id}`, and
+//! `PUT .../collection-groups/order`. The conformance plan has no compared success for them yet
+//! (the job list is a feed, no admin job is seeded, and no reorder case carries a valid `If-Match`).
 
 mod autoscan_writes;
 mod contributions;
@@ -72,11 +76,6 @@ pub const ROWS: &[NativeRow] = &[
     ),
     NativeRow::new(
         ApiV2,
-        "PUT",
-        "/api/v2/admin/libraries/{library_id}/collection-groups/order",
-    ),
-    NativeRow::new(
-        ApiV2,
         "GET",
         "/api/v2/admin/libraries/{library_id}/collection-groups",
     ),
@@ -86,8 +85,6 @@ pub const ROWS: &[NativeRow] = &[
         "/api/v2/admin/libraries/{library_id}/collection-groups/order",
     ),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/unmatched"),
-    NativeRow::new(ApiV2, "GET", "/api/v2/admin/jobs"),
-    NativeRow::new(ApiV2, "GET", "/api/v2/admin/jobs/{id}"),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/autoscan/settings"),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/autoscan/status"),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/autoscan/connections"),
@@ -114,8 +111,6 @@ pub const PUBLIC_ROWS: &[NativeRow] = &[NativeRow::new(
 /// Rows whose answer depends on S3 presigning, which is not ported.
 pub const S3_ROWS: &[NativeRow] = &[
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/jobs/capabilities"),
-    NativeRow::new(ApiV2, "GET", "/api/v2/admin/jobs"),
-    NativeRow::new(ApiV2, "GET", "/api/v2/admin/jobs/{id}"),
 ];
 
 /// `Capability`.
