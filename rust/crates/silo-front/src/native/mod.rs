@@ -375,7 +375,9 @@ impl Gate {
         if requests::STATUS_PATHS.contains(&bare) {
             fresh.request_server_enabled = Some(stack.refresh_request_server().await);
         }
-        if domain_row(bare).is_some_and(|row| personal::ROWS.contains(row)) {
+        if domain_row(bare)
+            .is_some_and(|row| personal::ROWS.contains(row) || row.path == "/api/v2/watched/{id}")
+        {
             fresh.personal_needs_go = Some(stack.refresh_personal_needs_go().await);
         }
         fresh
@@ -465,7 +467,7 @@ impl Gate {
                 return false;
             }
             // Watch provider fan-out and title promotion need the plugin host and watchlist service.
-            if personal::ROWS.contains(row)
+            if (personal::ROWS.contains(row) || row.path == "/api/v2/watched/{id}")
                 && self
                     .stack
                     .as_ref()

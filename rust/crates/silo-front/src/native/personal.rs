@@ -260,6 +260,8 @@ struct StatePayload<'a> {
     is_favorite: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     in_watchlist: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    played: Option<bool>,
 }
 
 /// `publishUserStateEvent`.
@@ -273,6 +275,7 @@ pub(super) async fn publish_state(
     change: &str,
     is_favorite: Option<bool>,
     in_watchlist: Option<bool>,
+    played: Option<bool>,
 ) {
     if user == 0 || profile.is_empty() || change.is_empty() {
         return;
@@ -284,6 +287,7 @@ pub(super) async fn publish_state(
         change,
         is_favorite,
         in_watchlist,
+        played,
     })
     .unwrap_or_default();
     publish_envelope(
@@ -819,7 +823,18 @@ async fn notify_list(s: &Stack, list: List, added: bool, user: i64, profile: &st
     } else {
         (None, Some(added))
     };
-    publish_state(s, user, profile, item, "", list.change, favorite, watchlist).await;
+    publish_state(
+        s,
+        user,
+        profile,
+        item,
+        "",
+        list.change,
+        favorite,
+        watchlist,
+        None,
+    )
+    .await;
 }
 
 async fn add_entry(s: &Stack, r: &Request, list: List, item: &str) -> Result<(), ApiError> {
@@ -1678,7 +1693,7 @@ async fn sync_progress(
             }
             for id in &published {
                 let of = series.get(id).map_or("", String::as_str);
-                publish_state(s, user, &profile, id, of, "progress", None, None).await;
+                publish_state(s, user, &profile, id, of, "progress", None, None, None).await;
             }
         }
     }
@@ -2107,7 +2122,18 @@ async fn dismiss(
             .await
             .map_err(|_| failed())?;
         interest::queue_home_change(user, &profile, &of);
-        publish_state(s, user, &profile, item, &of, "home_dismissal", None, None).await;
+        publish_state(
+            s,
+            user,
+            &profile,
+            item,
+            &of,
+            "home_dismissal",
+            None,
+            None,
+            None,
+        )
+        .await;
         return Ok(());
     }
     let (series_arg, stamp_arg) = match surface {
@@ -2144,6 +2170,7 @@ async fn dismiss(
         item,
         series,
         "home_dismissal",
+        None,
         None,
         None,
     )
@@ -2244,6 +2271,7 @@ async fn undismiss(
         item,
         series.as_deref().unwrap_or(""),
         "home_dismissal",
+        None,
         None,
         None,
     )
