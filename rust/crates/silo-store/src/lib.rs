@@ -40,6 +40,7 @@ pub mod access;
 pub mod autoscan;
 pub mod blobstore;
 pub mod catalog;
+pub mod library_admin_reads;
 pub mod rating;
 pub mod requests;
 pub mod settings;

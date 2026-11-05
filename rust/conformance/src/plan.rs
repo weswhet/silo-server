@@ -1027,6 +1027,19 @@ const CHAIN_ROWS: &[(Surface, &str, bool)] = &[
     (Surface::ApiV2, "/api/v2/admin/autoscan/sources", true),
     (Surface::ApiV2, "/api/v2/admin/autoscan/events", true),
     (Surface::ApiV2, "/api/v2/admin/autoscan/scans", true),
+    (
+        Surface::ApiV2,
+        "/api/v2/admin/libraries/{library_id}/collection-groups",
+        true,
+    ),
+    (
+        Surface::ApiV2,
+        "/api/v2/admin/libraries/{library_id}/collection-groups/order",
+        true,
+    ),
+    (Surface::ApiV2, "/api/v2/admin/unmatched", true),
+    (Surface::ApiV2, "/api/v2/admin/jobs", true),
+    (Surface::ApiV2, "/api/v2/admin/jobs/{id}", true),
 ];
 
 /// `queryGuard`, Huma's unknown-parameter refusal, and the v2 representation guards.

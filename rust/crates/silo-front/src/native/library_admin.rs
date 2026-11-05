@@ -5,9 +5,10 @@
 //! The six autoscan inspection reads use Postgres; running-poll elapsed time also uses the clock.
 //! None requires the plugin host, S3, or in-process scheduler state.
 //!
-//! Every scan, autoscan, job, task, and storage transition action stays on Go: each reaches the scanner, the
-//! autoscan ingest path, the job runner, or the blob store. `getAdminJobCapabilities` stays on Go while a
-//! deployment uses S3, because public links need presigning.
+//! Collection-group list/order and unmatched-file reads use the Go repository SQL. Retained-job
+//! reads sign local artifact capabilities with Stack's artwork key. Job reads and
+//! `getAdminJobCapabilities` stay on Go for S3 deployments, because download URLs need presigning.
+//! Mutating scan, autoscan, job, task, and storage transition actions stay on Go.
 
 use std::sync::Arc;
 
@@ -22,6 +23,8 @@ use silo_http::chi::Mux;
 use silo_http::handler_fn;
 use silo_store::access::Scope as AccessScope;
 use silo_store::autoscan as store;
+use silo_store::library_admin_reads as reads;
+
 use std::collections::BTreeMap;
 use std::time::SystemTime;
 
@@ -32,6 +35,19 @@ use crate::rows::NativeRow;
 use crate::rows::Surface::ApiV2;
 
 pub const ROWS: &[NativeRow] = &[
+    NativeRow::new(
+        ApiV2,
+        "GET",
+        "/api/v2/admin/libraries/{library_id}/collection-groups",
+    ),
+    NativeRow::new(
+        ApiV2,
+        "GET",
+        "/api/v2/admin/libraries/{library_id}/collection-groups/order",
+    ),
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/unmatched"),
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/jobs"),
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/jobs/{id}"),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/autoscan/settings"),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/autoscan/status"),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/autoscan/connections"),
@@ -56,11 +72,11 @@ pub const PUBLIC_ROWS: &[NativeRow] = &[NativeRow::new(
 )];
 
 /// Rows whose answer depends on S3 presigning, which is not ported.
-pub const S3_ROWS: &[NativeRow] = &[NativeRow::new(
-    ApiV2,
-    "GET",
-    "/api/v2/admin/jobs/capabilities",
-)];
+pub const S3_ROWS: &[NativeRow] = &[
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/jobs/capabilities"),
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/jobs"),
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/jobs/{id}"),
+];
 
 /// `Capability`.
 #[derive(Serialize)]
@@ -138,6 +154,8 @@ pub fn mount_public(v2: &Mux) {
 
 pub fn mount(stack: &Arc<Stack>, v2: &Mux) {
     mount_autoscan(stack, v2);
+    mount_admin_reads(stack, v2);
+    jobs::mount(stack, v2);
     simple(
         v2,
         Some(stack),
@@ -1023,5 +1041,882 @@ fn mount_autoscan(stack: &Arc<Stack>, v2: &Mux) {
                 }),
             ),
         );
+    }
+}
+
+#[derive(Serialize)]
+struct AdminCollectionGroup {
+    id: String,
+    library_id: String,
+    name: String,
+    slug: String,
+    kind: String,
+    default_sort_mode: String,
+    sort_order: i32,
+}
+
+#[derive(Serialize)]
+struct AdminGroups {
+    items: Vec<AdminCollectionGroup>,
+    ungrouped_sort_order: i32,
+}
+
+#[derive(Serialize)]
+struct AdminCollectionOrder {
+    library_id: String,
+    group_id: Option<String>,
+    ordered_ids: Vec<String>,
+    has_more: bool,
+}
+
+#[derive(Serialize)]
+struct AdminUnmatchedFile {
+    id: String,
+    media_folder_id: String,
+    file_path: String,
+    file_size: i64,
+    container: String,
+}
+
+fn mount_admin_reads(stack: &Arc<Stack>, v2: &Mux) {
+    for (path, canonical) in [
+        (
+            "/api/v2/admin/libraries/{library_id}/collection-groups",
+            false,
+        ),
+        (
+            "/api/v2/admin/libraries/{library_id}/collection-groups/order",
+            true,
+        ),
+    ] {
+        v2.get(path, stack.v2(path, V2Class::ActingAdmin, route!(stack, |s, w, r| {
+            let Some(id) = silo_api_v2::wire::Id(r.url_param("library_id").to_owned()).to_int() else {
+                return write_problem(w, r, Problem::new(silo_api_v2::problem::type_for_status(404), "No library has that identifier.")).await;
+            };
+            // Go accepts a machine integer, then pgx rejects values outside the int4 key range.
+            let Ok(database_id) = i32::try_from(id) else {
+                return write_problem(w, r, internal_problem()).await;
+            };
+            let revision = if canonical {
+                let revision = read_db!(w, r, reads::collection_order_revision(&s.pool, database_id));
+                let Some(revision) = revision else {
+                    return write_problem(w, r, Problem::new(silo_api_v2::problem::type_for_status(404), "Collection or group not found.")).await;
+                };
+                revision
+            } else { 0 };
+            let groups = read_db!(w, r, reads::list_collection_groups(&s.pool, database_id));
+            let ungrouped = match reads::ungrouped_sort_order(&s.pool, database_id).await {
+                Ok(order) => order,
+                Err(_) if !canonical => 9999,
+                Err(_) => return write_problem(w, r, internal_problem()).await,
+            };
+            if canonical {
+                let after = read_db!(w, r, reads::collection_order_revision(&s.pool, database_id));
+                let Some(after) = after else {
+                    return write_problem(w, r, Problem::new(silo_api_v2::problem::type_for_status(404), "Collection or group not found.")).await;
+                };
+                if after != revision {
+                    return write_problem(w, r, Problem::new(silo_api_v2::problem::type_for_status(409), "The collection changed during the read; fetch its current editor again.")).await;
+                }
+                let mut positions: Vec<_> = groups.into_iter().map(|g| (g.sort_order, g.id)).collect();
+                positions.push((ungrouped, "ungrouped".to_owned()));
+                positions.sort();
+                let Some(claims) = get_claims(r) else { return; };
+                let scope = format!("collections:admin-groups-order:{}:{}:{}", claims.user_id, get_profile_id(r), viewer_digest(r));
+                let tag = silo_core::apiv2::render_etag(scope.as_bytes(), id.to_string().as_bytes(), revision);
+                w.header().set("ETag", tag.to_wire());
+                write_v2_json(w, &AdminCollectionOrder {
+                    library_id: id.to_string(), group_id: None,
+                    ordered_ids: positions.into_iter().map(|(_, id)| id).collect(), has_more: false,
+                }).await;
+            } else {
+                write_v2_json(w, &AdminGroups {
+                    items: groups.into_iter().map(|g| AdminCollectionGroup {
+                        id: g.id, library_id: g.library_id.to_string(), name: g.name, slug: g.slug,
+                        kind: g.kind, default_sort_mode: g.default_sort_mode, sort_order: g.sort_order,
+                    }).collect(), ungrouped_sort_order: ungrouped,
+                }).await;
+            }
+        })));
+    }
+    let path = "/api/v2/admin/unmatched";
+    v2.get(
+        path,
+        stack.v2(
+            path,
+            V2Class::ActingAdmin,
+            route!(stack, |s, w, r| {
+                let Some(claims) = get_claims(r) else {
+                    return;
+                };
+                // The shared v2 chain applies Huma's integer parsing and bounds first.
+                let limit = query(r, "limit").parse::<i64>().unwrap_or(50);
+                let cursor = query(r, "cursor");
+                let scope = CursorScope {
+                    operation_id: "listAdminUnmatchedFiles".into(),
+                    security: format!("{}/{}", claims.user_id, get_profile_id(r)),
+                    filter: limit.to_string(),
+                    sort: "id".into(),
+                    tiebreaker: "id".into(),
+                };
+                let after: i64 = if cursor.is_empty() {
+                    0
+                } else {
+                    match s.cursors.decode(&scope, &cursor) {
+                        Ok(after) if after > 0 => after,
+                        Ok(_) => {
+                            return write_problem(
+                                w,
+                                r,
+                                Problem::new(
+                                    silo_api_v2::problem::invalid_cursor(),
+                                    "Invalid file cursor",
+                                ),
+                            )
+                            .await;
+                        }
+                        Err(p) => return write_problem(w, r, p).await,
+                    }
+                };
+                let mut rows =
+                    read_db!(w, r, reads::list_unmatched_files(&s.pool, limit + 1, after));
+                let more = rows.len() as i64 > limit;
+                rows.truncate(limit as usize);
+                let next = if more && !rows.is_empty() {
+                    match s
+                        .cursors
+                        .encode(&scope, &rows.last().expect("nonempty page").id)
+                    {
+                        Ok(next) => next,
+                        Err(_) => return write_problem(w, r, internal_problem()).await,
+                    }
+                } else {
+                    String::new()
+                };
+                let items: Vec<_> = rows
+                    .into_iter()
+                    .map(|f| AdminUnmatchedFile {
+                        id: f.id.to_string(),
+                        media_folder_id: f.media_folder_id.to_string(),
+                        file_path: f.file_path,
+                        file_size: f.file_size,
+                        container: f.container,
+                    })
+                    .collect();
+                write_v2_json(w, &paginated(items, next)).await;
+            }),
+        ),
+    );
+}
+
+mod jobs {
+    //! Retained admin jobs and signed local artifact URLs. S3 deployments keep these rows on Go.
+    use super::super::chain::client_ip_of;
+    use super::*;
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+    use silo_gocompat::json::unmarshal;
+    use silo_gocompat::time::GoTime;
+    use silo_store::catalog::library_admin as jobs_store;
+
+    #[derive(Default, Serialize, Deserialize)]
+    #[serde(default)]
+    struct CatalogResult {
+        format_version: i64,
+        schema_version: i64,
+        libraries_exported: i64,
+        items_exported: i64,
+        cast_exported: i64,
+        crew_exported: i64,
+        seasons_exported: i64,
+        episodes_exported: i64,
+        files_exported: i64,
+        library_links_exported: i64,
+        items_created: i64,
+        files_created: i64,
+    }
+    #[derive(Default, Serialize, Deserialize)]
+    #[serde(default)]
+    struct LibraryResult {
+        total_items: i64,
+        items_with_ids: i64,
+        items_without_ids: i64,
+        refreshed_ok: i64,
+        refreshed_failed: i64,
+        pipeline_ok: i64,
+        pipeline_failed: i64,
+        deleted_media_files: i64,
+        deleted_orphaned_items: i64,
+        image_cleanup_queued: bool,
+        image_cleanup_dirs: i64,
+        deleted_prefixes: i64,
+        deleted_s3_objects: i64,
+    }
+
+    #[derive(Default, Deserialize)]
+    #[serde(default)]
+    struct LibraryJobRequest {
+        library_id: i64,
+        library_name: String,
+    }
+    #[derive(Default, Deserialize)]
+    #[serde(default)]
+    struct CatalogJobRequest {
+        library_ids: Vec<i64>,
+        source_label: String,
+    }
+    #[derive(Default, Deserialize)]
+    #[serde(default)]
+    struct RefreshPayload {
+        library_id: i64,
+        refreshed_ok: i64,
+        pipeline_ok: i64,
+        refreshed_failed: i64,
+        pipeline_failed: i64,
+    }
+    #[derive(Default, Deserialize)]
+    #[serde(default)]
+    struct DeletionPayload {
+        library_id: i64,
+        deleted_media_files: i64,
+        deleted_item_links: i64,
+        deleted_orphaned_items: i64,
+    }
+    #[derive(Default, Deserialize)]
+    #[serde(default)]
+    struct ItemPayload {
+        requested_content_id: String,
+        refresh_content_id: String,
+        detail_content_id: String,
+        matched_files: i64,
+        artwork_cache_warning: String,
+        scan_result: Option<ItemScan>,
+    }
+    #[derive(Default, Deserialize)]
+    #[serde(default)]
+    struct ItemScan {
+        new: i64,
+    }
+    #[derive(Serialize)]
+    struct ItemResult {
+        new_files: i64,
+        artwork_cache_incomplete: bool,
+        requested_content_id: String,
+        refresh_content_id: String,
+        #[serde(skip_serializing_if = "String::is_empty")]
+        detail_content_id: String,
+        matched_files: i64,
+    }
+    #[derive(Default, Deserialize)]
+    #[serde(default)]
+    struct TransitionPayload {
+        phase: String,
+        verified_objects: i64,
+        copied_objects: i64,
+        claim_generation: i64,
+        failure_category: String,
+        manual_restart_required: bool,
+    }
+    #[derive(Default, Serialize)]
+    struct TransitionResult {
+        phase: String,
+        verified_objects: i64,
+        #[serde(skip_serializing_if = "String::is_empty")]
+        failure_category: String,
+        manual_restart_required: bool,
+    }
+    #[derive(Serialize)]
+    struct JobProgress {
+        current: i64,
+        total: i64,
+        unit: &'static str,
+    }
+    #[derive(Serialize)]
+    struct RefreshResult {
+        library_id: String,
+        refreshed: i64,
+        failed: i64,
+    }
+    #[derive(Serialize)]
+    struct DeletionResult {
+        library_id: String,
+        deleted_media_files: i64,
+        deleted_item_links: i64,
+        deleted_orphaned_items: i64,
+    }
+    #[derive(Serialize)]
+    struct Failure {
+        #[serde(rename = "type")]
+        kind: String,
+        title: &'static str,
+        detail: &'static str,
+        retryable: bool,
+    }
+
+    #[derive(Serialize)]
+    struct TaskJob {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        library_id: Option<String>,
+        #[serde(skip_serializing_if = "String::is_empty")]
+        library_name: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        library_result: Option<LibraryResult>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        template_result: Option<TemplateResult>,
+        id: String,
+        kind: String,
+        state: String,
+        terminal: bool,
+        cancelable: bool,
+        created_at: Instant,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        started_at: Option<Instant>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        finished_at: Option<Instant>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        progress: Option<JobProgress>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        refresh_result: Option<RefreshResult>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        deletion_result: Option<DeletionResult>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        failure: Option<Failure>,
+        library_ids: Vec<String>,
+        #[serde(skip_serializing_if = "String::is_empty")]
+        source_label: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        catalog_result: Option<CatalogResult>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        item_result: Option<ItemResult>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        storage_transition_result: Option<TransitionResult>,
+        artifact_size_bytes: i64,
+        #[serde(skip_serializing_if = "String::is_empty")]
+        download_url: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        download_expires_at: Option<Instant>,
+        #[serde(skip_serializing_if = "String::is_empty")]
+        public_url: String,
+        public_link_supported: bool,
+    }
+
+    fn payload<T: serde::de::DeserializeOwned>(raw: &Option<String>) -> Option<T> {
+        unmarshal(raw.as_deref().unwrap_or_default().as_bytes()).ok()
+    }
+    fn transition(job: &jobs_store::AdminJob) -> TransitionResult {
+        let raw: TransitionPayload = payload(&job.result_payload).unwrap_or_default();
+        let mut out = TransitionResult {
+            verified_objects: raw.verified_objects.max(raw.copied_objects).max(0),
+            manual_restart_required: raw.manual_restart_required,
+            ..Default::default()
+        };
+        let checking = |out: &mut TransitionResult| {
+            out.phase = "checking_target".into();
+            out.verified_objects = 0;
+            out.manual_restart_required = false;
+        };
+        match job.status.as_str() {
+            "queued" => {
+                out.phase = "queued".into();
+                out.verified_objects = 0;
+                out.manual_restart_required = false;
+            }
+            "failed" => {
+                out.phase = "failed".into();
+                out.manual_restart_required = false;
+                out.failure_category = match raw.failure_category.as_str() {
+                    "preparation_failed"
+                    | "target_check_failed"
+                    | "copy_failed"
+                    | "verification_failed"
+                    | "commit_failed" => raw.failure_category,
+                    _ => "unknown".into(),
+                };
+            }
+            "cancelled" => {
+                out.phase = "canceled".into();
+                out.manual_restart_required = false;
+            }
+            "completed" => {
+                out.phase = if raw.phase == "restart_pending" || raw.manual_restart_required {
+                    "restart_pending"
+                } else {
+                    "completed"
+                }
+                .into()
+            }
+            "running" => {
+                if raw.claim_generation != job.claim_generation
+                    && (raw.claim_generation != 0 || job.claim_generation > 1)
+                {
+                    checking(&mut out)
+                } else {
+                    match raw.phase.as_str() {
+                        "checking_target" | "copying" | "verifying" | "committing"
+                        | "restart_pending" => out.phase = raw.phase,
+                        _ => checking(&mut out),
+                    }
+                }
+            }
+            _ => checking(&mut out),
+        }
+        out
+    }
+
+    fn task_job(job: &jobs_store::AdminJob, admin: bool, secret: &str, now: SystemTime) -> TaskJob {
+        let terminal = matches!(job.status.as_str(), "completed" | "failed" | "cancelled");
+        let state = if job.cancel_requested && !terminal {
+            "canceling"
+        } else {
+            match job.status.as_str() {
+                "completed" => "succeeded",
+                "cancelled" => "canceled",
+                v => v,
+            }
+        }
+        .to_owned();
+        let done = job.status == "completed";
+        let progress_valid = job.progress_total > 0
+            && job.progress_current >= 0
+            && job.progress_current <= job.progress_total;
+        let transition = (job.job_type == "storage_transition").then(|| transition(job));
+        let mut out=TaskJob {
+            library_id:None, library_name:String::new(), library_result:None, template_result:None,
+            id:job.id.clone(),kind:job.job_type.clone(),state,terminal,
+            cancelable:matches!(job.job_type.as_str(),"library_refresh"|"storage_transition"|"image_cache_cleanup") && !terminal,
+            created_at:instant(job.requested_at),started_at:instant_opt(job.started_at),finished_at:instant_opt(job.completed_at),
+            progress:(progress_valid && transition.as_ref().is_none_or(|t|job.status!="queued" && t.phase!="checking_target")).then_some(JobProgress {current:job.progress_current,total:job.progress_total,unit:"items"}),
+            refresh_result:None,deletion_result:None,
+            failure:(job.status=="failed").then(||Failure {kind:format!("{}job_failed",silo_api_v2::problem::PROBLEM_TYPE_ORIGIN),title:"Job failed",detail:"The operation could not finish. Inspect administrator diagnostics before submitting new work.",retryable:false}),
+            library_ids:vec![],source_label:String::new(),catalog_result:None,item_result:None,storage_transition_result:None,artifact_size_bytes:0,download_url:String::new(),download_expires_at:None,public_url:String::new(),public_link_supported:false,
+        };
+        if done && job.job_type == "library_refresh" {
+            out.refresh_result =
+                payload::<RefreshPayload>(&job.result_payload).map(|p| RefreshResult {
+                    library_id: p.library_id.to_string(),
+                    refreshed: p.refreshed_ok + p.pipeline_ok,
+                    failed: p.refreshed_failed + p.pipeline_failed,
+                });
+        }
+        if done && job.job_type == "delete_library" {
+            out.deletion_result =
+                payload::<DeletionPayload>(&job.result_payload).map(|p| DeletionResult {
+                    library_id: p.library_id.to_string(),
+                    deleted_media_files: p.deleted_media_files,
+                    deleted_item_links: p.deleted_item_links,
+                    deleted_orphaned_items: p.deleted_orphaned_items,
+                });
+        }
+        if done && job.job_type == "item_refresh" {
+            out.item_result = payload::<ItemPayload>(&job.result_payload)
+                .filter(|p| !p.requested_content_id.is_empty() && !p.refresh_content_id.is_empty())
+                .map(|p| ItemResult {
+                    new_files: p.scan_result.map_or(0, |v| v.new),
+                    artwork_cache_incomplete: !p.artwork_cache_warning.is_empty(),
+                    requested_content_id: p.requested_content_id,
+                    refresh_content_id: p.refresh_content_id,
+                    detail_content_id: p.detail_content_id,
+                    matched_files: p.matched_files,
+                });
+        }
+        if !admin {
+            return out;
+        }
+        out.storage_transition_result = transition;
+        if matches!(
+            job.job_type.as_str(),
+            "library_refresh" | "delete_library" | "image_cache_cleanup"
+        ) {
+            if let Some(p) = payload::<LibraryJobRequest>(&job.request_payload) {
+                out.library_id = (p.library_id > 0).then(|| p.library_id.to_string());
+                out.library_name = p.library_name;
+            }
+            if done || (job.job_type == "image_cache_cleanup" && job.status == "cancelled") {
+                out.library_result = payload(&job.result_payload);
+            }
+        }
+        if job.job_type == "template_bundle_apply" {
+            out.cancelable = false;
+            out.progress = progress_valid.then_some(JobProgress {
+                current: job.progress_current,
+                total: job.progress_total,
+                unit: "templates",
+            });
+            if done {
+                out.template_result =
+                    payload::<TemplateResult>(&job.result_payload).map(safe_template);
+            }
+        }
+        if matches!(job.job_type.as_str(), "catalog_export" | "catalog_import") {
+            if let Some(p) = payload::<CatalogJobRequest>(&job.request_payload) {
+                out.library_ids = p.library_ids.iter().map(i64::to_string).collect();
+                out.source_label = p.source_label;
+            }
+            if done {
+                out.catalog_result = payload(&job.result_payload);
+            }
+            out.artifact_size_bytes = job.artifact_size_bytes;
+            out.public_url = job.public_url.clone();
+            if done && !job.artifact_bucket.is_empty() && !job.artifact_key.is_empty() {
+                let (url, expires) = sign_artifact(secret, &job.id, now);
+                out.download_url = url;
+                out.download_expires_at = Some(expires);
+            }
+        }
+        out
+    }
+
+    fn id_json<S: serde::Serializer>(id: &i64, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&id.to_string())
+    }
+    fn optional_id_json<S: serde::Serializer>(id: &i64, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&if *id > 0 {
+            id.to_string()
+        } else {
+            String::new()
+        })
+    }
+    fn no_id(id: &i64) -> bool {
+        *id <= 0
+    }
+    #[derive(Default, Serialize, Deserialize)]
+    #[serde(default)]
+    struct TemplateEntry {
+        template_id: String,
+        template_title: String,
+        #[serde(serialize_with = "id_json")]
+        library_id: i64,
+        library_name: String,
+        #[serde(skip_serializing_if = "String::is_empty")]
+        collection_id: String,
+        #[serde(skip_serializing_if = "String::is_empty")]
+        reason: String,
+    }
+    #[derive(Default, Serialize, Deserialize)]
+    #[serde(default)]
+    struct TemplateCollectionEntry {
+        #[serde(serialize_with = "id_json")]
+        library_id: i64,
+        library_name: String,
+        collection_id: String,
+        collection_title: String,
+        #[serde(skip_serializing_if = "String::is_empty")]
+        reason: String,
+    }
+    #[derive(Default, Serialize, Deserialize)]
+    #[serde(default)]
+    struct TemplateFeaturedEntry {
+        surface: String,
+        #[serde(serialize_with = "optional_id_json", skip_serializing_if = "no_id")]
+        library_id: i64,
+        #[serde(skip_serializing_if = "String::is_empty")]
+        library_name: String,
+        template_id: String,
+        template_title: String,
+        #[serde(skip_serializing_if = "String::is_empty")]
+        collection_id: String,
+        #[serde(skip_serializing_if = "String::is_empty")]
+        section_id: String,
+        #[serde(skip_serializing_if = "String::is_empty")]
+        reason: String,
+    }
+    #[derive(Default, Serialize, Deserialize)]
+    #[serde(default)]
+    struct TemplateResult {
+        bundle_id: String,
+        dry_run: bool,
+        delete_existing: bool,
+        deleted: Vec<TemplateCollectionEntry>,
+        delete_skipped: Vec<TemplateCollectionEntry>,
+        delete_failed: Vec<TemplateCollectionEntry>,
+        created: Vec<TemplateEntry>,
+        skipped: Vec<TemplateEntry>,
+        failed: Vec<TemplateEntry>,
+        sync_queued: Vec<TemplateEntry>,
+        featured: Vec<TemplateFeaturedEntry>,
+        featured_failed: Vec<TemplateFeaturedEntry>,
+    }
+    fn safe_template(mut p: TemplateResult) -> TemplateResult {
+        fn reason(s: &mut String) {
+            if !matches!(
+                s.as_str(),
+                "" | "would_create"
+                    | "created"
+                    | "created_sync_skipped_unconfigured"
+                    | "sync_queued"
+                    | "sync_queued_no_schedule"
+                    | "would_delete"
+                    | "deleted"
+                    | "in_use_by_section"
+                    | "shared_with_unselected_library"
+                    | "ineligible_library"
+                    | "already_exists"
+                    | "already_exists_delete_failed"
+                    | "library_not_selected"
+                    | "template_not_found"
+                    | "template_not_in_bundle"
+                    | "collection_not_available"
+                    | "section_repo_not_configured"
+            ) {
+                *s = "operation_failed".into();
+            }
+        }
+        for v in p
+            .deleted
+            .iter_mut()
+            .chain(&mut p.delete_skipped)
+            .chain(&mut p.delete_failed)
+        {
+            reason(&mut v.reason);
+        }
+        for v in p
+            .created
+            .iter_mut()
+            .chain(&mut p.skipped)
+            .chain(&mut p.failed)
+            .chain(&mut p.sync_queued)
+        {
+            reason(&mut v.reason);
+        }
+        for v in p.featured.iter_mut().chain(&mut p.featured_failed) {
+            reason(&mut v.reason);
+        }
+        p
+    }
+
+    /// Go's job-artifact domain is distinct from artwork, even though both derive from the JWT secret.
+    fn sign_artifact(secret: &str, id: &str, now: SystemTime) -> (String, Instant) {
+        type H = Hmac<Sha256>;
+        let hmac = |key: &[u8], bytes: &[u8]| {
+            let mut h = H::new_from_slice(key).expect("HMAC takes any key");
+            h.update(bytes);
+            h.finalize().into_bytes().to_vec()
+        };
+        let key = hmac(secret.as_bytes(), b"silo-job-artifact-url-v1");
+        let secs = now
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        let exp = secs - (secs + 62_135_596_800).rem_euclid(900) + 1800;
+        let sig = hmac(&key, format!("job-artifact-v1\n{id}\n{exp}").as_bytes());
+        const TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        let mut encoded = String::new();
+        for c in sig[..16].chunks(3) {
+            let n = (u32::from(c[0]) << 16)
+                | (u32::from(*c.get(1).unwrap_or(&0)) << 8)
+                | u32::from(*c.get(2).unwrap_or(&0));
+            encoded.push(TABLE[(n >> 18) as usize & 63] as char);
+            encoded.push(TABLE[(n >> 12) as usize & 63] as char);
+            if c.len() > 1 {
+                encoded.push(TABLE[(n >> 6) as usize & 63] as char);
+            }
+            if c.len() > 2 {
+                encoded.push(TABLE[n as usize & 63] as char);
+            }
+        }
+        let path = silo_gocompat::url::Url {
+            path: format!(
+                "/api/v2/admin/jobs/{}/artifact",
+                id.strip_prefix('/').unwrap_or(id)
+            ),
+            ..Default::default()
+        }
+        .escaped_path();
+        (
+            format!("{path}?exp={exp}&sig={encoded}"),
+            Instant::new(
+                time::OffsetDateTime::from_unix_timestamp(exp)
+                    .expect("current expiry fits timestamp"),
+            ),
+        )
+    }
+
+    #[derive(Default, Serialize, Deserialize)]
+    #[serde(default)]
+    struct JobPosition {
+        requested: GoTime,
+        id: String,
+    }
+
+    pub(super) fn mount(stack: &Arc<Stack>, v2: &Mux) {
+        let path = "/api/v2/admin/jobs";
+        let s = stack.clone();
+        v2.get(
+            path,
+            stack.v2(
+                path,
+                V2Class::ActingAdmin,
+                handler_fn(move |w, r| {
+                    let s = s.clone();
+                    Box::pin(async move {
+                        let Some(claims) = get_claims(r) else {
+                            return;
+                        };
+                        let limit = query(r, "limit").parse::<i64>().unwrap_or(20);
+                        let kind = query(r, "kind");
+                        let cursor = query(r, "cursor");
+                        let scope = CursorScope {
+                            operation_id: "listAdminJobs".into(),
+                            security: format!("{}/{}", claims.user_id, get_profile_id(r)),
+                            filter: kind.clone(),
+                            sort: "-requested_at".into(),
+                            tiebreaker: "id".into(),
+                        };
+                        let pos: JobPosition = if cursor.is_empty() {
+                            JobPosition::default()
+                        } else {
+                            match s.cursors.decode(&scope, &cursor) {
+                                Ok(v) => v,
+                                Err(p) => return write_problem(w, r, p).await,
+                            }
+                        };
+                        let mut rows = match jobs_store::list_admin_jobs(
+                            &s.pool,
+                            &kind,
+                            pos.requested.to_system_time(),
+                            &pos.id,
+                            limit + 1,
+                        )
+                        .await
+                        {
+                            Ok(v) => v,
+                            Err(_) => return write_problem(w, r, internal_problem()).await,
+                        };
+                        let mut next = String::new();
+                        if rows.len() > limit as usize {
+                            rows.truncate(limit as usize);
+                            let last = rows.last().expect("positive validated limit");
+                            next = match s.cursors.encode(
+                                &scope,
+                                &JobPosition {
+                                    requested: GoTime::from_system_time(last.requested_at),
+                                    id: last.id.clone(),
+                                },
+                            ) {
+                                Ok(v) => v,
+                                Err(p) => return write_problem(w, r, p).await,
+                            };
+                        }
+                        let now = SystemTime::now();
+                        let items = rows
+                            .iter()
+                            .map(|job| task_job(job, true, &s.artwork_secret, now))
+                            .collect();
+                        write_v2_json(w, &paginated(items, next)).await;
+                    })
+                }),
+            ),
+        );
+        let path = "/api/v2/admin/jobs/{id}";
+        let s = stack.clone();
+        v2.get(
+            path,
+            stack.v2(
+                path,
+                V2Class::ProfileOptional,
+                handler_fn(move |w, r| {
+                    let s = s.clone();
+                    Box::pin(async move {
+                        let hidden = || {
+                            Problem::new(
+                                silo_api_v2::problem::type_for_status(404),
+                                "Job not found",
+                            )
+                        };
+                        let job = match jobs_store::admin_job(&s.pool, r.url_param("id")).await {
+                            Ok(Some(v)) => v,
+                            Ok(None) => return write_problem(w, r, hidden()).await,
+                            Err(_) => return write_problem(w, r, internal_problem()).await,
+                        };
+                        let admin = match s.gates.acting_admin(r, &client_ip_of(r)).await {
+                            Ok(v) => v,
+                            Err(_) => return write_problem(w, r, internal_problem()).await,
+                        };
+                        if !admin
+                            && (job.job_type != "item_refresh"
+                                || get_claims(r)
+                                    .is_none_or(|c| c.user_id != job.created_by_user_id))
+                        {
+                            return write_problem(w, r, hidden()).await;
+                        }
+                        let body = task_job(&job, admin, &s.artwork_secret, SystemTime::now());
+                        if !body.terminal {
+                            w.header().set("Retry-After", "5");
+                        }
+                        write_v2_json(w, &body).await;
+                    })
+                }),
+            ),
+        );
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        fn job(kind: &str) -> jobs_store::AdminJob {
+            jobs_store::AdminJob {
+                id: "job-1".into(),
+                job_type: kind.into(),
+                status: "completed".into(),
+                created_by_user_id: 7,
+                request_payload: Some(
+                    r#"{"library_id":12,"library_name":"private","source_label":"private"}"#.into(),
+                ),
+                result_payload: Some("{}".into()),
+                progress_current: 1,
+                progress_total: 1,
+                artifact_bucket: "private".into(),
+                artifact_key: "private".into(),
+                artifact_size_bytes: 99,
+                public_url: "https://private.invalid".into(),
+                requested_at: SystemTime::UNIX_EPOCH,
+                started_at: None,
+                completed_at: None,
+                cancel_requested: false,
+                claim_generation: 1,
+            }
+        }
+        #[test]
+        fn artifact_signature_uses_its_domain_and_bucket() {
+            let (url, expiry) = sign_artifact(
+                "secret",
+                "job-1",
+                SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1700000000),
+            );
+            assert_eq!(
+                url,
+                "/api/v2/admin/jobs/job-1/artifact?exp=1700001000&sig=GVRM_sv4T2NR6F8UfXfY6w"
+            );
+            assert_eq!(
+                serde_json::to_string(&expiry).unwrap(),
+                "\"2023-11-14T22:30:00.000Z\""
+            );
+        }
+        #[test]
+        fn item_owner_receives_only_safe_result() {
+            let mut job = job("item_refresh");
+            job.result_payload=Some(r#"{"requested_content_id":"a","refresh_content_id":"b","scan_path":"private","artwork_cache_warning":"private","scan_result":{"new":3},"matched_files":4}"#.into());
+            let out = task_job(&job, false, "secret", SystemTime::UNIX_EPOCH);
+            let json = serde_json::to_string(&out).unwrap();
+            assert!(!json.contains("private"));
+            assert!(!json.contains("download_url"));
+            assert!(!json.contains("library_name"));
+            let item = out.item_result.unwrap();
+            assert_eq!(item.new_files, 3);
+            assert!(item.artwork_cache_incomplete);
+            assert_eq!(item.matched_files, 4);
+        }
+        #[test]
+        fn null_job_payload_retains_go_zero_value_results() {
+            let mut job = job("catalog_export");
+            job.result_payload = Some("null".into());
+            assert!(
+                task_job(&job, true, "secret", SystemTime::UNIX_EPOCH)
+                    .catalog_result
+                    .is_some()
+            );
+            let template: TemplateResult = unmarshal(br#"{"created":null}"#).unwrap();
+            assert!(template.created.is_empty());
+        }
     }
 }
