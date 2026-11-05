@@ -679,7 +679,10 @@ macro_rules! read_db {
     ($w:ident, $r:ident, $call:expr) => {
         match $call.await {
             Ok(v) => v,
-            Err(_) => return write_problem($w, $r, internal_problem()).await,
+            Err(error) => {
+                tracing::warn!(error = ?error, "library admin read failed");
+                return write_problem($w, $r, internal_problem()).await;
+            }
         }
     };
 }
