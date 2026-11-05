@@ -128,7 +128,7 @@ fn document<F>(
     operation: &'static str,
     render: F,
 ) where
-    F: Fn(&str) -> Vec<u8> + Send + Sync + Copy + 'static,
+    F: Fn(&str, bool) -> Vec<u8> + Send + Sync + Copy + 'static,
 {
     v2.get(
         path,
@@ -136,7 +136,10 @@ fn document<F>(
             path,
             class,
             handler_fn(move |w, r| {
-                Box::pin(async move { write_capability(w, r, operation, render).await })
+                Box::pin(async move {
+                    let allowed = login_allowed(r);
+                    write_capability(w, r, operation, |revision| render(revision, allowed)).await
+                })
             }),
         ),
     );
@@ -150,7 +153,7 @@ pub fn mount(stack: &Arc<Stack>, v2: &Mux) {
         "/api/v2/admin/nodes/capabilities",
         V2Class::ActingAdmin,
         "getAdminNodeCapabilities",
-        |revision| {
+        |revision, _allowed| {
             capability_json(&NodeCaps {
                 revision,
                 state: "available",
@@ -166,7 +169,7 @@ pub fn mount(stack: &Arc<Stack>, v2: &Mux) {
         "/api/v2/admin/sessions/capabilities",
         V2Class::ActingAdmin,
         "getAdminPlaybackSessionCapabilities",
-        |revision| {
+        |revision, _allowed| {
             capability_json(&SessionCaps {
                 revision,
                 state: "available",
@@ -200,7 +203,7 @@ pub fn mount(stack: &Arc<Stack>, v2: &Mux) {
         "/api/v2/admin/sessions/command-capabilities",
         V2Class::ActingAdmin,
         "getAdminPlaybackCommandCapabilities",
-        |revision| {
+        |revision, _allowed| {
             capability_json(&CommandCaps {
                 revision,
                 state: "available",
@@ -218,7 +221,7 @@ pub fn mount(stack: &Arc<Stack>, v2: &Mux) {
         "/api/v2/admin/playback-routing/capabilities",
         V2Class::ActingAdmin,
         "getAdminPlaybackRoutingCapabilities",
-        |revision| {
+        |revision, _allowed| {
             capability_json(&RoutingCaps {
                 revision,
                 state: "available",
@@ -242,11 +245,11 @@ pub fn mount(stack: &Arc<Stack>, v2: &Mux) {
         "/api/v2/playback/sessions/control/capabilities",
         V2Class::ProfileScoped,
         "getPlaybackControlSocketCapabilities",
-        |revision| {
+        |revision, allowed| {
             capability_json(&ControlCaps {
                 revision,
                 state: "available",
-                allowed: true,
+                allowed,
                 available: true,
                 protocol: "silo.playback-control.v2",
             })
@@ -258,11 +261,11 @@ pub fn mount(stack: &Arc<Stack>, v2: &Mux) {
         "/api/v2/watch-together/capabilities",
         V2Class::Authenticated,
         "getWatchTogetherCapabilities",
-        |revision| {
+        |revision, allowed| {
             capability_json(&RoomCaps {
                 revision,
                 state: "available",
-                allowed: true,
+                allowed,
                 staged_selection: true,
                 lobby_ready: true,
                 connection_replaced: true,
@@ -276,4 +279,20 @@ pub fn mount(stack: &Arc<Stack>, v2: &Mux) {
             })
         },
     );
+}
+
+/// `capabilityLoginAllowed`: a current login session's access token.
+fn login_allowed(r: &silo_http::Request) -> bool {
+    let Some(claims) = silo_gate::mw::auth::get_claims(r) else {
+        return false;
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos() as i128);
+    claims.token_type == silo_auth::claims::token_type::ACCESS
+        && !claims.session_id.is_empty()
+        && claims
+            .registered
+            .expires_at
+            .is_some_and(|e| i128::from(e.0) * 1_000_000_000 > now)
 }
