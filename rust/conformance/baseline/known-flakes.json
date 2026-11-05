@@ -175,6 +175,16 @@
         "ValueMismatch $.allowed_profile_ids[5]"
       ],
       "why": "A shared collection's v1 allowed_profile_ids lists every profile on the login sorted by ID (`v1CollectionAudience`, `slices.Sort`). Profiles created earlier in the plan get random UUIDs on each stack, so where they sort against the fixed seed IDs differs. Seen Go vs Go: `self-compare.sh --only 'flow:collections|flow:settings|scenario:profiles_create'` differed on these three cases at $.allowed_profile_ids[0..3] in 5 of 6 runs; the M6 proxy-all run showed create_second and parent_create at [1] and [2]."
+    },
+    {
+      "cases": [
+        "api_v2 GET /api/v2/admin/nodes#admin"
+      ],
+      "signatures": [
+        "MissingKey $.items[0].advertised_capabilities_hash",
+        "ExtraKey $.items[0].advertised_capabilities_hash"
+      ],
+      "why": "advertised_capabilities_hash is absent until this process's node health loop has checked the node (`AdminNode.AdvertisedCapabilitiesHash`, set from the transcode pool), so the seed's node has it on whichever server ticked first, the same race as last_health_check above. Seen Go vs Go: the M7 `mutation-test.sh none` control, which passes both Go servers' bytes through unchanged, reported MissingKey here once on the second host's stack pair."
     }
   ]
 }
