@@ -12,7 +12,7 @@ use serde::Serialize;
 use silo_http::chi::Mux;
 use silo_http::handler_fn;
 
-use super::chain::{Stack, V2Class, capability_json, write_capability};
+use super::chain::{Stack, V2Class, capability_json, v2_public, write_capability};
 use crate::rows::NativeRow;
 use crate::rows::Surface::ApiV2;
 
@@ -34,6 +34,9 @@ pub const S3_ROWS: &[NativeRow] = &[NativeRow::new(ApiV2, "GET", "/api/v2/admin/
 struct Capability<'a> {
     revision: &'a str,
     state: &'static str,
+    /// Huma fills `allowed` on an acting-administrator document.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    allowed: Option<bool>,
 }
 
 /// `AdminJobArtifactCapabilities`.
@@ -41,6 +44,7 @@ struct Capability<'a> {
 struct JobCapabilities<'a> {
     revision: &'a str,
     state: &'static str,
+    allowed: bool,
     artifact_download: bool,
     public_links: bool,
 }
@@ -50,6 +54,7 @@ struct JobCapabilities<'a> {
 struct StorageTransitionCapabilities<'a> {
     revision: &'a str,
     state: &'static str,
+    allowed: bool,
     start_fresh: bool,
     preserve_uploads: bool,
     migrate_all: bool,
@@ -61,6 +66,7 @@ struct StorageTransitionCapabilities<'a> {
 }
 
 fn simple(v2: &Mux, stack: Option<&Arc<Stack>>, path: &'static str, class: V2Class, op: &'static str) {
+    let admin = matches!(class, V2Class::ActingAdmin);
     let handler = handler_fn(move |w, r| {
         Box::pin(async move {
             // The library handler (`ScanControlAvailable`) and autoscan delivery are always wired in `NewRouter`.
@@ -68,6 +74,7 @@ fn simple(v2: &Mux, stack: Option<&Arc<Stack>>, path: &'static str, class: V2Cla
                 capability_json(&Capability {
                     revision,
                     state: "available",
+                    allowed: admin.then_some(true),
                 })
             })
             .await;
@@ -75,7 +82,7 @@ fn simple(v2: &Mux, stack: Option<&Arc<Stack>>, path: &'static str, class: V2Cla
     });
     match stack {
         Some(stack) => v2.get(path, stack.v2(path, class, handler)),
-        None => v2.get(path, handler),
+        None => v2.get(path, v2_public(path, handler)),
     }
 }
 
@@ -112,6 +119,7 @@ pub fn mount(stack: &Arc<Stack>, v2: &Mux) {
                         capability_json(&JobCapabilities {
                             revision,
                             state: "available",
+                            allowed: true,
                             artifact_download: true,
                             public_links: false,
                         })
@@ -134,6 +142,7 @@ pub fn mount(stack: &Arc<Stack>, v2: &Mux) {
                         capability_json(&StorageTransitionCapabilities {
                             revision,
                             state: "available",
+                            allowed: true,
                             start_fresh: true,
                             preserve_uploads: true,
                             migrate_all: true,
