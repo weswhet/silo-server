@@ -4,8 +4,10 @@
 //!
 //! Go derives each document from which services its process wired. These documents are the values a
 //! server with Postgres and Redis wires (every service present), which is what the front serves in front
-//! of. Session, node, transcode, and room operations stay on Go: they read the playback manager, the node
-//! pool, and the room hub, which live in Go's process.
+//! of. Administrator session reads use persisted observations and lifecycle state. Other session,
+//! node, transcode, and room operations stay on Go: they use process-local managers and hubs.
+
+mod sessions;
 
 use std::sync::Arc;
 
@@ -18,6 +20,8 @@ use crate::rows::NativeRow;
 use crate::rows::Surface::ApiV2;
 
 pub const ROWS: &[NativeRow] = &[
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/sessions"),
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/sessions/summary"),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/nodes/capabilities"),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/sessions/capabilities"),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/sessions/command-capabilities"),
@@ -28,6 +32,12 @@ pub const ROWS: &[NativeRow] = &[
         "/api/v2/playback/sessions/control/capabilities",
     ),
     NativeRow::new(ApiV2, "GET", "/api/v2/watch-together/capabilities"),
+];
+
+/// Rows whose poster URLs require S3 presigning, which is not ported.
+pub const S3_ROWS: &[NativeRow] = &[
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/sessions"),
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/sessions/summary"),
 ];
 
 /// `AdminNodeCapabilities`.
@@ -147,6 +157,36 @@ fn document<F>(
 
 /// Registers the discovery documents.
 pub fn mount(stack: &Arc<Stack>, v2: &Mux) {
+    {
+        let state = stack.clone();
+        let path = "/api/v2/admin/sessions";
+        v2.get(
+            path,
+            stack.v2(
+                path,
+                V2Class::ActingAdmin,
+                handler_fn(move |w, r| {
+                    let state = state.clone();
+                    Box::pin(async move { sessions::list(&state, w, r).await })
+                }),
+            ),
+        );
+    }
+    {
+        let state = stack.clone();
+        let path = "/api/v2/admin/sessions/summary";
+        v2.get(
+            path,
+            stack.v2(
+                path,
+                V2Class::ActingAdmin,
+                handler_fn(move |w, r| {
+                    let state = state.clone();
+                    Box::pin(async move { sessions::summary(&state, w, r).await })
+                }),
+            ),
+        );
+    }
     document(
         stack,
         v2,

@@ -436,7 +436,8 @@ impl Gate {
             if (profiles::ROWS.contains(row)
                 || libraries::ROWS.contains(row)
                 || notifications::ROWS.contains(row)
-                || library_admin::S3_ROWS.contains(row))
+                || library_admin::S3_ROWS.contains(row)
+                || playback::S3_ROWS.contains(row))
                 && self
                     .stack
                     .as_ref()
@@ -450,8 +451,10 @@ impl Gate {
             {
                 return false;
             }
-            // The watch provider registry needs the plugin host.
-            if (bare == "/api/v1/admin/stats" || bare == "/api/v2/admin/stats")
+            // Watch providers and plugin-backed session posters need the plugin host.
+            if (bare == "/api/v1/admin/stats"
+                || bare == "/api/v2/admin/stats"
+                || bare == "/api/v2/admin/sessions")
                 && self.stack.as_ref().is_some_and(|s| s.plugins_installed())
             {
                 return false;

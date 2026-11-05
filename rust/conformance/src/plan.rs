@@ -1040,6 +1040,8 @@ const CHAIN_ROWS: &[(Surface, &str, bool)] = &[
     (Surface::ApiV2, "/api/v2/admin/unmatched", true),
     (Surface::ApiV2, "/api/v2/admin/nodes/capabilities", true),
     (Surface::ApiV2, "/api/v2/admin/sessions/capabilities", true),
+    (Surface::ApiV2, "/api/v2/admin/sessions", true),
+    (Surface::ApiV2, "/api/v2/admin/sessions/summary", true),
     (
         Surface::ApiV2,
         "/api/v2/admin/sessions/command-capabilities",
