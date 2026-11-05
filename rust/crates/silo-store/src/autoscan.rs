@@ -886,6 +886,18 @@ pub async fn rotate_webhook_endpoint(
     Ok((scan_webhook_endpoint(&row), token))
 }
 
+async fn write_query_one(
+    pool: &Pool,
+    sql: &str,
+    params: silo_pg::Params<'_>,
+) -> Result<Row, silo_pg::Error> {
+    pool.query(sql, params)
+        .await?
+        .into_iter()
+        .next()
+        .ok_or(silo_pg::Error::NoRows)
+}
+
 #[cfg(test)]
 mod write_tests {
     use super::*;
@@ -944,16 +956,4 @@ mod write_tests {
         assert_eq!(suffix, token[37..]);
         assert_ne!(token, new_webhook_token().unwrap().0);
     }
-}
-
-async fn write_query_one(
-    pool: &Pool,
-    sql: &str,
-    params: silo_pg::Params<'_>,
-) -> Result<Row, silo_pg::Error> {
-    pool.query(sql, params)
-        .await?
-        .into_iter()
-        .next()
-        .ok_or(silo_pg::Error::NoRows)
 }
