@@ -38,6 +38,8 @@ use crate::rows::NativeRow;
 use crate::rows::Surface::{ApiV1, ApiV2};
 
 pub const ROWS: &[NativeRow] = &[
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/request-discover/layout"),
+    NativeRow::new(ApiV2, "DELETE", "/api/v2/admin/request-discover/layout"),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/request-routing"),
     NativeRow::new(ApiV2, "PUT", "/api/v2/admin/request-routing"),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/request-users/{user_id}/usage"),
@@ -1158,6 +1160,7 @@ fn mount_v2(stack: &Arc<Stack>, v2: &Mux) {
 }
 
 fn mount_v2_admin(stack: &Arc<Stack>, v2: &Mux) {
+    mount_v2_discover_layout(stack, v2);
     mount_v2_request_limits(stack, v2);
     mount_v2_request_routing_usage(stack, v2);
     let p = "/api/v2/admin/requests/capabilities";
@@ -2351,4 +2354,116 @@ fn mount_v2_integrations(stack: &Arc<Stack>, v2: &Mux) {
 pub fn mount(stack: &Arc<Stack>, api: &Mux, v2: &Mux) {
     mount_v1(stack, api);
     mount_v2(stack, v2);
+}
+
+#[derive(Serialize)]
+struct V2DiscoverLayout {
+    customized: bool,
+    rows: Vec<V2DiscoverRow>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    updated_at: Option<Instant>,
+    max_rows: i32,
+}
+
+#[derive(Serialize)]
+struct V2DiscoverRow {
+    #[serde(flatten)]
+    row: store::DiscoverRow,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<V2DiscoverSource>,
+}
+
+#[derive(Serialize)]
+struct V2DiscoverSource {
+    state: &'static str,
+    entries: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    refreshed_at: Option<Instant>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    error: String,
+}
+
+fn v2_discover_layout(mut layout: store::DiscoverLayout) -> V2DiscoverLayout {
+    V2DiscoverLayout {
+        customized: layout.customized,
+        rows: layout
+            .rows
+            .into_iter()
+            .map(|row| {
+                let source = layout.sources.remove(&row.id).map(|s| V2DiscoverSource {
+                    state: s.state,
+                    entries: s.entries,
+                    refreshed_at: s.refreshed_at.map(instant),
+                    error: s.error,
+                });
+                V2DiscoverRow { row, source }
+            })
+            .collect(),
+        updated_at: layout.updated_at.map(instant),
+        max_rows: 30,
+    }
+}
+
+fn mount_v2_discover_layout(stack: &Arc<Stack>, v2: &Mux) {
+    // PUT remains on Go: saving triggers the list refresher's outbound fetches.
+    let p = "/api/v2/admin/request-discover/layout";
+    v2.get(
+        p,
+        stack.v2(
+            p,
+            V2Class::ActingAdmin,
+            route!(stack, |s, w, r| {
+                match store::get_discover_layout(&s.pool).await {
+                    Ok(layout) => {
+                        w.header().set(
+                            "ETag",
+                            admin_tag(r, "discover-layout", "global", layout.revision).to_wire(),
+                        );
+                        write_v2_json(w, &v2_discover_layout(layout)).await;
+                    }
+                    Err(e) => write_problem(w, r, request_problem(e)).await,
+                }
+            }),
+        ),
+    );
+    v2.delete(
+        p,
+        stack.v2_steps(
+            p,
+            V2_ADMIN_WRITE,
+            route!(stack, |s, w, r| {
+                let current = match store::get_discover_layout(&s.pool).await {
+                    Ok(c) => c,
+                    Err(e) => return write_problem(w, r, request_problem(e)).await,
+                };
+                let expected = match admin_guard(
+                    r,
+                    &admin_tag(r, "discover-layout", "global", current.revision),
+                    current.revision,
+                ) {
+                    Ok(v) => v,
+                    Err(p) => return write_problem(w, r, p).await,
+                };
+                match store::reset_discover_layout(&s.pool, expected).await {
+                    Ok(()) => w.write_header(204).await,
+                    Err(Error::StaleRevision) => {
+                        let current = match store::get_discover_layout(&s.pool).await {
+                            Ok(c) => c,
+                            Err(e) => return write_problem(w, r, request_problem(e)).await,
+                        };
+                        let p = problem(
+                            "precondition_failed",
+                            "The Discover layout changed; reload before saving.",
+                        )
+                        .with_header(
+                            "ETag",
+                            admin_tag(r, "discover-layout", "global", current.revision).to_wire(),
+                        );
+                        write_problem(w, r, p).await;
+                    }
+                    Err(e) => write_problem(w, r, request_problem(e)).await,
+                }
+            }),
+        ),
+    );
 }

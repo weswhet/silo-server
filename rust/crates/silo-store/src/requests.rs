@@ -2878,3 +2878,321 @@ const COUNT_USER_REQUESTS_SQL: &str = r#"
 		WHERE requested_by_user_id = $1
 		  AND created_at >= $2
 		  AND (outcome = 'active' OR (outcome = 'cancelled' AND last_error = ''))"#;
+
+// Discover layout reads and resets: internal/requests/discover_layout.go.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct DiscoverChart {
+    pub preset: String,
+    pub media_type: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub time_window: String,
+}
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct DiscoverFilter {
+    pub media_type: String,
+    pub sort_by: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub genre_ids: Vec<i64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub exclude_genre_ids: Vec<i64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub keyword_ids: Vec<i64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub company_ids: Vec<i64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub network_ids: Vec<i64>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub original_language: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub origin_countries: Vec<String>,
+    #[serde(skip_serializing_if = "discover_is_zero")]
+    pub year_from: i64,
+    #[serde(skip_serializing_if = "discover_is_zero")]
+    pub year_to: i64,
+    #[serde(skip_serializing_if = "discover_is_zero")]
+    pub vote_average_gte: f64,
+    #[serde(skip_serializing_if = "discover_is_zero")]
+    pub vote_count_gte: i64,
+    #[serde(skip_serializing_if = "discover_is_zero")]
+    pub runtime_gte: i64,
+    #[serde(skip_serializing_if = "discover_is_zero")]
+    pub runtime_lte: i64,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub certification_lte: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub watch_provider_ids: Vec<i64>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub watch_region: String,
+}
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct DiscoverList {
+    pub url: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub order: String,
+}
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct DiscoverRow {
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub id: String,
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub title: String,
+    pub enabled: bool,
+    #[serde(skip_serializing_if = "discover_is_zero")]
+    pub limit: i64,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub hide_available: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chart: Option<DiscoverChart>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub discover: Option<DiscoverFilter>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub list: Option<DiscoverList>,
+}
+
+fn discover_is_zero<T: Default + PartialEq>(v: &T) -> bool {
+    *v == T::default()
+}
+
+pub struct DiscoverLayout {
+    pub rows: Vec<DiscoverRow>,
+    pub customized: bool,
+    pub revision: i64,
+    pub updated_at: Option<SystemTime>,
+    pub sources: HashMap<String, DiscoverSource>,
+}
+
+pub struct DiscoverSource {
+    pub state: &'static str,
+    pub entries: i32,
+    pub refreshed_at: Option<SystemTime>,
+    pub error: String,
+}
+
+fn default_discover_rows() -> Vec<DiscoverRow> {
+    let mut rows = Vec::new();
+    for (id, title, preset, media_type, window) in [
+        (
+            "trending_movies",
+            "Trending Movies",
+            "trending",
+            "movie",
+            "week",
+        ),
+        (
+            "trending_series",
+            "Trending Series",
+            "trending",
+            "series",
+            "week",
+        ),
+        ("popular_movies", "Popular Movies", "popular", "movie", ""),
+        ("popular_series", "Popular Series", "popular", "series", ""),
+        (
+            "upcoming_movies",
+            "Upcoming Movies",
+            "upcoming",
+            "movie",
+            "",
+        ),
+        ("on_air_series", "On Air Series", "on_the_air", "series", ""),
+    ] {
+        rows.push(DiscoverRow {
+            id: id.into(),
+            kind: "tmdb_chart".into(),
+            title: title.into(),
+            enabled: true,
+            limit: 20,
+            chart: Some(DiscoverChart {
+                preset: preset.into(),
+                media_type: media_type.into(),
+                time_window: window.into(),
+            }),
+            ..Default::default()
+        });
+    }
+    for (id, title) in [
+        ("studios", "Studios"),
+        ("networks", "Networks"),
+        ("genres", "Genres"),
+    ] {
+        rows.push(DiscoverRow {
+            id: id.into(),
+            kind: id.into(),
+            title: title.into(),
+            enabled: true,
+            ..Default::default()
+        });
+    }
+    rows
+}
+
+// `discoverrows.SourceKey`, including the collection URL allowlists. No URL is fetched here.
+fn discover_source_key(row: &DiscoverRow) -> Option<String> {
+    let list = row.list.as_ref()?;
+    let raw = trim_space(&list.url);
+    if row.kind == "tmdb_list" {
+        let parse_id = |s: &str| {
+            if s.is_empty() || !s.bytes().all(|b| b.is_ascii_digit()) {
+                return None;
+            }
+            s.parse::<i64>().ok().filter(|id| *id > 0)
+        };
+        if let Some(id) = parse_id(raw) {
+            return Some(format!("tmdb_list:{id}"));
+        }
+        let raw = if raw.contains("://") {
+            raw.to_owned()
+        } else {
+            format!("https://{raw}")
+        };
+        let u = silo_gocompat::url::parse(&raw).ok()?;
+        let host = silo_gocompat::strings::to_lower(u.host.split(':').next()?);
+        if !matches!(u.scheme.as_str(), "http" | "https")
+            || !matches!(
+                host.strip_suffix('.').unwrap_or(&host),
+                "themoviedb.org" | "www.themoviedb.org"
+            )
+        {
+            return None;
+        }
+        let parts: Vec<_> = u.path.trim_matches('/').split('/').collect();
+        if parts.len() != 2 || parts[0] != "list" {
+            return None;
+        }
+        let id = parse_id(parts[1].split('-').next()?)?;
+        return Some(format!("tmdb_list:{id}"));
+    }
+    if row.kind != "mdblist" || raw.is_empty() {
+        return None;
+    }
+    let mut feed = raw.trim_end_matches('/').to_owned();
+    while feed.ends_with("/json/json") {
+        feed.truncate(feed.len() - 5);
+    }
+    if !feed.ends_with("/json") {
+        feed.push_str("/json");
+    }
+    let u = silo_gocompat::url::parse(&feed).ok()?;
+    let mut host_port = u.host.split(':');
+    let host = silo_gocompat::strings::to_lower(host_port.next()?);
+    let port = host_port.next().unwrap_or("");
+    if !matches!(u.scheme.as_str(), "http" | "https")
+        || u.user.is_some()
+        || !matches!(
+            host.strip_suffix('.').unwrap_or(&host),
+            "mdblist.com" | "www.mdblist.com"
+        )
+        || !matches!(port, "" | "80" | "443")
+        || !u.escaped_path().starts_with("/lists/")
+    {
+        return None;
+    }
+    Some(if list.order.is_empty() {
+        format!("mdblist:{feed}")
+    } else {
+        format!("mdblist:{feed}?order={}", list.order)
+    })
+}
+
+pub async fn get_discover_layout(pool: &Pool) -> Result<DiscoverLayout, Error> {
+    let rows = pool
+        .query(
+            "SELECT rows, revision, updated_at FROM request_discover_layout WHERE id",
+            &[],
+        )
+        .await?;
+    let mut out = match rows.first() {
+        Some(row) => DiscoverLayout {
+            rows: unmarshal::<Option<Vec<DiscoverRow>>>(
+                row.get::<_, silo_pg::TextValue>(0).0.as_bytes(),
+            )
+            .map_err(|e| Error::Internal(e.to_string()))?
+            .unwrap_or_default(),
+            customized: true,
+            revision: row.get(1),
+            updated_at: Some(row.get(2)),
+            sources: HashMap::new(),
+        },
+        None => DiscoverLayout {
+            rows: default_discover_rows(),
+            customized: false,
+            revision: 0,
+            updated_at: None,
+            sources: HashMap::new(),
+        },
+    };
+    let keys: HashMap<String, String> = out
+        .rows
+        .iter()
+        .filter_map(|row| discover_source_key(row).map(|key| (row.id.clone(), key)))
+        .collect();
+    if keys.is_empty() {
+        return Ok(out);
+    }
+    let source_keys: Vec<String> = keys.values().cloned().collect();
+    let statuses = pool.query("\n\t\tSELECT source_key, entry_count, refreshed_at, last_status, last_error\n\t\tFROM request_discover_list_snapshots WHERE source_key = ANY($1)", &[&source_keys]).await?;
+    for (id, key) in keys {
+        let mut status = DiscoverSource {
+            state: "pending",
+            entries: 0,
+            refreshed_at: None,
+            error: String::new(),
+        };
+        if let Some(row) = statuses.iter().find(|r| r.get::<_, String>(0) == key) {
+            status.entries = row.get(1);
+            status.refreshed_at = row.get(2);
+            let last: String = row.get(3);
+            if last == "error" {
+                status.state = "error";
+                status.error = row.get(4);
+            } else if last == "empty" {
+                status.state = "empty";
+            } else if status.refreshed_at.is_some() {
+                status.state = "ready";
+            }
+        }
+        out.sources.insert(id, status);
+    }
+    Ok(out)
+}
+
+pub async fn reset_discover_layout(pool: &Pool, expected: i64) -> Result<(), Error> {
+    let mut session = pool.acquire().await?;
+    let mut tx = session.begin().await?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+        .await?;
+    let rows = tx
+        .query(
+            "SELECT revision FROM request_discover_layout WHERE id FOR UPDATE",
+            &[],
+        )
+        .await?;
+    match rows.first() {
+        Some(row) if expected != -1 && expected != row.get::<_, i64>(0) => {
+            return Err(Error::StaleRevision);
+        }
+        None if expected != 0 && expected != -1 => return Err(Error::StaleRevision),
+        _ => {}
+    }
+    let affected = tx
+        .execute(
+            "DELETE FROM request_discover_layout WHERE id AND ($1::bigint = -1 OR revision = $1)",
+            &[&expected],
+        )
+        .await?;
+    if affected == 0 && expected != -1 {
+        let rows = tx
+            .query("SELECT EXISTS (SELECT 1 FROM request_discover_layout)", &[])
+            .await?;
+        if rows[0].get::<_, bool>(0) {
+            return Err(Error::StaleRevision);
+        }
+    }
+    tx.commit().await?;
+    Ok(())
+}

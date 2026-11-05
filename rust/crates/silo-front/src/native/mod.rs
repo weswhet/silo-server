@@ -22,6 +22,7 @@ pub mod interest;
 pub mod libraries;
 pub mod notifications;
 pub mod personal;
+pub mod plugin_ai;
 pub mod profiles;
 pub mod requests;
 pub mod series_prefs;
@@ -60,6 +61,7 @@ pub const DOMAINS: &[&[NativeRow]] = &[
     requests::ROWS,
     series_prefs::ROWS,
     downloads::ROWS,
+    plugin_ai::ROWS,
 ];
 
 const fn all_in_table() -> bool {
@@ -236,6 +238,7 @@ pub fn main_handler(inputs: &NativeInputs) -> BoxHandler {
         requests::mount(stack, &api, &v2);
         series_prefs::mount(stack, &api, &v2);
         downloads::mount(stack, &api, &v2);
+        plugin_ai::mount(stack, &api, &v2);
         discovery::mount(stack, &api, &v2);
     }
 

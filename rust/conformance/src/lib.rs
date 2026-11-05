@@ -17,6 +17,7 @@ pub mod origin;
 pub mod params;
 pub mod personal_flows;
 pub mod plan;
+pub mod plugin_ai_flows;
 pub mod report;
 pub mod request_flows;
 pub mod runner;

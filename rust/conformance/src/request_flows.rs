@@ -920,8 +920,64 @@ pub(crate) fn add(b: &mut Builder) {
     v1(f);
     v2_requests(f);
     v2_admin(f);
+    v2_discover_layout(f);
     v2_admin_limits(f);
     v2_admin_routing_usage(f);
     v2_routes(f);
     v2_integrations(f);
+}
+
+fn v2_discover_layout(f: &mut Flows) {
+    let path = "/api/v2/admin/request-discover/layout";
+    go(f, ApiV2, "GET", path, "discover_layout_get", admin());
+    // PUT stays on Go because it schedules list fetching. These chart/brand-only
+    // writes exercise the native GET and DELETE against the shared stored layout.
+    let body = r#"{"rows":[{"id":"r_anime","type":"tmdb_discover","title":"Anime on Netflix","enabled":true,"limit":30,"hide_available":true,"discover":{"media_type":"series","sort_by":"popularity.desc","keyword_ids":[210024],"watch_provider_ids":[8],"watch_region":"US"}},{"type":"studios","title":"Studios","enabled":false}]}"#;
+    for (name, headers, body) in [
+        ("discover_layout_save", &[("If-Match", "*")][..], body),
+        (
+            "discover_layout_invalid",
+            &[("If-Match", "*")][..],
+            r#"{"rows":[{"type":"mdblist","title":"Bad","enabled":true,"list":{"url":"http://10.0.0.1/lists/a/b"}}]}"#,
+        ),
+        ("discover_layout_no_precondition", &[][..], body),
+        (
+            "discover_layout_stale",
+            &[("If-Match", "\"stale\"")][..],
+            body,
+        ),
+    ] {
+        go(
+            f,
+            ApiV2,
+            "PUT",
+            path,
+            name,
+            Call {
+                body: Some(body),
+                headers,
+                ..admin()
+            },
+        );
+    }
+    go(f, ApiV2, "GET", path, "discover_layout_after", admin());
+    go(
+        f,
+        ApiV2,
+        "DELETE",
+        path,
+        "discover_layout_reset",
+        Call {
+            headers: &[("If-Match", "*")],
+            ..admin()
+        },
+    );
+    go(
+        f,
+        ApiV2,
+        "GET",
+        path,
+        "discover_layout_after_reset",
+        admin(),
+    );
 }

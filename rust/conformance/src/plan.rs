@@ -455,6 +455,7 @@ pub fn build(src: &Sources) -> Plan {
     crate::download_flows::add(&mut b);
     crate::collection_flows::add(&mut b);
     crate::request_flows::add(&mut b);
+    crate::plugin_ai_flows::add(&mut b);
     crate::auth_flows::add(&mut b);
     let mut plan = Plan {
         cases: std::mem::take(&mut b.cases),
