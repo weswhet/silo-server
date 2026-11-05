@@ -17,6 +17,7 @@ pub mod catalog;
 pub mod chain;
 pub mod collections;
 pub mod discovery;
+pub mod history_caps;
 pub mod huma;
 pub mod interest;
 pub mod libraries;
@@ -60,6 +61,7 @@ pub const DOMAINS: &[&[NativeRow]] = &[
     requests::ROWS,
     user_caps::ROWS,
     admin_caps::ROWS,
+    history_caps::ROWS,
 ];
 
 const fn all_in_table() -> bool {
@@ -237,6 +239,7 @@ pub fn main_handler(inputs: &NativeInputs) -> BoxHandler {
         discovery::mount(stack, &api, &v2);
         user_caps::mount(stack, &v2);
         admin_caps::mount(stack, &v2);
+        history_caps::mount(stack, &v2);
     }
 
     api.handle("/api/v2/*", Arc::new(v2));
