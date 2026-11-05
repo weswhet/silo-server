@@ -1096,6 +1096,8 @@ impl<'a> De<'a> {
     fn nested<R>(&self, f: impl FnOnce() -> Result<R, Error>) -> Result<R, Error> {
         let ctx = self.ctx;
         let depth = ctx.depth.get() + 1;
+        // Release builds set the limit to usize::MAX, so this check is constant there.
+        #[allow(clippy::absurd_extreme_comparisons)]
         if depth > MAX_MATERIALIZED_DEPTH {
             let pos = self.ops.first().map_or(0, |&id| ctx.node(id).start);
             ctx.abort(
