@@ -274,13 +274,18 @@ pub fn item_column_expr(alias: &str, col: &str) -> String {
     qualified
 }
 
-/// `joinItemColumns` (and `qualifiedItemColumns`).
+/// `joinItemColumns`.
 pub fn join_item_columns(alias: &str) -> String {
     ITEM_COLUMN_NAMES
         .iter()
         .map(|c| item_column_expr(alias, c))
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+/// `qualifiedItemColumns`, including the nullable-string projections used when hydrating items.
+pub fn qualified_item_columns(alias: &str) -> String {
+    join_item_columns(alias)
 }
 
 /// `qualifiedItemColumnRefs`.
