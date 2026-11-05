@@ -21,5 +21,6 @@ pub mod request_flows;
 pub mod runner;
 pub mod schema;
 pub mod scope;
+pub mod series_pref_flows;
 pub mod settings_flows;
 pub mod sources;

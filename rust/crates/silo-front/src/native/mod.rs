@@ -23,6 +23,7 @@ pub mod notifications;
 pub mod personal;
 pub mod profiles;
 pub mod requests;
+pub mod series_prefs;
 pub mod settings;
 pub mod system;
 
@@ -56,6 +57,7 @@ pub const DOMAINS: &[&[NativeRow]] = &[
     catalog::ROWS,
     collections::ROWS,
     requests::ROWS,
+    series_prefs::ROWS,
 ];
 
 const fn all_in_table() -> bool {
@@ -230,6 +232,7 @@ pub fn main_handler(inputs: &NativeInputs) -> BoxHandler {
         catalog::mount_v2(stack, &v2);
         collections::mount(stack, &api, &v2);
         requests::mount(stack, &api, &v2);
+        series_prefs::mount(stack, &api, &v2);
         discovery::mount(stack, &api, &v2);
     }
 
