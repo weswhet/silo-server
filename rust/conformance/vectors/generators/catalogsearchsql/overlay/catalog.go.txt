@@ -1,0 +1,56 @@
+// overlay-package: internal/catalog
+//
+// Export shims for the catalogsearchsql vector generator, substituted in only through
+// `go build -overlay`; internal/catalog on disk is unchanged.
+
+package catalog
+
+import (
+	"context"
+	"strconv"
+
+	"github.com/Silo-Server/silo-server/internal/models"
+)
+
+func VecGetByIDsWithAccessSQL(ids []string, a AccessFilter) (string, []any) {
+	return (&ItemRepository{}).buildGetByIDsWithAccessSQL(ids, a)
+}
+
+func VecCountVisiblePersonalSQL(userID int, ids []string, a AccessFilter) (string, []any) {
+	return buildCountVisiblePersonalCollectionMembersSQL(userID, ids, a)
+}
+
+func VecMixedSearchSQL(q string, types []string, limit, offset int, a AccessFilter, total bool) (string, string, []any) {
+	return (&ItemRepository{}).buildMixedSearchSQLFromParsed(parseSearchQuery(q), types, limit, offset, a, total)
+}
+
+func VecFuzzySearchSQL(q string, types []string, limit, offset int, a AccessFilter, total bool, exclude []string, minSim float64) (string, string, []any) {
+	return (&ItemRepository{}).buildFuzzySearchFromParsed(parseSearchQuery(q), types, limit, offset, a, total, exclude, minSim)
+}
+
+func VecSearchText(q string) string        { return searchTextFromParsed(parseSearchQuery(q)) }
+func VecFuzzyCandidateText(s string) string { return fuzzyCandidateText(s) }
+func VecSplitSearchItemTypes(t []string) ([]string, bool) { return splitSearchItemTypes(t) }
+
+// VecFuzzyRerank reranks items titled titles[i] (content ID "i") with aliases[i], and
+// returns the admitted content IDs in order plus required.
+func VecFuzzyRerank(searchText string, titles []string, aliases [][]string, exactHits bool) ([]string, int) {
+	items := make([]*models.MediaItem, len(titles))
+	byID := map[string][]string{}
+	for i, t := range titles {
+		id := strconv.Itoa(i)
+		items[i] = &models.MediaItem{ContentID: id, Title: t}
+		if i < len(aliases) && aliases[i] != nil {
+			byID[id] = aliases[i]
+		}
+	}
+	ranks, required, _ := rankFuzzyItems(context.Background(), searchText, items, byID)
+	ranks = admitFuzzyRanks(ranks, required, exactHits)
+	out := []string{}
+	for _, r := range ranks {
+		out = append(out, r.item.ContentID)
+	}
+	return out, required
+}
+
+func VecLevenshtein(a, b string, max int) int { return boundedLevenshteinRunes([]rune(a), []rune(b), max) }
