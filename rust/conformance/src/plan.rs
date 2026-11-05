@@ -864,7 +864,11 @@ const CHAIN_ROWS: &[(Surface, &str, bool)] = &[
     (Surface::ApiV2, "/api/v2/admin/stats/top-activity", true),
     (Surface::ApiV2, "/api/v2/admin/catalog/capabilities", true),
     (Surface::ApiV2, "/api/v2/admin/markers/capabilities", true),
-    (Surface::ApiV2, "/api/v2/admin/rating-sources/capabilities", true),
+    (
+        Surface::ApiV2,
+        "/api/v2/admin/rating-sources/capabilities",
+        true,
+    ),
     (Surface::ApiV2, "/api/v2/catalog/search/capabilities", true),
     (Surface::ApiV2, "/api/v2/capabilities/trailers", true),
     (Surface::ApiV1, "/api/v1/notifications/webhooks/", true),
@@ -1047,6 +1051,7 @@ const CHAIN_ROWS: &[(Surface, &str, bool)] = &[
     (Surface::ApiV2, "/api/v2/capabilities/not-interested", true),
     (Surface::ApiV2, "/api/v2/progress/capabilities", true),
     (Surface::ApiV2, "/api/v2/home/capabilities", true),
+    (Surface::ApiV2, "/api/v2/shuffles/capabilities", true),
     (Surface::ApiV2, "/api/v2/scan/capabilities", true),
     (Surface::ApiV2, "/api/v2/admin/jobs/capabilities", true),
     (

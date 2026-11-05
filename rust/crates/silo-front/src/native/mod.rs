@@ -19,6 +19,7 @@ pub mod collections;
 pub mod discovery;
 pub mod downloads;
 pub mod history_caps;
+pub mod home_caps;
 pub mod huma;
 pub mod interest;
 pub mod libraries;
@@ -65,6 +66,7 @@ pub const DOMAINS: &[&[NativeRow]] = &[
     catalog::ROWS,
     collections::ROWS,
     requests::ROWS,
+    home_caps::ROWS,
     user_caps::ROWS,
     admin_caps::ROWS,
     history_caps::ROWS,
@@ -253,6 +255,7 @@ pub fn main_handler(inputs: &NativeInputs) -> BoxHandler {
         downloads::mount(stack, &api, &v2);
         plugin_ai::mount(stack, &api, &v2);
         discovery::mount(stack, &api, &v2);
+        home_caps::mount(stack, &v2);
         user_caps::mount(stack, &v2);
         admin_caps::mount(stack, &v2);
         history_caps::mount(stack, &v2);
