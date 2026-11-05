@@ -2108,3 +2108,389 @@ pub async fn requests_allowed(pool: &Pool, user: i64) -> Result<bool, Error> {
     };
     Ok(own.unwrap_or(base))
 }
+
+/// Server-wide request editor settings, including a missing row's defaults.
+#[derive(Clone, Debug, Default)]
+pub struct Settings {
+    pub revision: i64,
+    pub requests_enabled: bool,
+    pub global_max_requests: i64,
+    pub global_window_days: i64,
+    pub global_auto_approval_enabled: bool,
+    pub force_dual_quality: bool,
+    pub watchlist_requests: bool,
+    pub updated_at: Option<SystemTime>,
+}
+
+fn scan_settings(row: &Row) -> Settings {
+    Settings {
+        requests_enabled: row.get(0),
+        global_max_requests: i64::from(row.get::<_, i32>(1)),
+        global_window_days: i64::from(row.get::<_, i32>(2)),
+        global_auto_approval_enabled: row.get(3),
+        force_dual_quality: row.get(4),
+        watchlist_requests: row.get(5),
+        updated_at: Some(row.get(6)),
+        revision: row.get(7),
+    }
+}
+
+pub async fn get_settings(pool: &Pool) -> Result<Settings, Error> {
+    let rows = pool.query(SETTINGS_GET_SQL, &[]).await?;
+    Ok(rows.first().map(scan_settings).unwrap_or(Settings {
+        global_max_requests: 5,
+        global_window_days: 7,
+        watchlist_requests: true,
+        ..Settings::default()
+    }))
+}
+
+// PostgreSQL integer columns must receive int4 parameters, even though Go's API integers are int64.
+fn request_int4(value: i64) -> Result<i32, Error> {
+    i32::try_from(value).map_err(|e| Error::Internal(e.to_string()))
+}
+
+async fn lock_default_revision(
+    tx: &mut Tx<'_>,
+    sql: &str,
+    params: &[&(dyn silo_pg::ToSql + Sync)],
+    expected: i64,
+) -> Result<(), Error> {
+    let rows = tx.query(sql, params).await?;
+    let revision = rows.first().map(|row| row.get::<_, i64>(0)).unwrap_or(0);
+    if expected != -1 && expected != revision {
+        return Err(Error::StaleRevision);
+    }
+    Ok(())
+}
+
+pub async fn update_settings_conditional(
+    pool: &Pool,
+    input: Settings,
+    expected: i64,
+) -> Result<Settings, Error> {
+    if input.global_max_requests < 0 || input.global_window_days <= 0 {
+        return Err(Error::InvalidInput("invalid request settings".into()));
+    }
+    let mut session = pool.acquire().await?;
+    let mut tx = session.begin().await?;
+    lock_default_revision(
+        &mut tx,
+        "SELECT revision FROM request_settings WHERE id=true FOR UPDATE",
+        &[],
+        expected,
+    )
+    .await?;
+    let max = request_int4(input.global_max_requests)?;
+    let window = request_int4(input.global_window_days)?;
+    let rows = tx
+        .query(
+            SETTINGS_PUT_SQL,
+            &[
+                &input.requests_enabled,
+                &max,
+                &window,
+                &input.global_auto_approval_enabled,
+                &input.force_dual_quality,
+                &expected,
+                &input.watchlist_requests,
+            ],
+        )
+        .await?;
+    let output = scan_settings(rows.first().ok_or(Error::StaleRevision)?);
+    tx.commit().await?;
+    Ok(output)
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct UserLimit {
+    pub revision: i64,
+    pub user_id: i64,
+    pub limit_mode: String,
+    pub max_requests: Option<i64>,
+    pub window_days: Option<i64>,
+    pub approval_mode: String,
+    pub updated_at: Option<SystemTime>,
+}
+
+fn scan_user_limit(row: &Row) -> UserLimit {
+    UserLimit {
+        user_id: i64::from(row.get::<_, i32>(0)),
+        limit_mode: row.get(1),
+        max_requests: row.get::<_, Option<i32>>(2).map(i64::from),
+        window_days: row.get::<_, Option<i32>>(3).map(i64::from),
+        approval_mode: row.get(4),
+        updated_at: Some(row.get(5)),
+        revision: row.get(6),
+    }
+}
+
+pub async fn get_user_limit(pool: &Pool, user_id: i64) -> Result<UserLimit, Error> {
+    if user_id <= 0 {
+        return Err(Error::InvalidInput("invalid user id".into()));
+    }
+    let rows = pool
+        .query(
+            "SELECT EXISTS(SELECT 1 FROM users WHERE id=$1)",
+            &[&user_id],
+        )
+        .await?;
+    if !rows[0].get::<_, bool>(0) {
+        return Err(Error::NotFound);
+    }
+    let id = request_int4(user_id)?;
+    let rows = pool.query(USER_LIMIT_GET_SQL, &[&id]).await?;
+    Ok(rows.first().map(scan_user_limit).unwrap_or(UserLimit {
+        user_id,
+        limit_mode: "inherit".into(),
+        approval_mode: "inherit".into(),
+        ..UserLimit::default()
+    }))
+}
+
+pub async fn upsert_user_limit_conditional(
+    pool: &Pool,
+    mut input: UserLimit,
+    expected: i64,
+) -> Result<UserLimit, Error> {
+    if input.user_id <= 0 {
+        return Err(Error::InvalidInput("invalid user id".into()));
+    }
+    match input.limit_mode.as_str() {
+        "" | "inherit" | "unlimited" | "blocked" => {
+            if input.limit_mode.is_empty() {
+                input.limit_mode = "inherit".into();
+            }
+            input.max_requests = None;
+            input.window_days = None;
+        }
+        "custom" => {
+            if input.max_requests.is_none_or(|v| v < 0) || input.window_days.is_none_or(|v| v <= 0)
+            {
+                return Err(Error::InvalidInput(
+                    "custom limits require max_requests >= 0 and window_days > 0".into(),
+                ));
+            }
+        }
+        _ => return Err(Error::InvalidInput("invalid limit mode".into())),
+    }
+    match input.approval_mode.as_str() {
+        "" => input.approval_mode = "inherit".into(),
+        "inherit" | "manual" | "auto" | "blocked" => {}
+        _ => return Err(Error::InvalidInput("invalid approval mode".into())),
+    }
+    let id = request_int4(input.user_id)?;
+    let mut session = pool.acquire().await?;
+    let mut tx = session.begin().await?;
+    if tx
+        .query(
+            "SELECT id FROM users WHERE id=$1 FOR KEY SHARE",
+            &[&input.user_id],
+        )
+        .await?
+        .is_empty()
+    {
+        return Err(Error::NotFound);
+    }
+    lock_default_revision(
+        &mut tx,
+        "SELECT revision FROM request_user_limits WHERE user_id=$1 FOR UPDATE",
+        &[&id],
+        expected,
+    )
+    .await?;
+    let max = input.max_requests.map(request_int4).transpose()?;
+    let window = input.window_days.map(request_int4).transpose()?;
+    let rows = tx
+        .query(
+            USER_LIMIT_PUT_SQL,
+            &[
+                &id,
+                &input.limit_mode,
+                &max,
+                &window,
+                &input.approval_mode,
+                &expected,
+            ],
+        )
+        .await?;
+    let output = scan_user_limit(rows.first().ok_or(Error::StaleRevision)?);
+    tx.commit().await?;
+    Ok(output)
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct GroupLimit {
+    pub revision: i64,
+    pub group_id: i64,
+    pub limit_mode: String,
+    pub max_requests: Option<i64>,
+    pub window_days: Option<i64>,
+    pub approval_mode: String,
+    pub updated_at: Option<SystemTime>,
+}
+
+fn scan_group_limit(row: &Row) -> GroupLimit {
+    GroupLimit {
+        group_id: row.get(0),
+        limit_mode: row.get(1),
+        max_requests: row.get::<_, Option<i32>>(2).map(i64::from),
+        window_days: row.get::<_, Option<i32>>(3).map(i64::from),
+        approval_mode: row.get(4),
+        updated_at: Some(row.get(5)),
+        revision: row.get(6),
+    }
+}
+
+pub async fn get_group_limit(pool: &Pool, group_id: i64) -> Result<GroupLimit, Error> {
+    let rows = pool
+        .query(
+            "SELECT EXISTS(SELECT 1 FROM access_groups WHERE id=$1)",
+            &[&group_id],
+        )
+        .await?;
+    if !rows[0].get::<_, bool>(0) {
+        return Err(Error::NotFound);
+    }
+    let rows = pool.query(GROUP_LIMIT_GET_SQL, &[&group_id]).await?;
+    Ok(rows.first().map(scan_group_limit).unwrap_or(GroupLimit {
+        group_id,
+        limit_mode: "inherit".into(),
+        approval_mode: "inherit".into(),
+        ..GroupLimit::default()
+    }))
+}
+
+pub async fn upsert_group_limit_conditional(
+    pool: &Pool,
+    mut input: GroupLimit,
+    expected: i64,
+) -> Result<GroupLimit, Error> {
+    if input.group_id <= 0 {
+        return Err(Error::InvalidInput("invalid access group id".into()));
+    }
+    match input.limit_mode.as_str() {
+        "" | "inherit" | "unlimited" => {
+            if input.limit_mode.is_empty() {
+                input.limit_mode = "inherit".into();
+            }
+            input.max_requests = None;
+            input.window_days = None;
+        }
+        "custom" => {
+            if input.max_requests.is_none_or(|v| v < 0) || input.window_days.is_none_or(|v| v <= 0)
+            {
+                return Err(Error::Validation {
+                    fields: BTreeMap::from([("max_requests".into(), "A custom limit needs a number of requests (0 or more) and a window of at least one day.".into())]),
+                    form: String::new(),
+                });
+            }
+        }
+        _ => return Err(Error::InvalidInput("invalid limit mode".into())),
+    }
+    match input.approval_mode.as_str() {
+        "" => input.approval_mode = "inherit".into(),
+        "inherit" | "manual" | "auto" => {}
+        _ => return Err(Error::InvalidInput("invalid approval mode".into())),
+    }
+    let mut session = pool.acquire().await?;
+    let mut tx = session.begin().await?;
+    if tx
+        .query(
+            "SELECT id FROM access_groups WHERE id=$1 FOR KEY SHARE",
+            &[&input.group_id],
+        )
+        .await?
+        .is_empty()
+    {
+        return Err(Error::NotFound);
+    }
+    lock_default_revision(
+        &mut tx,
+        "SELECT revision FROM request_group_limits WHERE group_id=$1 FOR UPDATE",
+        &[&input.group_id],
+        expected,
+    )
+    .await?;
+    let max = input.max_requests.map(request_int4).transpose()?;
+    let window = input.window_days.map(request_int4).transpose()?;
+    let rows = tx
+        .query(
+            GROUP_LIMIT_PUT_SQL,
+            &[
+                &input.group_id,
+                &input.limit_mode,
+                &max,
+                &window,
+                &input.approval_mode,
+                &expected,
+            ],
+        )
+        .await?;
+    let output = scan_group_limit(rows.first().ok_or(Error::StaleRevision)?);
+    tx.commit().await?;
+    Ok(output)
+}
+
+const SETTINGS_GET_SQL: &str = r#"
+		SELECT requests_enabled, global_max_requests, global_window_days,
+		       global_auto_approval_enabled, force_dual_quality, watchlist_requests, updated_at, revision
+		FROM request_settings
+		WHERE id = true
+	"#;
+
+const SETTINGS_PUT_SQL: &str = r#"
+		INSERT INTO request_settings (
+			id, requests_enabled, global_max_requests, global_window_days,
+			global_auto_approval_enabled, force_dual_quality, watchlist_requests, updated_at
+		)
+		VALUES (true, $1, $2, $3, $4, $5, COALESCE($7::boolean, true), now())
+		ON CONFLICT (id) DO UPDATE SET
+			requests_enabled = EXCLUDED.requests_enabled,
+			global_max_requests = EXCLUDED.global_max_requests,
+			global_window_days = EXCLUDED.global_window_days,
+			global_auto_approval_enabled = EXCLUDED.global_auto_approval_enabled,
+			force_dual_quality = EXCLUDED.force_dual_quality,
+			watchlist_requests = COALESCE($7::boolean, request_settings.watchlist_requests),
+			updated_at = now()
+		WHERE $6::bigint = -1 OR request_settings.revision = $6
+		RETURNING requests_enabled, global_max_requests, global_window_days,
+		          global_auto_approval_enabled, force_dual_quality, watchlist_requests, updated_at, revision
+	"#;
+
+const USER_LIMIT_GET_SQL: &str = r#"
+		SELECT user_id, limit_mode, max_requests, window_days, approval_mode, updated_at, revision
+		FROM request_user_limits
+		WHERE user_id = $1
+	"#;
+
+const USER_LIMIT_PUT_SQL: &str = r#"
+		INSERT INTO request_user_limits (
+			user_id, limit_mode, max_requests, window_days, approval_mode, updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5, now())
+		ON CONFLICT (user_id) DO UPDATE SET
+			limit_mode = EXCLUDED.limit_mode,
+			max_requests = EXCLUDED.max_requests,
+			window_days = EXCLUDED.window_days,
+			approval_mode = EXCLUDED.approval_mode,
+			updated_at = now()
+		WHERE $6::bigint = -1 OR request_user_limits.revision = $6
+		RETURNING user_id, limit_mode, max_requests, window_days, approval_mode, updated_at, revision
+	"#;
+
+const GROUP_LIMIT_GET_SQL: &str = r#"
+		SELECT group_id, limit_mode, max_requests, window_days, approval_mode, updated_at, revision
+		FROM request_group_limits WHERE group_id = $1"#;
+
+const GROUP_LIMIT_PUT_SQL: &str = r#"
+		INSERT INTO request_group_limits (group_id, limit_mode, max_requests, window_days, approval_mode, updated_at)
+		VALUES ($1, $2, $3, $4, $5, now())
+		ON CONFLICT (group_id) DO UPDATE SET
+			limit_mode = EXCLUDED.limit_mode,
+			max_requests = EXCLUDED.max_requests,
+			window_days = EXCLUDED.window_days,
+			approval_mode = EXCLUDED.approval_mode,
+			updated_at = now()
+		WHERE $6::bigint = -1 OR request_group_limits.revision = $6
+		RETURNING group_id, limit_mode, max_requests, window_days, approval_mode, updated_at, revision"#;

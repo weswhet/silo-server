@@ -31,12 +31,26 @@ use super::chain::{
     Stack, Step, V2Class, capability_json, client_ip_of, problem_type, write_capability,
     write_problem, write_v1_json, write_v2_json, write_v2_json_status,
 };
-use super::huma::RawBody;
+use super::huma::{RawBody, decode_body};
 use super::personal::user_of;
 use crate::rows::NativeRow;
 use crate::rows::Surface::{ApiV1, ApiV2};
 
 pub const ROWS: &[NativeRow] = &[
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/request-settings"),
+    NativeRow::new(ApiV2, "PUT", "/api/v2/admin/request-settings"),
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/request-users/{user_id}/limit"),
+    NativeRow::new(ApiV2, "PUT", "/api/v2/admin/request-users/{user_id}/limit"),
+    NativeRow::new(
+        ApiV2,
+        "GET",
+        "/api/v2/admin/request-groups/{group_id}/limit",
+    ),
+    NativeRow::new(
+        ApiV2,
+        "PUT",
+        "/api/v2/admin/request-groups/{group_id}/limit",
+    ),
     NativeRow::new(ApiV1, "GET", "/api/v1/requests/mine"),
     NativeRow::new(ApiV1, "GET", "/api/v1/requests/status"),
     NativeRow::new(ApiV1, "GET", "/api/v1/requests/{id}"),
@@ -1140,6 +1154,7 @@ fn mount_v2(stack: &Arc<Stack>, v2: &Mux) {
 }
 
 fn mount_v2_admin(stack: &Arc<Stack>, v2: &Mux) {
+    mount_v2_request_limits(stack, v2);
     let p = "/api/v2/admin/requests/capabilities";
     v2.get(
         p,
@@ -1315,6 +1330,375 @@ fn mount_v2_admin(stack: &Arc<Stack>, v2: &Mux) {
                 let body: ReasonBody = unmarshal(&raw_body(r)).unwrap_or_default();
                 match store::cancel(&s.pool, &v, r.url_param("id"), &body.reason, true).await {
                     Ok(req) => write_v2_json(w, &v2_request(req, &v)).await,
+                    Err(e) => write_problem(w, r, request_problem(e)).await,
+                }
+            }),
+        ),
+    );
+}
+
+#[derive(Serialize, Deserialize, Default)]
+#[serde(default)]
+struct AdminRequestSettings {
+    requests_enabled: bool,
+    global_max_requests: i64,
+    global_window_days: i64,
+    global_auto_approval_enabled: bool,
+    force_dual_quality: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    watchlist_requests: Option<bool>,
+}
+
+fn admin_settings(s: store::Settings) -> AdminRequestSettings {
+    AdminRequestSettings {
+        requests_enabled: s.requests_enabled,
+        global_max_requests: s.global_max_requests,
+        global_window_days: s.global_window_days,
+        global_auto_approval_enabled: s.global_auto_approval_enabled,
+        force_dual_quality: s.force_dual_quality,
+        watchlist_requests: Some(s.watchlist_requests),
+    }
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct AdminRequestLimitBody {
+    limit_mode: String,
+    max_requests: Option<i64>,
+    window_days: Option<i64>,
+    approval_mode: String,
+}
+
+#[derive(Serialize)]
+struct AdminRequestUserLimit {
+    user_id: String,
+    limit_mode: String,
+    max_requests: Option<i64>,
+    window_days: Option<i64>,
+    approval_mode: String,
+}
+
+fn admin_user_limit(limit: store::UserLimit) -> AdminRequestUserLimit {
+    AdminRequestUserLimit {
+        user_id: limit.user_id.to_string(),
+        limit_mode: limit.limit_mode,
+        max_requests: limit.max_requests,
+        window_days: limit.window_days,
+        approval_mode: limit.approval_mode,
+    }
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct AdminRequestGroupLimitBody {
+    limit_mode: String,
+    max_requests: Option<i64>,
+    window_days: Option<i64>,
+    approval_mode: String,
+}
+
+#[derive(Serialize)]
+struct AdminRequestGroupLimit {
+    group_id: String,
+    limit_mode: String,
+    max_requests: Option<i64>,
+    window_days: Option<i64>,
+    approval_mode: String,
+}
+
+fn admin_group_limit(limit: store::GroupLimit) -> AdminRequestGroupLimit {
+    AdminRequestGroupLimit {
+        group_id: limit.group_id.to_string(),
+        limit_mode: limit.limit_mode,
+        max_requests: limit.max_requests,
+        window_days: limit.window_days,
+        approval_mode: limit.approval_mode,
+    }
+}
+
+fn mount_v2_request_limits(stack: &Arc<Stack>, v2: &Mux) {
+    let p = "/api/v2/admin/request-settings";
+    v2.get(
+        p,
+        stack.v2(
+            p,
+            V2Class::ActingAdmin,
+            route!(stack, |s, w, r| {
+                match store::get_settings(&s.pool).await {
+                    Ok(settings) => {
+                        w.header().set(
+                            "ETag",
+                            admin_tag(r, "settings", "global", settings.revision).to_wire(),
+                        );
+                        write_v2_json(w, &admin_settings(settings)).await;
+                    }
+                    Err(e) => write_problem(w, r, request_problem(e)).await,
+                }
+            }),
+        ),
+    );
+    v2.put(
+        p,
+        stack.v2_steps(
+            p,
+            V2_ADMIN_WRITE,
+            route!(stack, |s, w, r| {
+                let body: AdminRequestSettings = match decode_body(r) {
+                    Ok(body) => body,
+                    Err(p) => return write_problem(w, r, p).await,
+                };
+                let current = match store::get_settings(&s.pool).await {
+                    Ok(current) => current,
+                    Err(e) => return write_problem(w, r, request_problem(e)).await,
+                };
+                let expected = match admin_guard(
+                    r,
+                    &admin_tag(r, "settings", "global", current.revision),
+                    current.revision,
+                ) {
+                    Ok(expected) => expected,
+                    Err(p) => return write_problem(w, r, p).await,
+                };
+                let settings = store::Settings {
+                    requests_enabled: body.requests_enabled,
+                    global_max_requests: body.global_max_requests,
+                    global_window_days: body.global_window_days,
+                    global_auto_approval_enabled: body.global_auto_approval_enabled,
+                    force_dual_quality: body.force_dual_quality,
+                    watchlist_requests: body
+                        .watchlist_requests
+                        .unwrap_or(current.watchlist_requests),
+                    ..store::Settings::default()
+                };
+                match store::update_settings_conditional(&s.pool, settings, expected).await {
+                    Ok(settings) => {
+                        w.header().set(
+                            "ETag",
+                            admin_tag(r, "settings", "global", settings.revision).to_wire(),
+                        );
+                        write_v2_json(w, &admin_settings(settings)).await;
+                    }
+                    Err(Error::StaleRevision) => {
+                        let current = match store::get_settings(&s.pool).await {
+                            Ok(current) => current,
+                            Err(e) => return write_problem(w, r, request_problem(e)).await,
+                        };
+                        let p = problem(
+                            "precondition_failed",
+                            "Request settings changed; reload before saving.",
+                        )
+                        .with_header(
+                            "ETag",
+                            admin_tag(r, "settings", "global", current.revision).to_wire(),
+                        );
+                        write_problem(w, r, p).await;
+                    }
+                    Err(e) => write_problem(w, r, request_problem(e)).await,
+                }
+            }),
+        ),
+    );
+
+    let p = "/api/v2/admin/request-users/{user_id}/limit";
+    v2.get(
+        p,
+        stack.v2(
+            p,
+            V2Class::ActingAdmin,
+            route!(stack, |s, w, r| {
+                let id = match r.url_param("user_id").parse::<i64>() {
+                    Ok(id) if id > 0 => id,
+                    _ => {
+                        return write_problem(
+                            w,
+                            r,
+                            problem("validation_failed", "Invalid account ID."),
+                        )
+                        .await;
+                    }
+                };
+                match store::get_user_limit(&s.pool, id).await {
+                    Ok(limit) => {
+                        w.header().set(
+                            "ETag",
+                            admin_tag(r, "limit", r.url_param("user_id"), limit.revision).to_wire(),
+                        );
+                        write_v2_json(w, &admin_user_limit(limit)).await;
+                    }
+                    Err(e) => write_problem(w, r, request_problem(e)).await,
+                }
+            }),
+        ),
+    );
+    v2.put(
+        p,
+        stack.v2_steps(
+            p,
+            V2_ADMIN_WRITE,
+            route!(stack, |s, w, r| {
+                let body: AdminRequestLimitBody = match decode_body(r) {
+                    Ok(body) => body,
+                    Err(p) => return write_problem(w, r, p).await,
+                };
+                let id = match r.url_param("user_id").parse::<i64>() {
+                    Ok(id) if id > 0 => id,
+                    _ => {
+                        return write_problem(
+                            w,
+                            r,
+                            problem("validation_failed", "Invalid account ID."),
+                        )
+                        .await;
+                    }
+                };
+                let current = match store::get_user_limit(&s.pool, id).await {
+                    Ok(current) => current,
+                    Err(e) => return write_problem(w, r, request_problem(e)).await,
+                };
+                let expected = match admin_guard(
+                    r,
+                    &admin_tag(r, "limit", r.url_param("user_id"), current.revision),
+                    current.revision,
+                ) {
+                    Ok(expected) => expected,
+                    Err(p) => return write_problem(w, r, p).await,
+                };
+                let limit = store::UserLimit {
+                    user_id: id,
+                    limit_mode: body.limit_mode,
+                    max_requests: body.max_requests,
+                    window_days: body.window_days,
+                    approval_mode: body.approval_mode,
+                    ..store::UserLimit::default()
+                };
+                match store::upsert_user_limit_conditional(&s.pool, limit, expected).await {
+                    Ok(limit) => {
+                        w.header().set(
+                            "ETag",
+                            admin_tag(r, "limit", r.url_param("user_id"), limit.revision).to_wire(),
+                        );
+                        write_v2_json(w, &admin_user_limit(limit)).await;
+                    }
+                    Err(Error::StaleRevision) => {
+                        let current = match store::get_user_limit(&s.pool, id).await {
+                            Ok(current) => current,
+                            Err(e) => return write_problem(w, r, request_problem(e)).await,
+                        };
+                        let p = problem(
+                            "precondition_failed",
+                            "The account limit changed; reload before saving.",
+                        )
+                        .with_header(
+                            "ETag",
+                            admin_tag(r, "limit", r.url_param("user_id"), current.revision)
+                                .to_wire(),
+                        );
+                        write_problem(w, r, p).await;
+                    }
+                    Err(e) => write_problem(w, r, request_problem(e)).await,
+                }
+            }),
+        ),
+    );
+
+    let p = "/api/v2/admin/request-groups/{group_id}/limit";
+    v2.get(
+        p,
+        stack.v2(
+            p,
+            V2Class::ActingAdmin,
+            route!(stack, |s, w, r| {
+                let id = match r.url_param("group_id").parse::<i64>() {
+                    Ok(id) if id > 0 => id,
+                    _ => {
+                        return write_problem(
+                            w,
+                            r,
+                            problem("validation_failed", "Invalid access group ID."),
+                        )
+                        .await;
+                    }
+                };
+                match store::get_group_limit(&s.pool, id).await {
+                    Ok(limit) => {
+                        w.header().set(
+                            "ETag",
+                            admin_tag(r, "group-limit", r.url_param("group_id"), limit.revision)
+                                .to_wire(),
+                        );
+                        write_v2_json(w, &admin_group_limit(limit)).await;
+                    }
+                    Err(e) => write_problem(w, r, request_problem(e)).await,
+                }
+            }),
+        ),
+    );
+    v2.put(
+        p,
+        stack.v2_steps(
+            p,
+            V2_ADMIN_WRITE,
+            route!(stack, |s, w, r| {
+                let body: AdminRequestGroupLimitBody = match decode_body(r) {
+                    Ok(body) => body,
+                    Err(p) => return write_problem(w, r, p).await,
+                };
+                let id = match r.url_param("group_id").parse::<i64>() {
+                    Ok(id) if id > 0 => id,
+                    _ => {
+                        return write_problem(
+                            w,
+                            r,
+                            problem("validation_failed", "Invalid access group ID."),
+                        )
+                        .await;
+                    }
+                };
+                let current = match store::get_group_limit(&s.pool, id).await {
+                    Ok(current) => current,
+                    Err(e) => return write_problem(w, r, request_problem(e)).await,
+                };
+                let expected = match admin_guard(
+                    r,
+                    &admin_tag(r, "group-limit", r.url_param("group_id"), current.revision),
+                    current.revision,
+                ) {
+                    Ok(expected) => expected,
+                    Err(p) => return write_problem(w, r, p).await,
+                };
+                let limit = store::GroupLimit {
+                    group_id: id,
+                    limit_mode: body.limit_mode,
+                    max_requests: body.max_requests,
+                    window_days: body.window_days,
+                    approval_mode: body.approval_mode,
+                    ..store::GroupLimit::default()
+                };
+                match store::upsert_group_limit_conditional(&s.pool, limit, expected).await {
+                    Ok(limit) => {
+                        w.header().set(
+                            "ETag",
+                            admin_tag(r, "group-limit", r.url_param("group_id"), limit.revision)
+                                .to_wire(),
+                        );
+                        write_v2_json(w, &admin_group_limit(limit)).await;
+                    }
+                    Err(Error::StaleRevision) => {
+                        let current = match store::get_group_limit(&s.pool, id).await {
+                            Ok(current) => current,
+                            Err(e) => return write_problem(w, r, request_problem(e)).await,
+                        };
+                        let p = problem(
+                            "precondition_failed",
+                            "The access group's request limit changed; reload before saving.",
+                        )
+                        .with_header(
+                            "ETag",
+                            admin_tag(r, "group-limit", r.url_param("group_id"), current.revision)
+                                .to_wire(),
+                        );
+                        write_problem(w, r, p).await;
+                    }
                     Err(e) => write_problem(w, r, request_problem(e)).await,
                 }
             }),

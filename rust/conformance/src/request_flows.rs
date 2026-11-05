@@ -394,6 +394,143 @@ fn v2_admin(f: &mut Flows) {
 
 const FALLBACK: &str = r#"{"enabled":true,"conditions":{},"skip_uhd":false,"hd":{"integration_id":"conf-radarr"},"uhd":{}}"#;
 
+fn v2_admin_limits(f: &mut Flows) {
+    // accounts.sql seeds user 2 in the migration-seeded default group (ID 1).
+    for (name, route, at, body, invalid) in [
+        (
+            "settings",
+            "/api/v2/admin/request-settings",
+            "/api/v2/admin/request-settings",
+            r#"{"requests_enabled":true,"global_max_requests":12,"global_window_days":7,"global_auto_approval_enabled":false,"force_dual_quality":false,"watchlist_requests":true}"#,
+            r#"{"requests_enabled":true,"global_max_requests":-1,"global_window_days":7,"global_auto_approval_enabled":false,"force_dual_quality":false}"#,
+        ),
+        (
+            "user_limit",
+            "/api/v2/admin/request-users/{user_id}/limit",
+            "/api/v2/admin/request-users/2/limit",
+            r#"{"limit_mode":"custom","max_requests":6,"window_days":7,"approval_mode":"manual"}"#,
+            r#"{"limit_mode":"custom","max_requests":null,"window_days":7,"approval_mode":"manual"}"#,
+        ),
+        (
+            "group_limit",
+            "/api/v2/admin/request-groups/{group_id}/limit",
+            "/api/v2/admin/request-groups/1/limit",
+            r#"{"limit_mode":"custom","max_requests":8,"window_days":14,"approval_mode":"auto"}"#,
+            r#"{"limit_mode":"custom","max_requests":null,"window_days":7,"approval_mode":"manual"}"#,
+        ),
+    ] {
+        go(
+            f,
+            ApiV2,
+            "GET",
+            route,
+            &format!("{name}_get"),
+            Call {
+                at: Some(at),
+                ..admin()
+            },
+        );
+        for (suffix, headers, body) in [
+            ("save", &[("If-Match", "*")][..], body),
+            ("no_precondition", &[][..], body),
+            ("stale", &[("If-Match", "\"stale\"")][..], body),
+            ("invalid", &[("If-Match", "*")][..], invalid),
+        ] {
+            go(
+                f,
+                ApiV2,
+                "PUT",
+                route,
+                &format!("{name}_{suffix}"),
+                Call {
+                    at: Some(at),
+                    body: Some(body),
+                    headers,
+                    ..admin()
+                },
+            );
+        }
+        if name != "settings" {
+            go(
+                f,
+                ApiV2,
+                "PUT",
+                route,
+                &format!("{name}_bad_enum"),
+                Call {
+                    at: Some(at),
+                    body: Some(
+                        r#"{"limit_mode":"invalid","max_requests":null,"window_days":null,"approval_mode":"inherit"}"#,
+                    ),
+                    headers: &[("If-Match", "*")],
+                    ..admin()
+                },
+            );
+            go(
+                f,
+                ApiV2,
+                "PUT",
+                route,
+                &format!("{name}_bad_minimum"),
+                Call {
+                    at: Some(at),
+                    body: Some(
+                        r#"{"limit_mode":"custom","max_requests":-1,"window_days":0,"approval_mode":"inherit"}"#,
+                    ),
+                    headers: &[("If-Match", "*")],
+                    ..admin()
+                },
+            );
+        }
+        go(
+            f,
+            ApiV2,
+            "GET",
+            route,
+            &format!("{name}_after_save"),
+            Call {
+                at: Some(at),
+                ..admin()
+            },
+        );
+        if name == "settings" {
+            go(
+                f,
+                ApiV2,
+                "PUT",
+                route,
+                "settings_preserve_watchlist",
+                Call {
+                    body: Some(
+                        r#"{"requests_enabled":true,"global_max_requests":12,"global_window_days":7,"global_auto_approval_enabled":false,"force_dual_quality":false}"#,
+                    ),
+                    headers: &[("If-Match", "*")],
+                    ..admin()
+                },
+            );
+            go(
+                f,
+                ApiV2,
+                "GET",
+                route,
+                "settings_after_preserve_watchlist",
+                admin(),
+            );
+        }
+    }
+    go(
+        f,
+        ApiV2,
+        "GET",
+        "/api/v2/admin/request-groups/{group_id}/limit",
+        "group_limit_missing",
+        Call {
+            at: Some("/api/v2/admin/request-groups/999999/limit"),
+            ..admin()
+        },
+    );
+}
+
 fn v2_routes(f: &mut Flows) {
     let root = "/api/v2/admin/request-routes";
     let one = "/api/v2/admin/request-routes/{id}";
@@ -688,6 +825,7 @@ pub(crate) fn add(b: &mut Builder) {
     v1(f);
     v2_requests(f);
     v2_admin(f);
+    v2_admin_limits(f);
     v2_routes(f);
     v2_integrations(f);
 }
