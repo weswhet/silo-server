@@ -1116,43 +1116,95 @@ pub struct AdminJob {
     pub id: String,
     pub job_type: String,
     pub status: String,
+    pub created_by_user_id: i64,
+    pub request_payload: Option<String>,
     pub result_payload: Option<String>,
     pub progress_current: i64,
     pub progress_total: i64,
+    pub artifact_bucket: String,
+    pub artifact_key: String,
+    pub artifact_size_bytes: i64,
+    pub public_url: String,
     pub requested_at: SystemTime,
     pub started_at: Option<SystemTime>,
     pub completed_at: Option<SystemTime>,
     pub cancel_requested: bool,
+    pub claim_generation: i64,
+}
+
+const ADMIN_JOB_COLUMNS: &str = "id, job_type, status, created_by_user_id, request_payload,
+\tresult_payload, message, error_message, progress_current, progress_total,
+\tartifact_bucket, artifact_key, artifact_size_bytes,
+\tpublic_url, requested_at, started_at, completed_at, heartbeat_at, expires_at,
+\tpublished_at, updated_at, cancel_requested, claim_generation";
+
+fn scan_admin_job(r: &Row) -> Result<AdminJob> {
+    Ok(AdminJob {
+        id: text(r, 0)?,
+        job_type: text(r, 1)?,
+        status: text(r, 2)?,
+        created_by_user_id: int(r, 3)?,
+        request_payload: json_opt(r, 4)?,
+        result_payload: json_opt(r, 5)?,
+        progress_current: int(r, 8)?,
+        progress_total: int(r, 9)?,
+        artifact_bucket: text(r, 10)?,
+        artifact_key: text(r, 11)?,
+        artifact_size_bytes: int(r, 12)?,
+        public_url: text(r, 13)?,
+        requested_at: when(r, 14)?,
+        started_at: when_opt(r, 15)?,
+        completed_at: when_opt(r, 16)?,
+        cancel_requested: r.try_get(21).map_err(db)?,
+        claim_generation: int(r, 22)?,
+    })
 }
 
 /// `Repository.GetByID`; `None` is `ErrJobNotFound`.
 pub async fn admin_job(pool: &Pool, id: &str) -> Result<Option<AdminJob>> {
     let rows = pool
         .query(
-            "SELECT id, job_type, status, created_by_user_id, request_payload,
-	result_payload, message, error_message, progress_current, progress_total,
-	artifact_bucket, artifact_key, artifact_size_bytes,
-	public_url, requested_at, started_at, completed_at, heartbeat_at, expires_at,
-	published_at, updated_at, cancel_requested, claim_generation FROM admin_jobs WHERE id = $1",
+            &format!("SELECT {ADMIN_JOB_COLUMNS} FROM admin_jobs WHERE id = $1"),
             &[&id],
         )
         .await
         .map_err(db)?;
-    let Some(r) = rows.first() else {
-        return Ok(None);
-    };
-    Ok(Some(AdminJob {
-        id: text(r, 0)?,
-        job_type: text(r, 1)?,
-        status: text(r, 2)?,
-        result_payload: json_opt(r, 5)?,
-        progress_current: int(r, 8)?,
-        progress_total: int(r, 9)?,
-        requested_at: when(r, 14)?,
-        started_at: when_opt(r, 15)?,
-        completed_at: when_opt(r, 16)?,
-        cancel_requested: r.try_get(21).map_err(db)?,
-    }))
+    rows.first().map(scan_admin_job).transpose()
+}
+
+/// `Repository.ListPage`, including its creation-time and ID tie breaker.
+pub async fn list_admin_jobs(
+    pool: &Pool,
+    kind: &str,
+    before: SystemTime,
+    before_id: &str,
+    limit: i64,
+) -> Result<Vec<AdminJob>> {
+    if !(1..=201).contains(&limit) {
+        return Err("invalid job page limit".into());
+    }
+    let mut args: Vec<&(dyn silo_pg::ToSql + Sync)> = vec![&limit];
+    let mut query = format!("SELECT {ADMIN_JOB_COLUMNS} FROM admin_jobs WHERE true");
+    if !kind.is_empty() {
+        args.push(&kind);
+        query.push_str(&format!(" AND job_type=${}", args.len()));
+    }
+    if !before_id.is_empty() {
+        args.push(&before);
+        args.push(&before_id);
+        query.push_str(&format!(
+            " AND (requested_at,id)<(${},${})",
+            args.len() - 1,
+            args.len()
+        ));
+    }
+    query.push_str(" ORDER BY requested_at DESC,id DESC LIMIT $1");
+    pool.query(&query, &args)
+        .await
+        .map_err(db)?
+        .iter()
+        .map(scan_admin_job)
+        .collect()
 }
 
 /// `listLibraryPlaybackPreferences`' legacy row.

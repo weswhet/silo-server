@@ -528,6 +528,28 @@ fn kid_flow(f: &mut Flows) {
             "progress_library",
             None,
         );
+        if surface == ApiV2 {
+            let route = "/api/v2/progress/{media_item_id}/position";
+            for (id, name) in [(MOVIE, "clear_position"), (ABOVE, "clear_position_above")] {
+                let at = format!("/api/v2/progress/{id}/position");
+                kid(f, surface, "DELETE", route, &at, name, None);
+            }
+            let route = "/api/v2/watched/{id}";
+            for (id, suffix) in [(MOVIE, ""), (ABOVE, "_above")] {
+                let at = format!("/api/v2/watched/{id}");
+                for (method, action) in [("POST", "mark_watched"), ("DELETE", "unmark_watched")] {
+                    kid(
+                        f,
+                        surface,
+                        method,
+                        route,
+                        &at,
+                        &format!("{action}{suffix}"),
+                        None,
+                    );
+                }
+            }
+        }
         for (base, label) in [("favorites", "favorite"), ("watchlist", "watchlist")] {
             let route = format!("/api/{v}/{base}/{{item_id}}");
             let at = |id: &str| format!("/api/{v}/{base}/{id}");

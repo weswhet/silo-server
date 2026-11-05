@@ -37,8 +37,10 @@
 //! See the port report's `stubbed_or_skipped` and `divergences` for the exact list and the reasons.
 
 pub mod access;
+pub mod autoscan;
 pub mod blobstore;
 pub mod catalog;
+pub mod library_admin_reads;
 pub mod plugin_catalog;
 pub mod rating;
 pub mod requests;

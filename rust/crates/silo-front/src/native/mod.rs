@@ -22,8 +22,10 @@ pub mod history_caps;
 pub mod huma;
 pub mod interest;
 pub mod libraries;
+pub mod library_admin;
 pub mod notifications;
 pub mod personal;
+pub mod playback;
 pub mod plugin_ai;
 pub mod profiles;
 pub mod requests;
@@ -31,6 +33,7 @@ pub mod series_prefs;
 pub mod settings;
 pub mod system;
 pub mod user_caps;
+pub mod watch_state;
 
 use std::sync::Arc;
 
@@ -68,6 +71,9 @@ pub const DOMAINS: &[&[NativeRow]] = &[
     series_prefs::ROWS,
     downloads::ROWS,
     plugin_ai::ROWS,
+    library_admin::ROWS,
+    playback::ROWS,
+    watch_state::ROWS,
 ];
 
 const fn all_in_table() -> bool {
@@ -228,6 +234,7 @@ pub fn main_handler(inputs: &NativeInputs) -> BoxHandler {
 
     system::mount(&api, &v2, inputs);
     discovery::mount_public(&api, &v2);
+    library_admin::mount_public(&v2);
     if let Some(stack) = &inputs.stack {
         account::mount(stack, &api, &v2);
         auth::mount(stack, &api, &v2);
@@ -249,6 +256,9 @@ pub fn main_handler(inputs: &NativeInputs) -> BoxHandler {
         user_caps::mount(stack, &v2);
         admin_caps::mount(stack, &v2);
         history_caps::mount(stack, &v2);
+        library_admin::mount(stack, &v2);
+        playback::mount(stack, &v2);
+        watch_state::mount(stack, &v2);
     }
 
     api.handle("/api/v2/*", Arc::new(v2));
@@ -327,7 +337,9 @@ fn domain_row(path: &str) -> Option<&'static NativeRow> {
 
 /// Rows that need no credential: these work without the chain.
 fn is_public(row: &NativeRow) -> bool {
-    system::ROWS.contains(row) || discovery::PUBLIC_ROWS.contains(row)
+    system::ROWS.contains(row)
+        || discovery::PUBLIC_ROWS.contains(row)
+        || library_admin::PUBLIC_ROWS.contains(row)
 }
 
 /// The raw path is one `ServeMux` keeps as is and routes to the frontend.
@@ -381,7 +393,9 @@ impl Gate {
         if requests::STATUS_PATHS.contains(&bare) {
             fresh.request_server_enabled = Some(stack.refresh_request_server().await);
         }
-        if domain_row(bare).is_some_and(|row| personal::ROWS.contains(row)) {
+        if domain_row(bare)
+            .is_some_and(|row| personal::ROWS.contains(row) || row.path == "/api/v2/watched/{id}")
+        {
             fresh.personal_needs_go = Some(stack.refresh_personal_needs_go().await);
         }
         fresh
@@ -439,7 +453,8 @@ impl Gate {
             // Avatars and library posters in S3 need presigned URLs, which are not ported.
             if (profiles::ROWS.contains(row)
                 || libraries::ROWS.contains(row)
-                || notifications::ROWS.contains(row))
+                || notifications::ROWS.contains(row)
+                || library_admin::S3_ROWS.contains(row))
                 && self
                     .stack
                     .as_ref()
@@ -470,7 +485,7 @@ impl Gate {
                 return false;
             }
             // Watch provider fan-out and title promotion need the plugin host and watchlist service.
-            if personal::ROWS.contains(row)
+            if (personal::ROWS.contains(row) || row.path == "/api/v2/watched/{id}")
                 && self
                     .stack
                     .as_ref()

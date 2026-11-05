@@ -17,7 +17,7 @@ rustls-pki-types = "1"
 silo-gocompat = { path = "../silo-gocompat" }
 thiserror = "2"
 tokio = { version = "1", features = ["rt", "time", "sync", "macros", "net"] }
-tokio-postgres = { version = "0.7", default-features = false, features = ["runtime"] }
+tokio-postgres = { version = "0.7", default-features = false, features = ["runtime", "with-uuid-1"] }
 tokio-postgres-rustls = { version = "0.14", default-features = false, features = ["ring"] }
 tracing = "0.1"
 

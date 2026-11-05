@@ -806,7 +806,11 @@ fn add_doc_examples(b: &mut Builder) {
 /// Rows behind the native chain, each with its credential and profile refusals. A row in no such list
 /// still gets the generated anonymous cases.
 /// The contract's public operations in the native rows: they get the v2 guards' cases too.
-const PUBLIC_V2_ROWS: &[&str] = &["/api/v2/openapi.json", "/api/v2/auth/device/capability"];
+const PUBLIC_V2_ROWS: &[&str] = &[
+    "/api/v2/openapi.json",
+    "/api/v2/auth/device/capability",
+    "/api/v2/autoscan/capabilities",
+];
 
 const CHAIN_ROWS: &[(Surface, &str, bool)] = &[
     (Surface::ApiV1, "/api/v1/notifications/", true),
@@ -1041,6 +1045,56 @@ const CHAIN_ROWS: &[(Surface, &str, bool)] = &[
     (Surface::ApiV2, "/api/v2/capabilities/not-interested", true),
     (Surface::ApiV2, "/api/v2/progress/capabilities", true),
     (Surface::ApiV2, "/api/v2/home/capabilities", true),
+    (Surface::ApiV2, "/api/v2/scan/capabilities", true),
+    (Surface::ApiV2, "/api/v2/admin/jobs/capabilities", true),
+    (
+        Surface::ApiV2,
+        "/api/v2/admin/storage-transitions/capabilities",
+        true,
+    ),
+    (Surface::ApiV2, "/api/v2/admin/autoscan/settings", true),
+    (Surface::ApiV2, "/api/v2/admin/autoscan/status", true),
+    (Surface::ApiV2, "/api/v2/admin/autoscan/connections", true),
+    (Surface::ApiV2, "/api/v2/admin/autoscan/sources", true),
+    (Surface::ApiV2, "/api/v2/admin/autoscan/events", true),
+    (Surface::ApiV2, "/api/v2/admin/autoscan/scans", true),
+    (
+        Surface::ApiV2,
+        "/api/v2/admin/libraries/{library_id}/collection-groups",
+        true,
+    ),
+    (
+        Surface::ApiV2,
+        "/api/v2/admin/libraries/{library_id}/collection-groups/order",
+        true,
+    ),
+    (Surface::ApiV2, "/api/v2/admin/unmatched", true),
+    (Surface::ApiV2, "/api/v2/admin/nodes/capabilities", true),
+    (Surface::ApiV2, "/api/v2/admin/sessions/capabilities", true),
+    (Surface::ApiV2, "/api/v2/admin/sessions", true),
+    (Surface::ApiV2, "/api/v2/admin/sessions/summary", true),
+    (
+        Surface::ApiV2,
+        "/api/v2/admin/sessions/command-capabilities",
+        true,
+    ),
+    (
+        Surface::ApiV2,
+        "/api/v2/admin/playback-routing/capabilities",
+        true,
+    ),
+    (
+        Surface::ApiV2,
+        "/api/v2/playback/sessions/control/capabilities",
+        true,
+    ),
+    (Surface::ApiV2, "/api/v2/watch-together/capabilities", true),
+    (Surface::ApiV2, "/api/v2/admin/trickplay/libraries", true),
+    (
+        Surface::ApiV2,
+        "/api/v2/admin/files/{fileId}/contributions",
+        true,
+    ),
 ];
 
 /// `queryGuard`, Huma's unknown-parameter refusal, and the v2 representation guards.
