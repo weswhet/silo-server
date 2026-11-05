@@ -1038,6 +1038,24 @@ const CHAIN_ROWS: &[(Surface, &str, bool)] = &[
         true,
     ),
     (Surface::ApiV2, "/api/v2/admin/unmatched", true),
+    (Surface::ApiV2, "/api/v2/admin/nodes/capabilities", true),
+    (Surface::ApiV2, "/api/v2/admin/sessions/capabilities", true),
+    (
+        Surface::ApiV2,
+        "/api/v2/admin/sessions/command-capabilities",
+        true,
+    ),
+    (
+        Surface::ApiV2,
+        "/api/v2/admin/playback-routing/capabilities",
+        true,
+    ),
+    (
+        Surface::ApiV2,
+        "/api/v2/playback/sessions/control/capabilities",
+        true,
+    ),
+    (Surface::ApiV2, "/api/v2/watch-together/capabilities", true),
     (Surface::ApiV2, "/api/v2/admin/trickplay/libraries", true),
     (
         Surface::ApiV2,

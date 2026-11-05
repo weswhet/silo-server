@@ -22,6 +22,7 @@ pub mod libraries;
 pub mod library_admin;
 pub mod notifications;
 pub mod personal;
+pub mod playback;
 pub mod profiles;
 pub mod requests;
 pub mod settings;
@@ -58,6 +59,7 @@ pub const DOMAINS: &[&[NativeRow]] = &[
     collections::ROWS,
     requests::ROWS,
     library_admin::ROWS,
+    playback::ROWS,
 ];
 
 const fn all_in_table() -> bool {
@@ -235,6 +237,7 @@ pub fn main_handler(inputs: &NativeInputs) -> BoxHandler {
         requests::mount(stack, &api, &v2);
         discovery::mount(stack, &api, &v2);
         library_admin::mount(stack, &v2);
+        playback::mount(stack, &v2);
     }
 
     api.handle("/api/v2/*", Arc::new(v2));
