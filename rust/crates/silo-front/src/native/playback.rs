@@ -19,8 +19,9 @@ use super::chain::{Stack, V2Class, capability_json, write_capability};
 use crate::rows::NativeRow;
 use crate::rows::Surface::ApiV2;
 
+/// `GET /api/v2/admin/sessions` is ported and mounted but stays on Go: the plan reads it as a feed and
+/// never compares its contents, so it has no success evidence.
 pub const ROWS: &[NativeRow] = &[
-    NativeRow::new(ApiV2, "GET", "/api/v2/admin/sessions"),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/sessions/summary"),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/nodes/capabilities"),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/sessions/capabilities"),
@@ -32,12 +33,6 @@ pub const ROWS: &[NativeRow] = &[
         "/api/v2/playback/sessions/control/capabilities",
     ),
     NativeRow::new(ApiV2, "GET", "/api/v2/watch-together/capabilities"),
-];
-
-/// Rows whose poster URLs require S3 presigning, which is not ported.
-pub const S3_ROWS: &[NativeRow] = &[
-    NativeRow::new(ApiV2, "GET", "/api/v2/admin/sessions"),
-    NativeRow::new(ApiV2, "GET", "/api/v2/admin/sessions/summary"),
 ];
 
 /// `AdminNodeCapabilities`.
