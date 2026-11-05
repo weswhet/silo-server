@@ -1,6 +1,10 @@
-//! Read-only administrator collection-group and unmatched-file queries.
+//! Administrator collection-group mutations and library/file inspection queries.
 //! SQL follows `internal/catalog/library_collection_group_repo.go`,
 //! `library_collection_mutations.go`, and `internal/api/handlers/admin.go`.
+
+pub mod contributions;
+pub mod groups;
+pub mod trickplay;
 
 use silo_pg::Pool;
 use std::time::SystemTime;

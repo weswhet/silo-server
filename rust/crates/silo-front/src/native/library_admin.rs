@@ -8,7 +8,16 @@
 //! Collection-group list/order and unmatched-file reads use the Go repository SQL. Retained-job
 //! reads sign local artifact capabilities with Stack's artwork key. Job reads and
 //! `getAdminJobCapabilities` stay on Go for S3 deployments, because download URLs need presigning.
-//! Mutating scan, autoscan, job, task, and storage transition actions stay on Go.
+//! Trickplay library status and marker contribution history read Postgres only; contribution history
+//! applies catalog and file access checks without calling the plugin host or a remote provider.
+//! Collection-group writes preserve Go transaction boundaries and have no process-local effects.
+//! Job cancellation stays on Go: running image-cache cleanup signals its in-process CancelRegistry;
+//! queued cleanup also publishes a realtime event. Mutating scan, autoscan, task, and storage
+//! transition actions stay on Go.
+
+mod contributions;
+mod groups;
+mod trickplay;
 
 use std::sync::Arc;
 
@@ -35,6 +44,18 @@ use crate::rows::NativeRow;
 use crate::rows::Surface::ApiV2;
 
 pub const ROWS: &[NativeRow] = &[
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/trickplay/libraries"),
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/files/{fileId}/contributions"),
+    NativeRow::new(
+        ApiV2,
+        "POST",
+        "/api/v2/admin/libraries/{library_id}/collection-groups",
+    ),
+    NativeRow::new(
+        ApiV2,
+        "PUT",
+        "/api/v2/admin/libraries/{library_id}/collection-groups/order",
+    ),
     NativeRow::new(
         ApiV2,
         "GET",
@@ -153,6 +174,9 @@ pub fn mount_public(v2: &Mux) {
 }
 
 pub fn mount(stack: &Arc<Stack>, v2: &Mux) {
+    contributions::mount(stack, v2);
+    groups::mount(stack, v2);
+    trickplay::mount(stack, v2);
     mount_autoscan(stack, v2);
     mount_admin_reads(stack, v2);
     jobs::mount(stack, v2);

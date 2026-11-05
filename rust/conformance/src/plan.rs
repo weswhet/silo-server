@@ -1040,6 +1040,12 @@ const CHAIN_ROWS: &[(Surface, &str, bool)] = &[
     (Surface::ApiV2, "/api/v2/admin/unmatched", true),
     (Surface::ApiV2, "/api/v2/admin/jobs", true),
     (Surface::ApiV2, "/api/v2/admin/jobs/{id}", true),
+    (Surface::ApiV2, "/api/v2/admin/trickplay/libraries", true),
+    (
+        Surface::ApiV2,
+        "/api/v2/admin/files/{fileId}/contributions",
+        true,
+    ),
 ];
 
 /// `queryGuard`, Huma's unknown-parameter refusal, and the v2 representation guards.
