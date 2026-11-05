@@ -38,7 +38,7 @@ case "$lanes" in [1-9]) ;; *) conf_die "CONF_LANES must be 1-9" ;; esac
 [ "$((CONF_PAIR + lanes - 1))" -le 9 ] || conf_die "CONF_PAIR $CONF_PAIR leaves no room for $lanes lanes"
 lane_args=()
 pids=()
-for lane in $(seq 1 $((lanes - 1))); do
+for ((lane = 1; lane < lanes; lane++)); do
   dir="$CONF_PAIR_RUN/lanes/$lane"
   mkdir -p "$dir"
   conf_pair_shell "$((CONF_PAIR + lane))" "$CONF_SCRIPTS_DIR/lane-up.sh" "$dir" --go >"$dir/up.log" 2>&1 &
