@@ -44,9 +44,9 @@ pub async fn authorize(
     filter: &AccessFilter,
     quality: &str,
 ) -> Result<bool, String> {
-    let id = i32::try_from(file_id).map_err(|e| e.to_string())?;
+    // `media_files.id` is bigint.
     let rows = pool
-        .query(FILE_SQL, &[&id])
+        .query(FILE_SQL, &[&file_id])
         .await
         .map_err(|e| e.to_string())?;
     let Some(row) = rows.first() else {

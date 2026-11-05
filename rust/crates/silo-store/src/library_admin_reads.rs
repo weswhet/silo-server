@@ -62,7 +62,7 @@ pub async fn ungrouped_sort_order(pool: &Pool, library_id: i32) -> Result<i32, S
 		FROM media_folders
 		WHERE id = $1
 	",
-        &[&library_id],
+        &[&i64::from(library_id)],
     )
     .await
     .map_err(|e| e.to_string())?
@@ -78,7 +78,7 @@ pub async fn collection_order_revision(
 ) -> Result<Option<i64>, String> {
     pool.query(
         "SELECT COALESCE(v.revision,1) FROM media_folders f LEFT JOIN library_collection_order_revisions v ON v.library_id=f.id WHERE f.id=$1",
-        &[&library_id],
+        &[&i64::from(library_id)],
     )
     .await
     .map_err(|e| e.to_string())?

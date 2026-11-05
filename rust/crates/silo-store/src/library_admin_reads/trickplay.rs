@@ -3,7 +3,7 @@
 use silo_pg::Pool;
 
 pub struct LibraryStatus {
-    pub library_id: i32,
+    pub library_id: i64,
     pub name: String,
     pub pending: i64,
     pub running: i64,

@@ -69,7 +69,7 @@ pub async fn reorder(
             return result;
         }
         if expected != -1 {
-            let rows = pool.query(REVISION, &[&library_id]).await?;
+            let rows = pool.query(REVISION, &[&i64::from(library_id)]).await?;
             let row = rows.first().ok_or(MutationError::NotFound)?;
             if row.get::<_, i64>(0) != expected {
                 return Err(MutationError::Stale);
@@ -92,7 +92,7 @@ async fn reorder_attempt(
     let mut tx = session.begin().await?;
     tx.batch_execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
         .await?;
-    let rows = tx.query(REVISION, &[&library_id]).await?;
+    let rows = tx.query(REVISION, &[&i64::from(library_id)]).await?;
     let row = rows.first().ok_or(MutationError::NotFound)?;
     if expected != -1 && row.get::<_, i64>(0) != expected {
         return Err(MutationError::Stale);
@@ -150,7 +150,7 @@ async fn reorder_attempt(
 			SET collection_ungrouped_sort_order = $1
 			WHERE id = $2
 		",
-            &[&position, &library_id],
+            &[&position, &i64::from(library_id)],
         )
         .await?;
     }
