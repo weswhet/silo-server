@@ -394,6 +394,238 @@ fn v2_admin(f: &mut Flows) {
 
 const FALLBACK: &str = r#"{"enabled":true,"conditions":{},"skip_uhd":false,"hd":{"integration_id":"conf-radarr"},"uhd":{}}"#;
 
+fn v2_admin_limits(f: &mut Flows) {
+    // accounts.sql seeds user 2 in the migration-seeded default group (ID 1).
+    for (name, route, at, body, invalid) in [
+        (
+            "settings",
+            "/api/v2/admin/request-settings",
+            "/api/v2/admin/request-settings",
+            r#"{"requests_enabled":true,"global_max_requests":12,"global_window_days":7,"global_auto_approval_enabled":false,"force_dual_quality":false,"watchlist_requests":true}"#,
+            r#"{"requests_enabled":true,"global_max_requests":-1,"global_window_days":7,"global_auto_approval_enabled":false,"force_dual_quality":false}"#,
+        ),
+        (
+            "user_limit",
+            "/api/v2/admin/request-users/{user_id}/limit",
+            "/api/v2/admin/request-users/2/limit",
+            r#"{"limit_mode":"custom","max_requests":6,"window_days":7,"approval_mode":"manual"}"#,
+            r#"{"limit_mode":"custom","max_requests":null,"window_days":7,"approval_mode":"manual"}"#,
+        ),
+        (
+            "group_limit",
+            "/api/v2/admin/request-groups/{group_id}/limit",
+            "/api/v2/admin/request-groups/1/limit",
+            r#"{"limit_mode":"custom","max_requests":8,"window_days":14,"approval_mode":"auto"}"#,
+            r#"{"limit_mode":"custom","max_requests":null,"window_days":7,"approval_mode":"manual"}"#,
+        ),
+    ] {
+        go(
+            f,
+            ApiV2,
+            "GET",
+            route,
+            &format!("{name}_get"),
+            Call {
+                at: Some(at),
+                ..admin()
+            },
+        );
+        for (suffix, headers, body) in [
+            ("save", &[("If-Match", "*")][..], body),
+            ("no_precondition", &[][..], body),
+            ("stale", &[("If-Match", "\"stale\"")][..], body),
+            ("invalid", &[("If-Match", "*")][..], invalid),
+        ] {
+            go(
+                f,
+                ApiV2,
+                "PUT",
+                route,
+                &format!("{name}_{suffix}"),
+                Call {
+                    at: Some(at),
+                    body: Some(body),
+                    headers,
+                    ..admin()
+                },
+            );
+        }
+        if name != "settings" {
+            go(
+                f,
+                ApiV2,
+                "PUT",
+                route,
+                &format!("{name}_bad_enum"),
+                Call {
+                    at: Some(at),
+                    body: Some(
+                        r#"{"limit_mode":"invalid","max_requests":null,"window_days":null,"approval_mode":"inherit"}"#,
+                    ),
+                    headers: &[("If-Match", "*")],
+                    ..admin()
+                },
+            );
+            go(
+                f,
+                ApiV2,
+                "PUT",
+                route,
+                &format!("{name}_bad_minimum"),
+                Call {
+                    at: Some(at),
+                    body: Some(
+                        r#"{"limit_mode":"custom","max_requests":-1,"window_days":0,"approval_mode":"inherit"}"#,
+                    ),
+                    headers: &[("If-Match", "*")],
+                    ..admin()
+                },
+            );
+        }
+        go(
+            f,
+            ApiV2,
+            "GET",
+            route,
+            &format!("{name}_after_save"),
+            Call {
+                at: Some(at),
+                ..admin()
+            },
+        );
+        if name == "settings" {
+            go(
+                f,
+                ApiV2,
+                "PUT",
+                route,
+                "settings_preserve_watchlist",
+                Call {
+                    body: Some(
+                        r#"{"requests_enabled":true,"global_max_requests":12,"global_window_days":7,"global_auto_approval_enabled":false,"force_dual_quality":false}"#,
+                    ),
+                    headers: &[("If-Match", "*")],
+                    ..admin()
+                },
+            );
+            go(
+                f,
+                ApiV2,
+                "GET",
+                route,
+                "settings_after_preserve_watchlist",
+                admin(),
+            );
+        }
+    }
+    go(
+        f,
+        ApiV2,
+        "GET",
+        "/api/v2/admin/request-groups/{group_id}/limit",
+        "group_limit_missing",
+        Call {
+            at: Some("/api/v2/admin/request-groups/999999/limit"),
+            ..admin()
+        },
+    );
+}
+
+fn v2_admin_routing_usage(f: &mut Flows) {
+    let routing = "/api/v2/admin/request-routing";
+    go(f, ApiV2, "GET", routing, "routing_get", admin());
+    for (name, headers, body) in [
+        (
+            "routing_advanced",
+            &[("If-Match", "*")][..],
+            r#"{"mode":"advanced"}"#,
+        ),
+        (
+            "routing_standard",
+            &[("If-Match", "*")][..],
+            r#"{"mode":"standard"}"#,
+        ),
+        ("routing_no_precondition", &[][..], r#"{"mode":"advanced"}"#),
+        (
+            "routing_stale",
+            &[("If-Match", "\"stale\"")][..],
+            r#"{"mode":"advanced"}"#,
+        ),
+        (
+            "routing_invalid",
+            &[("If-Match", "*")][..],
+            r#"{"mode":"invalid"}"#,
+        ),
+    ] {
+        go(
+            f,
+            ApiV2,
+            "PUT",
+            routing,
+            name,
+            Call {
+                body: Some(body),
+                headers,
+                ..admin()
+            },
+        );
+    }
+    go(f, ApiV2, "GET", routing, "routing_after", admin());
+
+    let usage = "/api/v2/admin/request-users/{user_id}/usage";
+    for (name, id) in [
+        ("usage_user", 2),
+        ("usage_admin", 1),
+        ("usage_missing", 999999),
+    ] {
+        let at = format!("/api/v2/admin/request-users/{id}/usage");
+        go(
+            f,
+            ApiV2,
+            "GET",
+            usage,
+            name,
+            Call {
+                at: Some(&at),
+                ..admin()
+            },
+        );
+    }
+    go(
+        f,
+        ApiV2,
+        "PUT",
+        "/api/v2/admin/request-users/{user_id}/limit",
+        "usage_custom_limit",
+        Call {
+            at: Some("/api/v2/admin/request-users/2/limit"),
+            body: Some(
+                r#"{"limit_mode":"custom","max_requests":3,"window_days":14,"approval_mode":"auto"}"#,
+            ),
+            headers: &[("If-Match", "*")],
+            ..admin()
+        },
+    );
+    go(
+        f,
+        ApiV2,
+        "GET",
+        usage,
+        "usage_after_custom_limit",
+        Call {
+            at: Some("/api/v2/admin/request-users/2/usage"),
+            ..admin()
+        },
+    );
+    // The seed's child belongs to user 2; the admin account has no child profile.
+    f.step(Step {
+        identity: Identity::Kid,
+        at: Some("/api/v2/admin/request-users/2/usage"),
+        profile: Some("${kid_profile_id}"),
+        ..Step::new(ApiV2, "GET", usage, "requests:v2:usage_kid")
+    });
+}
+
 fn v2_routes(f: &mut Flows) {
     let root = "/api/v2/admin/request-routes";
     let one = "/api/v2/admin/request-routes/{id}";
@@ -688,6 +920,64 @@ pub(crate) fn add(b: &mut Builder) {
     v1(f);
     v2_requests(f);
     v2_admin(f);
+    v2_discover_layout(f);
+    v2_admin_limits(f);
+    v2_admin_routing_usage(f);
     v2_routes(f);
     v2_integrations(f);
+}
+
+fn v2_discover_layout(f: &mut Flows) {
+    let path = "/api/v2/admin/request-discover/layout";
+    go(f, ApiV2, "GET", path, "discover_layout_get", admin());
+    // PUT stays on Go because it schedules list fetching. These chart/brand-only
+    // writes exercise the native GET and DELETE against the shared stored layout.
+    let body = r#"{"rows":[{"id":"r_anime","type":"tmdb_discover","title":"Anime on Netflix","enabled":true,"limit":30,"hide_available":true,"discover":{"media_type":"series","sort_by":"popularity.desc","keyword_ids":[210024],"watch_provider_ids":[8],"watch_region":"US"}},{"type":"studios","title":"Studios","enabled":false}]}"#;
+    for (name, headers, body) in [
+        ("discover_layout_save", &[("If-Match", "*")][..], body),
+        (
+            "discover_layout_invalid",
+            &[("If-Match", "*")][..],
+            r#"{"rows":[{"type":"mdblist","title":"Bad","enabled":true,"list":{"url":"http://10.0.0.1/lists/a/b"}}]}"#,
+        ),
+        ("discover_layout_no_precondition", &[][..], body),
+        (
+            "discover_layout_stale",
+            &[("If-Match", "\"stale\"")][..],
+            body,
+        ),
+    ] {
+        go(
+            f,
+            ApiV2,
+            "PUT",
+            path,
+            name,
+            Call {
+                body: Some(body),
+                headers,
+                ..admin()
+            },
+        );
+    }
+    go(f, ApiV2, "GET", path, "discover_layout_after", admin());
+    go(
+        f,
+        ApiV2,
+        "DELETE",
+        path,
+        "discover_layout_reset",
+        Call {
+            headers: &[("If-Match", "*")],
+            ..admin()
+        },
+    );
+    go(
+        f,
+        ApiV2,
+        "GET",
+        path,
+        "discover_layout_after_reset",
+        admin(),
+    );
 }

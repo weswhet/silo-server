@@ -129,6 +129,17 @@ fn row_for(id: &str) -> Option<Row> {
                 json!("\"f6c99ed5e31df9e832d0ecb2\""),
             ],
         ),
+        "download-subscription-etags" => row(
+            "api_v2",
+            "GET /api/v2/downloads/subscriptions/{id}",
+            json!("\"0557f3d979daa091b1ac490e67dcb23a8e500c2ff71bdafab2c78b4dd2bf1e64\""),
+            json!("\"6c04fdf09392b587d4156b3f2e058dd6e73810f2b7ea97c8c72e25f726d307db\""),
+            vec![
+                json!("W/\"6c04fdf09392b587d4156b3f2e058dd6e73810f2b7ea97c8c72e25f726d307db\""),
+                json!("6c04fdf09392b587d4156b3f2e058dd6e73810f2b7ea97c8c72e25f726d307db"),
+                json!("\"6c04fdf09392b587\""),
+            ],
+        ),
         "legacy-device-setting-updated-at" => row(
             "api_v1",
             "GET /api/v1/settings/effective",

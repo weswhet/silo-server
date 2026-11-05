@@ -17,14 +17,17 @@ pub mod catalog;
 pub mod chain;
 pub mod collections;
 pub mod discovery;
+pub mod downloads;
 pub mod history_caps;
 pub mod huma;
 pub mod interest;
 pub mod libraries;
 pub mod notifications;
 pub mod personal;
+pub mod plugin_ai;
 pub mod profiles;
 pub mod requests;
+pub mod series_prefs;
 pub mod settings;
 pub mod system;
 pub mod user_caps;
@@ -62,6 +65,9 @@ pub const DOMAINS: &[&[NativeRow]] = &[
     user_caps::ROWS,
     admin_caps::ROWS,
     history_caps::ROWS,
+    series_prefs::ROWS,
+    downloads::ROWS,
+    plugin_ai::ROWS,
 ];
 
 const fn all_in_table() -> bool {
@@ -236,6 +242,9 @@ pub fn main_handler(inputs: &NativeInputs) -> BoxHandler {
         catalog::mount_v2(stack, &v2);
         collections::mount(stack, &api, &v2);
         requests::mount(stack, &api, &v2);
+        series_prefs::mount(stack, &api, &v2);
+        downloads::mount(stack, &api, &v2);
+        plugin_ai::mount(stack, &api, &v2);
         discovery::mount(stack, &api, &v2);
         user_caps::mount(stack, &v2);
         admin_caps::mount(stack, &v2);

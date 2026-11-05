@@ -2108,3 +2108,1091 @@ pub async fn requests_allowed(pool: &Pool, user: i64) -> Result<bool, Error> {
     };
     Ok(own.unwrap_or(base))
 }
+
+/// Server-wide request editor settings, including a missing row's defaults.
+#[derive(Clone, Debug, Default)]
+pub struct Settings {
+    pub revision: i64,
+    pub requests_enabled: bool,
+    pub global_max_requests: i64,
+    pub global_window_days: i64,
+    pub global_auto_approval_enabled: bool,
+    pub force_dual_quality: bool,
+    pub watchlist_requests: bool,
+    pub updated_at: Option<SystemTime>,
+}
+
+fn scan_settings(row: &Row) -> Settings {
+    Settings {
+        requests_enabled: row.get(0),
+        global_max_requests: i64::from(row.get::<_, i32>(1)),
+        global_window_days: i64::from(row.get::<_, i32>(2)),
+        global_auto_approval_enabled: row.get(3),
+        force_dual_quality: row.get(4),
+        watchlist_requests: row.get(5),
+        updated_at: Some(row.get(6)),
+        revision: row.get(7),
+    }
+}
+
+pub async fn get_settings(pool: &Pool) -> Result<Settings, Error> {
+    let rows = pool.query(SETTINGS_GET_SQL, &[]).await?;
+    Ok(rows.first().map(scan_settings).unwrap_or(Settings {
+        global_max_requests: 5,
+        global_window_days: 7,
+        watchlist_requests: true,
+        ..Settings::default()
+    }))
+}
+
+// PostgreSQL integer columns must receive int4 parameters, even though Go's API integers are int64.
+fn request_int4(value: i64) -> Result<i32, Error> {
+    i32::try_from(value).map_err(|e| Error::Internal(e.to_string()))
+}
+
+async fn lock_default_revision(
+    tx: &mut Tx<'_>,
+    sql: &str,
+    params: &[&(dyn silo_pg::ToSql + Sync)],
+    expected: i64,
+) -> Result<(), Error> {
+    let rows = tx.query(sql, params).await?;
+    let revision = rows.first().map(|row| row.get::<_, i64>(0)).unwrap_or(0);
+    if expected != -1 && expected != revision {
+        return Err(Error::StaleRevision);
+    }
+    Ok(())
+}
+
+pub async fn update_settings_conditional(
+    pool: &Pool,
+    input: Settings,
+    expected: i64,
+) -> Result<Settings, Error> {
+    if input.global_max_requests < 0 || input.global_window_days <= 0 {
+        return Err(Error::InvalidInput("invalid request settings".into()));
+    }
+    let mut session = pool.acquire().await?;
+    let mut tx = session.begin().await?;
+    lock_default_revision(
+        &mut tx,
+        "SELECT revision FROM request_settings WHERE id=true FOR UPDATE",
+        &[],
+        expected,
+    )
+    .await?;
+    let max = request_int4(input.global_max_requests)?;
+    let window = request_int4(input.global_window_days)?;
+    let rows = tx
+        .query(
+            SETTINGS_PUT_SQL,
+            &[
+                &input.requests_enabled,
+                &max,
+                &window,
+                &input.global_auto_approval_enabled,
+                &input.force_dual_quality,
+                &expected,
+                &input.watchlist_requests,
+            ],
+        )
+        .await?;
+    let output = scan_settings(rows.first().ok_or(Error::StaleRevision)?);
+    tx.commit().await?;
+    Ok(output)
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct UserLimit {
+    pub revision: i64,
+    pub user_id: i64,
+    pub limit_mode: String,
+    pub max_requests: Option<i64>,
+    pub window_days: Option<i64>,
+    pub approval_mode: String,
+    pub updated_at: Option<SystemTime>,
+}
+
+fn scan_user_limit(row: &Row) -> UserLimit {
+    UserLimit {
+        user_id: i64::from(row.get::<_, i32>(0)),
+        limit_mode: row.get(1),
+        max_requests: row.get::<_, Option<i32>>(2).map(i64::from),
+        window_days: row.get::<_, Option<i32>>(3).map(i64::from),
+        approval_mode: row.get(4),
+        updated_at: Some(row.get(5)),
+        revision: row.get(6),
+    }
+}
+
+pub async fn get_user_limit(pool: &Pool, user_id: i64) -> Result<UserLimit, Error> {
+    if user_id <= 0 {
+        return Err(Error::InvalidInput("invalid user id".into()));
+    }
+    let rows = pool
+        .query(
+            "SELECT EXISTS(SELECT 1 FROM users WHERE id=$1)",
+            &[&user_id],
+        )
+        .await?;
+    if !rows[0].get::<_, bool>(0) {
+        return Err(Error::NotFound);
+    }
+    let id = request_int4(user_id)?;
+    let rows = pool.query(USER_LIMIT_GET_SQL, &[&id]).await?;
+    Ok(rows.first().map(scan_user_limit).unwrap_or(UserLimit {
+        user_id,
+        limit_mode: "inherit".into(),
+        approval_mode: "inherit".into(),
+        ..UserLimit::default()
+    }))
+}
+
+pub async fn upsert_user_limit_conditional(
+    pool: &Pool,
+    mut input: UserLimit,
+    expected: i64,
+) -> Result<UserLimit, Error> {
+    if input.user_id <= 0 {
+        return Err(Error::InvalidInput("invalid user id".into()));
+    }
+    match input.limit_mode.as_str() {
+        "" | "inherit" | "unlimited" | "blocked" => {
+            if input.limit_mode.is_empty() {
+                input.limit_mode = "inherit".into();
+            }
+            input.max_requests = None;
+            input.window_days = None;
+        }
+        "custom" => {
+            if input.max_requests.is_none_or(|v| v < 0) || input.window_days.is_none_or(|v| v <= 0)
+            {
+                return Err(Error::InvalidInput(
+                    "custom limits require max_requests >= 0 and window_days > 0".into(),
+                ));
+            }
+        }
+        _ => return Err(Error::InvalidInput("invalid limit mode".into())),
+    }
+    match input.approval_mode.as_str() {
+        "" => input.approval_mode = "inherit".into(),
+        "inherit" | "manual" | "auto" | "blocked" => {}
+        _ => return Err(Error::InvalidInput("invalid approval mode".into())),
+    }
+    let id = request_int4(input.user_id)?;
+    let mut session = pool.acquire().await?;
+    let mut tx = session.begin().await?;
+    if tx
+        .query(
+            "SELECT id FROM users WHERE id=$1 FOR KEY SHARE",
+            &[&input.user_id],
+        )
+        .await?
+        .is_empty()
+    {
+        return Err(Error::NotFound);
+    }
+    lock_default_revision(
+        &mut tx,
+        "SELECT revision FROM request_user_limits WHERE user_id=$1 FOR UPDATE",
+        &[&id],
+        expected,
+    )
+    .await?;
+    let max = input.max_requests.map(request_int4).transpose()?;
+    let window = input.window_days.map(request_int4).transpose()?;
+    let rows = tx
+        .query(
+            USER_LIMIT_PUT_SQL,
+            &[
+                &id,
+                &input.limit_mode,
+                &max,
+                &window,
+                &input.approval_mode,
+                &expected,
+            ],
+        )
+        .await?;
+    let output = scan_user_limit(rows.first().ok_or(Error::StaleRevision)?);
+    tx.commit().await?;
+    Ok(output)
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct GroupLimit {
+    pub revision: i64,
+    pub group_id: i64,
+    pub limit_mode: String,
+    pub max_requests: Option<i64>,
+    pub window_days: Option<i64>,
+    pub approval_mode: String,
+    pub updated_at: Option<SystemTime>,
+}
+
+fn scan_group_limit(row: &Row) -> GroupLimit {
+    GroupLimit {
+        group_id: row.get(0),
+        limit_mode: row.get(1),
+        max_requests: row.get::<_, Option<i32>>(2).map(i64::from),
+        window_days: row.get::<_, Option<i32>>(3).map(i64::from),
+        approval_mode: row.get(4),
+        updated_at: Some(row.get(5)),
+        revision: row.get(6),
+    }
+}
+
+pub async fn get_group_limit(pool: &Pool, group_id: i64) -> Result<GroupLimit, Error> {
+    let rows = pool
+        .query(
+            "SELECT EXISTS(SELECT 1 FROM access_groups WHERE id=$1)",
+            &[&group_id],
+        )
+        .await?;
+    if !rows[0].get::<_, bool>(0) {
+        return Err(Error::NotFound);
+    }
+    let rows = pool.query(GROUP_LIMIT_GET_SQL, &[&group_id]).await?;
+    Ok(rows.first().map(scan_group_limit).unwrap_or(GroupLimit {
+        group_id,
+        limit_mode: "inherit".into(),
+        approval_mode: "inherit".into(),
+        ..GroupLimit::default()
+    }))
+}
+
+pub async fn upsert_group_limit_conditional(
+    pool: &Pool,
+    mut input: GroupLimit,
+    expected: i64,
+) -> Result<GroupLimit, Error> {
+    if input.group_id <= 0 {
+        return Err(Error::InvalidInput("invalid access group id".into()));
+    }
+    match input.limit_mode.as_str() {
+        "" | "inherit" | "unlimited" => {
+            if input.limit_mode.is_empty() {
+                input.limit_mode = "inherit".into();
+            }
+            input.max_requests = None;
+            input.window_days = None;
+        }
+        "custom" => {
+            if input.max_requests.is_none_or(|v| v < 0) || input.window_days.is_none_or(|v| v <= 0)
+            {
+                return Err(Error::Validation {
+                    fields: BTreeMap::from([("max_requests".into(), "A custom limit needs a number of requests (0 or more) and a window of at least one day.".into())]),
+                    form: String::new(),
+                });
+            }
+        }
+        _ => return Err(Error::InvalidInput("invalid limit mode".into())),
+    }
+    match input.approval_mode.as_str() {
+        "" => input.approval_mode = "inherit".into(),
+        "inherit" | "manual" | "auto" => {}
+        _ => return Err(Error::InvalidInput("invalid approval mode".into())),
+    }
+    let mut session = pool.acquire().await?;
+    let mut tx = session.begin().await?;
+    if tx
+        .query(
+            "SELECT id FROM access_groups WHERE id=$1 FOR KEY SHARE",
+            &[&input.group_id],
+        )
+        .await?
+        .is_empty()
+    {
+        return Err(Error::NotFound);
+    }
+    lock_default_revision(
+        &mut tx,
+        "SELECT revision FROM request_group_limits WHERE group_id=$1 FOR UPDATE",
+        &[&input.group_id],
+        expected,
+    )
+    .await?;
+    let max = input.max_requests.map(request_int4).transpose()?;
+    let window = input.window_days.map(request_int4).transpose()?;
+    let rows = tx
+        .query(
+            GROUP_LIMIT_PUT_SQL,
+            &[
+                &input.group_id,
+                &input.limit_mode,
+                &max,
+                &window,
+                &input.approval_mode,
+                &expected,
+            ],
+        )
+        .await?;
+    let output = scan_group_limit(rows.first().ok_or(Error::StaleRevision)?);
+    tx.commit().await?;
+    Ok(output)
+}
+
+const SETTINGS_GET_SQL: &str = r#"
+		SELECT requests_enabled, global_max_requests, global_window_days,
+		       global_auto_approval_enabled, force_dual_quality, watchlist_requests, updated_at, revision
+		FROM request_settings
+		WHERE id = true
+	"#;
+
+const SETTINGS_PUT_SQL: &str = r#"
+		INSERT INTO request_settings (
+			id, requests_enabled, global_max_requests, global_window_days,
+			global_auto_approval_enabled, force_dual_quality, watchlist_requests, updated_at
+		)
+		VALUES (true, $1, $2, $3, $4, $5, COALESCE($7::boolean, true), now())
+		ON CONFLICT (id) DO UPDATE SET
+			requests_enabled = EXCLUDED.requests_enabled,
+			global_max_requests = EXCLUDED.global_max_requests,
+			global_window_days = EXCLUDED.global_window_days,
+			global_auto_approval_enabled = EXCLUDED.global_auto_approval_enabled,
+			force_dual_quality = EXCLUDED.force_dual_quality,
+			watchlist_requests = COALESCE($7::boolean, request_settings.watchlist_requests),
+			updated_at = now()
+		WHERE $6::bigint = -1 OR request_settings.revision = $6
+		RETURNING requests_enabled, global_max_requests, global_window_days,
+		          global_auto_approval_enabled, force_dual_quality, watchlist_requests, updated_at, revision
+	"#;
+
+const USER_LIMIT_GET_SQL: &str = r#"
+		SELECT user_id, limit_mode, max_requests, window_days, approval_mode, updated_at, revision
+		FROM request_user_limits
+		WHERE user_id = $1
+	"#;
+
+const USER_LIMIT_PUT_SQL: &str = r#"
+		INSERT INTO request_user_limits (
+			user_id, limit_mode, max_requests, window_days, approval_mode, updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5, now())
+		ON CONFLICT (user_id) DO UPDATE SET
+			limit_mode = EXCLUDED.limit_mode,
+			max_requests = EXCLUDED.max_requests,
+			window_days = EXCLUDED.window_days,
+			approval_mode = EXCLUDED.approval_mode,
+			updated_at = now()
+		WHERE $6::bigint = -1 OR request_user_limits.revision = $6
+		RETURNING user_id, limit_mode, max_requests, window_days, approval_mode, updated_at, revision
+	"#;
+
+const GROUP_LIMIT_GET_SQL: &str = r#"
+		SELECT group_id, limit_mode, max_requests, window_days, approval_mode, updated_at, revision
+		FROM request_group_limits WHERE group_id = $1"#;
+
+const GROUP_LIMIT_PUT_SQL: &str = r#"
+		INSERT INTO request_group_limits (group_id, limit_mode, max_requests, window_days, approval_mode, updated_at)
+		VALUES ($1, $2, $3, $4, $5, now())
+		ON CONFLICT (group_id) DO UPDATE SET
+			limit_mode = EXCLUDED.limit_mode,
+			max_requests = EXCLUDED.max_requests,
+			window_days = EXCLUDED.window_days,
+			approval_mode = EXCLUDED.approval_mode,
+			updated_at = now()
+		WHERE $6::bigint = -1 OR request_group_limits.revision = $6
+		RETURNING group_id, limit_mode, max_requests, window_days, approval_mode, updated_at, revision"#;
+
+#[derive(Clone, Debug)]
+pub struct StandardDestination {
+    pub media_type: String,
+    pub hd_integration_id: String,
+    pub uhd_integration_id: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct RoutingOverview {
+    pub mode: String,
+    pub revision: i64,
+    pub standard: Vec<StandardDestination>,
+    pub standard_blocker: String,
+}
+
+fn server_serves(server: &Integration, media_type: &str) -> bool {
+    match config_kind(&server.plugin_config) {
+        "" => {
+            server.supported_media_types.is_empty()
+                || server.supported_media_types.iter().any(|m| m == media_type)
+        }
+        kind => {
+            kind == if media_type == "movie" {
+                "radarr"
+            } else {
+                "sonarr"
+            }
+        }
+    }
+}
+
+fn self_routed(server: &Integration) -> bool {
+    config_kind(&server.plugin_config).is_empty()
+}
+
+fn split_services(hd: &Integration, uhd: &Integration) -> bool {
+    if !self_routed(hd) && !self_routed(uhd) {
+        return false;
+    }
+    self_routed(hd) != self_routed(uhd)
+        || hd.installation_id.is_none()
+        || uhd.installation_id.is_none()
+        || hd.installation_id != uhd.installation_id
+        || hd.capability_id != uhd.capability_id
+}
+
+fn server_names(servers: &[&Integration]) -> String {
+    let mut names: Vec<&str> = servers.iter().map(|s| s.name.as_str()).collect();
+    names.sort();
+    names.join(", ")
+}
+
+fn standard_layout(integrations: &[Integration]) -> (Vec<StandardDestination>, String) {
+    let mut out = Vec::new();
+    let mut problems = Vec::new();
+    let mut split = false;
+    for media_type in ["movie", "series"] {
+        let (uhd, hd): (Vec<_>, Vec<_>) = integrations
+            .iter()
+            .filter(|s| s.enabled && server_serves(s, media_type))
+            .partition(|s| is_4k_server(&s.plugin_config));
+        let noun = plural(media_type);
+        let capitalized = if media_type == "movie" {
+            "Movies"
+        } else {
+            "Series"
+        };
+        if hd.len() > 1 {
+            problems.push(format!(
+                "{capitalized} can go to more than one server ({})",
+                server_names(&hd)
+            ));
+        }
+        if uhd.len() > 1 {
+            problems.push(format!(
+                "more than one 4K server takes {noun} ({})",
+                server_names(&uhd)
+            ));
+        }
+        if hd.len() > 1 || uhd.len() > 1 || hd.len() + uhd.len() == 0 {
+            continue;
+        }
+        if hd.len() == 1 && uhd.len() == 1 && split_services(hd[0], uhd[0]) {
+            split = true;
+            problems.push(format!(
+                "{noun} go to {} and their 4K versions to {}, which are different request services",
+                hd[0].name, uhd[0].name
+            ));
+            continue;
+        }
+        out.push(StandardDestination {
+            media_type: media_type.into(),
+            hd_integration_id: hd.first().map(|s| s.id.clone()).unwrap_or_default(),
+            uhd_integration_id: uhd.first().map(|s| s.id.clone()).unwrap_or_default(),
+        });
+    }
+    if problems.is_empty() {
+        return (out, String::new());
+    }
+    let mut blocker = problems.join("; ");
+    blocker[..1].make_ascii_uppercase();
+    blocker.push_str(". Standard sends each request to one server, plus one server marked 4K");
+    if split {
+        blocker.push_str(", through one request service. Switch to Advanced routing to send them to different services");
+    }
+    blocker.push('.');
+    (Vec::new(), blocker)
+}
+
+pub async fn get_routing_overview(pool: &Pool, cipher: &Cipher) -> Result<RoutingOverview, Error> {
+    let rows = pool
+        .query(
+            "SELECT mode, revision, updated_at FROM request_routing WHERE id",
+            &[],
+        )
+        .await?;
+    let (mode, revision) = rows
+        .first()
+        .map(|r| (r.get(0), r.get(1)))
+        .unwrap_or(("advanced".into(), 0));
+    let integrations = list_integrations(pool, cipher).await?;
+    let (standard, standard_blocker) = standard_layout(&integrations);
+    Ok(RoutingOverview {
+        mode,
+        revision,
+        standard,
+        standard_blocker,
+    })
+}
+
+pub async fn update_routing_mode_conditional(
+    pool: &Pool,
+    cipher: &Cipher,
+    mode: &str,
+    expected: i64,
+) -> Result<RoutingOverview, Error> {
+    if !matches!(mode, "standard" | "advanced") {
+        return Err(Error::InvalidInput("invalid routing mode".into()));
+    }
+    let mut session = pool.acquire().await?;
+    let mut tx = session.begin().await?;
+    lock_routing_mode(&mut tx).await?;
+    lock_default_revision(
+        &mut tx,
+        "SELECT revision FROM request_routing WHERE id FOR UPDATE",
+        &[],
+        expected,
+    )
+    .await?;
+    let sql = format!("SELECT {INTEGRATION_COLUMNS} FROM request_integrations ORDER BY name");
+    let integrations = tx
+        .query(&sql, &[])
+        .await?
+        .iter()
+        .map(|r| scan_integration(cipher, r))
+        .collect::<Result<Vec<_>, _>>()?;
+    let (layout, blocker) = standard_layout(&integrations);
+    if mode == "standard" && !blocker.is_empty() {
+        return Err(Error::Validation {
+            fields: BTreeMap::from([("mode".into(), blocker)]),
+            form: String::new(),
+        });
+    }
+    let rows = tx
+        .query(
+            "SELECT mode, revision, updated_at FROM request_routing WHERE id",
+            &[],
+        )
+        .await?;
+    if mode == "advanced"
+        && rows
+            .first()
+            .is_some_and(|r| r.get::<_, String>(0) == "standard")
+    {
+        seed_advanced_from_standard(&mut tx, &layout, &integrations).await?;
+    }
+    tx.query(SET_ROUTING_MODE_SQL, &[&mode]).await?;
+    tx.commit().await?;
+    drop(session);
+    get_routing_overview(pool, cipher).await
+}
+
+async fn seed_advanced_from_standard(
+    tx: &mut Tx<'_>,
+    layout: &[StandardDestination],
+    integrations: &[Integration],
+) -> Result<(), Error> {
+    let mut marked = Vec::new();
+    let mut unmarked = Vec::new();
+    for server in integrations {
+        if self_routed(server) {
+            continue;
+        }
+        if is_4k_server(&server.plugin_config) {
+            marked.push(server.id.clone());
+        } else {
+            unmarked.push(server.id.clone());
+        }
+    }
+    tx.execute(CLEAR_CHANGED_TIERS_SQL, &[&marked, &unmarked])
+        .await?;
+    let usable = |id: &str, media_type: &str, four_k: bool| -> Option<String> {
+        integrations
+            .iter()
+            .find(|s| s.id == id)
+            .filter(|s| {
+                !self_routed(s)
+                    && s.enabled
+                    && server_serves(s, media_type)
+                    && is_4k_server(&s.plugin_config) == four_k
+            })
+            .map(|s| s.id.clone())
+    };
+    for dest in layout {
+        let hd = usable(&dest.hd_integration_id, &dest.media_type, false);
+        let uhd = usable(&dest.uhd_integration_id, &dest.media_type, true);
+        if hd.is_none() && uhd.is_none() {
+            continue;
+        }
+        tx.execute(
+            SEED_STANDARD_FALLBACK_SQL,
+            &[
+                &fallback_id(&dest.media_type),
+                &dest.media_type,
+                &"Everything else",
+                &hd,
+                &uhd,
+            ],
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+#[derive(Clone, Debug)]
+pub struct EffectivePolicy {
+    pub requests_enabled: bool,
+    pub blocked: bool,
+    pub unlimited: bool,
+    pub used: i64,
+    pub max_requests: i64,
+    pub window_days: i64,
+    pub window_start: SystemTime,
+    pub remaining: i64,
+    pub auto_approve: bool,
+}
+
+/// `resolvePolicy`, with the account already loaded by the admin account check.
+pub async fn effective_policy(
+    pool: &Pool,
+    user_id: i64,
+    role: &str,
+    requests_allowed: Option<bool>,
+    access_group_id: Option<i64>,
+) -> Result<EffectivePolicy, Error> {
+    let settings = get_settings(pool).await?;
+    let id = request_int4(user_id)?;
+    let rows = pool.query(USER_LIMIT_GET_SQL, &[&id]).await?;
+    let limit = rows.first().map(scan_user_limit).unwrap_or_default();
+    let mut base_allowed = true;
+    let mut group = None;
+    if role != "admin"
+        && let Some(group_id) = access_group_id
+    {
+        let rows = pool.query(REQUEST_GROUP_POLICY_SQL, &[&user_id]).await?;
+        if let Some(row) = rows.first() {
+            base_allowed = row.get(13);
+        }
+        let rows = pool.query(GROUP_LIMIT_GET_SQL, &[&group_id]).await?;
+        group = rows.first().map(scan_group_limit);
+    }
+    let mut policy = EffectivePolicy {
+        requests_enabled: settings.requests_enabled,
+        blocked: !requests_allowed.unwrap_or(base_allowed),
+        unlimited: false,
+        used: 0,
+        max_requests: settings.global_max_requests,
+        window_days: if settings.global_window_days > 0 {
+            settings.global_window_days
+        } else {
+            7
+        },
+        window_start: SystemTime::UNIX_EPOCH,
+        remaining: 0,
+        auto_approve: settings.global_auto_approval_enabled,
+    };
+    let mut limit_mode = "inherit";
+    let mut max_requests = None;
+    let mut window_days = None;
+    let mut approval = "inherit";
+    let group_layer = group.as_ref().map(|g| {
+        (
+            g.limit_mode.as_str(),
+            g.max_requests,
+            g.window_days,
+            g.approval_mode.as_str(),
+        )
+    });
+    for (mode, max, days, approve) in group_layer.into_iter().chain(std::iter::once((
+        limit.limit_mode.as_str(),
+        limit.max_requests,
+        limit.window_days,
+        limit.approval_mode.as_str(),
+    ))) {
+        if !mode.is_empty() && mode != "inherit" {
+            limit_mode = mode;
+            max_requests = max;
+            window_days = days;
+        }
+        if !approve.is_empty() && approve != "inherit" {
+            approval = approve;
+        }
+    }
+    match limit_mode {
+        "blocked" => policy.blocked = true,
+        "unlimited" => policy.unlimited = true,
+        "custom" => {
+            if let Some(max) = max_requests {
+                policy.max_requests = max;
+            }
+            if let Some(days) = window_days.filter(|d| *d > 0) {
+                policy.window_days = days;
+            }
+        }
+        _ => {}
+    }
+    match approval {
+        "blocked" => policy.blocked = true,
+        "manual" => policy.auto_approve = false,
+        "auto" => policy.auto_approve = true,
+        _ => {}
+    }
+    // Go's service clock is UTC, so AddDate's days are exactly 24 hours.
+    policy.window_start =
+        SystemTime::now() - std::time::Duration::from_secs(policy.window_days as u64 * 86400);
+    if !policy.unlimited {
+        let user_id = request_int4(user_id)?;
+        let rows = pool
+            .query(COUNT_USER_REQUESTS_SQL, &[&user_id, &policy.window_start])
+            .await?;
+        policy.used = rows[0].get(0);
+        policy.remaining = (policy.max_requests - policy.used).max(0);
+    }
+    Ok(policy)
+}
+
+const SET_ROUTING_MODE_SQL: &str = r#"
+		INSERT INTO request_routing (id, mode, updated_at) VALUES (true, $1, now())
+		ON CONFLICT (id) DO UPDATE SET mode = EXCLUDED.mode, updated_at = now()
+		RETURNING mode, revision, updated_at"#;
+
+const CLEAR_CHANGED_TIERS_SQL: &str = r#"
+		UPDATE request_routes SET
+			hd_integration_id = CASE WHEN hd_integration_id = ANY($1) THEN NULL ELSE hd_integration_id END,
+			hd_overrides = CASE WHEN hd_integration_id = ANY($1) THEN '{}'::jsonb ELSE hd_overrides END,
+			uhd_integration_id = CASE WHEN uhd_integration_id = ANY($2) THEN NULL ELSE uhd_integration_id END,
+			uhd_overrides = CASE WHEN uhd_integration_id = ANY($2) THEN '{}'::jsonb ELSE uhd_overrides END
+		WHERE hd_integration_id = ANY($1) OR uhd_integration_id = ANY($2)"#;
+
+const SEED_STANDARD_FALLBACK_SQL: &str = r#"
+			INSERT INTO request_routes (id, media_type, position, name, is_fallback, hd_integration_id, uhd_integration_id)
+			VALUES ($1, $2, 1000, $3, true, $4, $5)
+			ON CONFLICT (id) DO UPDATE SET
+				hd_integration_id = coalesce(request_routes.hd_integration_id, EXCLUDED.hd_integration_id),
+				uhd_integration_id = coalesce(request_routes.uhd_integration_id, EXCLUDED.uhd_integration_id)
+			WHERE request_routes.hd_integration_id IS NULL
+			   OR (request_routes.uhd_integration_id IS NULL AND EXCLUDED.uhd_integration_id IS NOT NULL AND NOT request_routes.skip_uhd)"#;
+
+const REQUEST_GROUP_POLICY_SQL: &str = r#"
+		SELECT g.id, g.library_ids, g.max_playback_quality, g.download_allowed,
+			g.download_transcode_allowed, g.transcode_allowed, g.audio_transcode_allowed,
+			g.max_streams, g.max_transcodes, g.max_remote_stream_bitrate_kbps, g.max_local_stream_bitrate_kbps,
+			g.max_profiles, g.allowed_permissions, g.requests_allowed
+		FROM users u
+		JOIN access_groups g ON g.id = u.access_group_id
+		WHERE u.id = $1"#;
+
+const COUNT_USER_REQUESTS_SQL: &str = r#"
+		SELECT COUNT(*)
+		FROM media_requests
+		WHERE requested_by_user_id = $1
+		  AND created_at >= $2
+		  AND (outcome = 'active' OR (outcome = 'cancelled' AND last_error = ''))"#;
+
+// Discover layout reads and resets: internal/requests/discover_layout.go.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct DiscoverChart {
+    pub preset: String,
+    pub media_type: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub time_window: String,
+}
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct DiscoverFilter {
+    pub media_type: String,
+    pub sort_by: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub genre_ids: Vec<i64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub exclude_genre_ids: Vec<i64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub keyword_ids: Vec<i64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub company_ids: Vec<i64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub network_ids: Vec<i64>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub original_language: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub origin_countries: Vec<String>,
+    #[serde(skip_serializing_if = "discover_is_zero")]
+    pub year_from: i64,
+    #[serde(skip_serializing_if = "discover_is_zero")]
+    pub year_to: i64,
+    #[serde(skip_serializing_if = "discover_is_zero")]
+    pub vote_average_gte: f64,
+    #[serde(skip_serializing_if = "discover_is_zero")]
+    pub vote_count_gte: i64,
+    #[serde(skip_serializing_if = "discover_is_zero")]
+    pub runtime_gte: i64,
+    #[serde(skip_serializing_if = "discover_is_zero")]
+    pub runtime_lte: i64,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub certification_lte: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub watch_provider_ids: Vec<i64>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub watch_region: String,
+}
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct DiscoverList {
+    pub url: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub order: String,
+}
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct DiscoverRow {
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub id: String,
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub title: String,
+    pub enabled: bool,
+    #[serde(skip_serializing_if = "discover_is_zero")]
+    pub limit: i64,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub hide_available: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chart: Option<DiscoverChart>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub discover: Option<DiscoverFilter>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub list: Option<DiscoverList>,
+}
+
+fn discover_is_zero<T: Default + PartialEq>(v: &T) -> bool {
+    *v == T::default()
+}
+
+pub struct DiscoverLayout {
+    pub rows: Vec<DiscoverRow>,
+    pub customized: bool,
+    pub revision: i64,
+    pub updated_at: Option<SystemTime>,
+    pub sources: HashMap<String, DiscoverSource>,
+}
+
+pub struct DiscoverSource {
+    pub state: &'static str,
+    pub entries: i32,
+    pub refreshed_at: Option<SystemTime>,
+    pub error: String,
+}
+
+fn default_discover_rows() -> Vec<DiscoverRow> {
+    let mut rows = Vec::new();
+    for (id, title, preset, media_type, window) in [
+        (
+            "trending_movies",
+            "Trending Movies",
+            "trending",
+            "movie",
+            "week",
+        ),
+        (
+            "trending_series",
+            "Trending Series",
+            "trending",
+            "series",
+            "week",
+        ),
+        ("popular_movies", "Popular Movies", "popular", "movie", ""),
+        ("popular_series", "Popular Series", "popular", "series", ""),
+        (
+            "upcoming_movies",
+            "Upcoming Movies",
+            "upcoming",
+            "movie",
+            "",
+        ),
+        ("on_air_series", "On Air Series", "on_the_air", "series", ""),
+    ] {
+        rows.push(DiscoverRow {
+            id: id.into(),
+            kind: "tmdb_chart".into(),
+            title: title.into(),
+            enabled: true,
+            limit: 20,
+            chart: Some(DiscoverChart {
+                preset: preset.into(),
+                media_type: media_type.into(),
+                time_window: window.into(),
+            }),
+            ..Default::default()
+        });
+    }
+    for (id, title) in [
+        ("studios", "Studios"),
+        ("networks", "Networks"),
+        ("genres", "Genres"),
+    ] {
+        rows.push(DiscoverRow {
+            id: id.into(),
+            kind: id.into(),
+            title: title.into(),
+            enabled: true,
+            ..Default::default()
+        });
+    }
+    rows
+}
+
+// `discoverrows.SourceKey`, including the collection URL allowlists. No URL is fetched here.
+fn discover_source_key(row: &DiscoverRow) -> Option<String> {
+    let list = row.list.as_ref()?;
+    let raw = trim_space(&list.url);
+    if row.kind == "tmdb_list" {
+        let parse_id = |s: &str| {
+            if s.is_empty() || !s.bytes().all(|b| b.is_ascii_digit()) {
+                return None;
+            }
+            s.parse::<i64>().ok().filter(|id| *id > 0)
+        };
+        if let Some(id) = parse_id(raw) {
+            return Some(format!("tmdb_list:{id}"));
+        }
+        let raw = if raw.contains("://") {
+            raw.to_owned()
+        } else {
+            format!("https://{raw}")
+        };
+        let u = silo_gocompat::url::parse(&raw).ok()?;
+        let host = silo_gocompat::strings::to_lower(u.host.split(':').next()?);
+        if !matches!(u.scheme.as_str(), "http" | "https")
+            || !matches!(
+                host.strip_suffix('.').unwrap_or(&host),
+                "themoviedb.org" | "www.themoviedb.org"
+            )
+        {
+            return None;
+        }
+        let parts: Vec<_> = u.path.trim_matches('/').split('/').collect();
+        if parts.len() != 2 || parts[0] != "list" {
+            return None;
+        }
+        let id = parse_id(parts[1].split('-').next()?)?;
+        return Some(format!("tmdb_list:{id}"));
+    }
+    if row.kind != "mdblist" || raw.is_empty() {
+        return None;
+    }
+    let mut feed = raw.trim_end_matches('/').to_owned();
+    while feed.ends_with("/json/json") {
+        feed.truncate(feed.len() - 5);
+    }
+    if !feed.ends_with("/json") {
+        feed.push_str("/json");
+    }
+    let u = silo_gocompat::url::parse(&feed).ok()?;
+    let mut host_port = u.host.split(':');
+    let host = silo_gocompat::strings::to_lower(host_port.next()?);
+    let port = host_port.next().unwrap_or("");
+    if !matches!(u.scheme.as_str(), "http" | "https")
+        || u.user.is_some()
+        || !matches!(
+            host.strip_suffix('.').unwrap_or(&host),
+            "mdblist.com" | "www.mdblist.com"
+        )
+        || !matches!(port, "" | "80" | "443")
+        || !u.escaped_path().starts_with("/lists/")
+    {
+        return None;
+    }
+    Some(if list.order.is_empty() {
+        format!("mdblist:{feed}")
+    } else {
+        format!("mdblist:{feed}?order={}", list.order)
+    })
+}
+
+pub async fn get_discover_layout(pool: &Pool) -> Result<DiscoverLayout, Error> {
+    let rows = pool
+        .query(
+            "SELECT rows, revision, updated_at FROM request_discover_layout WHERE id",
+            &[],
+        )
+        .await?;
+    let mut out = match rows.first() {
+        Some(row) => DiscoverLayout {
+            rows: unmarshal::<Option<Vec<DiscoverRow>>>(
+                row.get::<_, silo_pg::TextValue>(0).0.as_bytes(),
+            )
+            .map_err(|e| Error::Internal(e.to_string()))?
+            .unwrap_or_default(),
+            customized: true,
+            revision: row.get(1),
+            updated_at: Some(row.get(2)),
+            sources: HashMap::new(),
+        },
+        None => DiscoverLayout {
+            rows: default_discover_rows(),
+            customized: false,
+            revision: 0,
+            updated_at: None,
+            sources: HashMap::new(),
+        },
+    };
+    let keys: HashMap<String, String> = out
+        .rows
+        .iter()
+        .filter_map(|row| discover_source_key(row).map(|key| (row.id.clone(), key)))
+        .collect();
+    if keys.is_empty() {
+        return Ok(out);
+    }
+    let source_keys: Vec<String> = keys.values().cloned().collect();
+    let statuses = pool.query("\n\t\tSELECT source_key, entry_count, refreshed_at, last_status, last_error\n\t\tFROM request_discover_list_snapshots WHERE source_key = ANY($1)", &[&source_keys]).await?;
+    for (id, key) in keys {
+        let mut status = DiscoverSource {
+            state: "pending",
+            entries: 0,
+            refreshed_at: None,
+            error: String::new(),
+        };
+        if let Some(row) = statuses.iter().find(|r| r.get::<_, String>(0) == key) {
+            status.entries = row.get(1);
+            status.refreshed_at = row.get(2);
+            let last: String = row.get(3);
+            if last == "error" {
+                status.state = "error";
+                status.error = row.get(4);
+            } else if last == "empty" {
+                status.state = "empty";
+            } else if status.refreshed_at.is_some() {
+                status.state = "ready";
+            }
+        }
+        out.sources.insert(id, status);
+    }
+    Ok(out)
+}
+
+pub async fn reset_discover_layout(pool: &Pool, expected: i64) -> Result<(), Error> {
+    let mut session = pool.acquire().await?;
+    let mut tx = session.begin().await?;
+    tx.batch_execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+        .await?;
+    let rows = tx
+        .query(
+            "SELECT revision FROM request_discover_layout WHERE id FOR UPDATE",
+            &[],
+        )
+        .await?;
+    match rows.first() {
+        Some(row) if expected != -1 && expected != row.get::<_, i64>(0) => {
+            return Err(Error::StaleRevision);
+        }
+        None if expected != 0 && expected != -1 => return Err(Error::StaleRevision),
+        _ => {}
+    }
+    let affected = tx
+        .execute(
+            "DELETE FROM request_discover_layout WHERE id AND ($1::bigint = -1 OR revision = $1)",
+            &[&expected],
+        )
+        .await?;
+    if affected == 0 && expected != -1 {
+        let rows = tx
+            .query("SELECT EXISTS (SELECT 1 FROM request_discover_layout)", &[])
+            .await?;
+        if rows[0].get::<_, bool>(0) {
+            return Err(Error::StaleRevision);
+        }
+    }
+    tx.commit().await?;
+    Ok(())
+}

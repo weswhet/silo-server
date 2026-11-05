@@ -473,6 +473,33 @@ pub async fn read_input(
     ))
 }
 
+/// Decode the validated body with Go JSON semantics, preserving type errors that schema
+/// validation cannot detect (fractional integer literals and machine-integer overflow).
+pub(super) fn decode_body<T: serde::de::DeserializeOwned>(r: &Request) -> Result<T, Problem> {
+    let raw = r
+        .extensions
+        .get::<RawBody>()
+        .map_or(&[][..], |b| b.0.as_slice());
+    silo_gocompat::json::unmarshal(raw).map_err(|mut error| {
+        if let silo_gocompat::json::DecodeError::Type { type_name, .. } = &mut error
+            && type_name == "int64"
+        {
+            *type_name = "int".to_owned();
+        }
+        from_huma_error(
+            &request_id(r),
+            422,
+            "validation failed",
+            &[HumaErr::Detail(ErrorDetail {
+                location: "body".to_owned(),
+                message: error.to_string(),
+            })],
+            MAX_JSON_BODY_BYTES,
+            HTTP_MAX_BYTES_MESSAGE,
+        )
+    })
+}
+
 /// `rejectNonNullableNulls` with nothing nullable.
 pub fn reject_nulls(raw: &[u8]) -> Option<Problem> {
     reject_nulls_except(raw, &[])
@@ -575,5 +602,35 @@ mod tests {
         assert!(!matches_pattern("^[1-9][0-9]*$", "012"));
         assert!(!matches_pattern("^[1-9][0-9]*$", ""));
         assert!(!matches_pattern("^[1-9][0-9]*$", "1a"));
+    }
+
+    #[test]
+    fn series_preference_schema_limits_and_language_pattern() {
+        for (schema, index, language) in [
+            (
+                "AudioPreferenceUpdate",
+                "audio_track_index",
+                "audio_language",
+            ),
+            (
+                "SubtitlePreferenceUpdate",
+                "subtitle_track_index",
+                "subtitle_language",
+            ),
+        ] {
+            let schema = schemas()["components"]["schemas"][schema].clone();
+            assert!(run(schema.clone(), json!({index: -1, language: " ENG "})).is_empty());
+            assert!(run(schema.clone(), json!({index: 0, language: "pt_BR"})).is_empty());
+            assert!(
+                run(schema.clone(), json!({index: -2}))
+                    .iter()
+                    .any(|(_, message)| message == "expected number >= -1")
+            );
+            assert!(
+                run(schema, json!({index: 0, language: "not a language"}))
+                    .iter()
+                    .any(|(_, message)| message.starts_with("expected string to match pattern"))
+            );
+        }
     }
 }

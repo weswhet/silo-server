@@ -39,6 +39,7 @@
 pub mod access;
 pub mod blobstore;
 pub mod catalog;
+pub mod plugin_catalog;
 pub mod rating;
 pub mod requests;
 pub mod settings;

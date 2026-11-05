@@ -16,6 +16,7 @@ use silo_api_v2::cursor::CursorScope;
 use silo_api_v2::precondition::evaluate_guarded_preconditions;
 use silo_api_v2::problem::{Problem, ProblemError};
 use silo_api_v2::wire::{Instant, paginated};
+use silo_auth::user::UserError;
 use silo_core::apiv2::{EntityTag, render_etag};
 use silo_gate::mw::auth::get_profile_id;
 use silo_gocompat::json::{Decoder, unmarshal};
@@ -31,12 +32,31 @@ use super::chain::{
     Stack, Step, V2Class, capability_json, client_ip_of, problem_type, write_capability,
     write_problem, write_v1_json, write_v2_json, write_v2_json_status,
 };
-use super::huma::RawBody;
+use super::huma::{RawBody, decode_body};
 use super::personal::user_of;
 use crate::rows::NativeRow;
 use crate::rows::Surface::{ApiV1, ApiV2};
 
 pub const ROWS: &[NativeRow] = &[
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/request-discover/layout"),
+    NativeRow::new(ApiV2, "DELETE", "/api/v2/admin/request-discover/layout"),
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/request-routing"),
+    NativeRow::new(ApiV2, "PUT", "/api/v2/admin/request-routing"),
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/request-users/{user_id}/usage"),
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/request-settings"),
+    NativeRow::new(ApiV2, "PUT", "/api/v2/admin/request-settings"),
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/request-users/{user_id}/limit"),
+    NativeRow::new(ApiV2, "PUT", "/api/v2/admin/request-users/{user_id}/limit"),
+    NativeRow::new(
+        ApiV2,
+        "GET",
+        "/api/v2/admin/request-groups/{group_id}/limit",
+    ),
+    NativeRow::new(
+        ApiV2,
+        "PUT",
+        "/api/v2/admin/request-groups/{group_id}/limit",
+    ),
     NativeRow::new(ApiV1, "GET", "/api/v1/requests/mine"),
     NativeRow::new(ApiV1, "GET", "/api/v1/requests/status"),
     NativeRow::new(ApiV1, "GET", "/api/v1/requests/{id}"),
@@ -1140,6 +1160,9 @@ fn mount_v2(stack: &Arc<Stack>, v2: &Mux) {
 }
 
 fn mount_v2_admin(stack: &Arc<Stack>, v2: &Mux) {
+    mount_v2_discover_layout(stack, v2);
+    mount_v2_request_limits(stack, v2);
+    mount_v2_request_routing_usage(stack, v2);
     let p = "/api/v2/admin/requests/capabilities";
     v2.get(
         p,
@@ -1315,6 +1338,567 @@ fn mount_v2_admin(stack: &Arc<Stack>, v2: &Mux) {
                 let body: ReasonBody = unmarshal(&raw_body(r)).unwrap_or_default();
                 match store::cancel(&s.pool, &v, r.url_param("id"), &body.reason, true).await {
                     Ok(req) => write_v2_json(w, &v2_request(req, &v)).await,
+                    Err(e) => write_problem(w, r, request_problem(e)).await,
+                }
+            }),
+        ),
+    );
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct AdminRequestRoutingBody {
+    mode: String,
+}
+
+#[derive(Serialize)]
+struct AdminRequestStandardDestination {
+    media_type: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    hd_integration_id: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    uhd_integration_id: String,
+}
+
+#[derive(Serialize)]
+struct AdminRequestRouting {
+    mode: String,
+    standard: Vec<AdminRequestStandardDestination>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    standard_unavailable_reason: String,
+}
+
+fn admin_routing(o: store::RoutingOverview) -> AdminRequestRouting {
+    AdminRequestRouting {
+        mode: o.mode,
+        standard: o
+            .standard
+            .into_iter()
+            .map(|d| AdminRequestStandardDestination {
+                media_type: d.media_type,
+                hd_integration_id: d.hd_integration_id,
+                uhd_integration_id: d.uhd_integration_id,
+            })
+            .collect(),
+        standard_unavailable_reason: o.standard_blocker,
+    }
+}
+
+#[derive(Serialize)]
+struct AdminRequestUserUsage {
+    requests_enabled: bool,
+    allowed: bool,
+    unlimited: bool,
+    used: i64,
+    max_requests: i64,
+    window_days: i64,
+    window_start: Instant,
+    remaining: i64,
+    auto_approve: bool,
+}
+
+fn admin_usage(p: store::EffectivePolicy) -> AdminRequestUserUsage {
+    AdminRequestUserUsage {
+        requests_enabled: p.requests_enabled,
+        allowed: !p.blocked,
+        unlimited: p.unlimited,
+        used: p.used,
+        max_requests: p.max_requests,
+        window_days: p.window_days,
+        window_start: instant(p.window_start),
+        remaining: p.remaining,
+        auto_approve: p.auto_approve,
+    }
+}
+
+fn mount_v2_request_routing_usage(stack: &Arc<Stack>, v2: &Mux) {
+    let p = "/api/v2/admin/request-routing";
+    v2.get(
+        p,
+        stack.v2(
+            p,
+            V2Class::ActingAdmin,
+            route!(stack, |s, w, r| {
+                match store::get_routing_overview(&s.pool, &s.cipher).await {
+                    Ok(o) => {
+                        w.header().set(
+                            "ETag",
+                            admin_tag(r, "routing", "global", o.revision).to_wire(),
+                        );
+                        write_v2_json(w, &admin_routing(o)).await;
+                    }
+                    Err(e) => write_problem(w, r, request_problem(e)).await,
+                }
+            }),
+        ),
+    );
+    v2.put(
+        p,
+        stack.v2_steps(
+            p,
+            V2_ADMIN_WRITE,
+            route!(stack, |s, w, r| {
+                let body: AdminRequestRoutingBody = match decode_body(r) {
+                    Ok(body) => body,
+                    Err(p) => return write_problem(w, r, p).await,
+                };
+                let current = match store::get_routing_overview(&s.pool, &s.cipher).await {
+                    Ok(current) => current,
+                    Err(e) => return write_problem(w, r, request_problem(e)).await,
+                };
+                let expected = match admin_guard(
+                    r,
+                    &admin_tag(r, "routing", "global", current.revision),
+                    current.revision,
+                ) {
+                    Ok(expected) => expected,
+                    Err(p) => return write_problem(w, r, p).await,
+                };
+                match store::update_routing_mode_conditional(
+                    &s.pool, &s.cipher, &body.mode, expected,
+                )
+                .await
+                {
+                    Ok(o) => {
+                        w.header().set(
+                            "ETag",
+                            admin_tag(r, "routing", "global", o.revision).to_wire(),
+                        );
+                        write_v2_json(w, &admin_routing(o)).await;
+                    }
+                    Err(Error::StaleRevision) => {
+                        let current = match store::get_routing_overview(&s.pool, &s.cipher).await {
+                            Ok(current) => current,
+                            Err(e) => return write_problem(w, r, request_problem(e)).await,
+                        };
+                        let p = problem(
+                            "precondition_failed",
+                            "Request routing changed; reload before saving.",
+                        )
+                        .with_header(
+                            "ETag",
+                            admin_tag(r, "routing", "global", current.revision).to_wire(),
+                        );
+                        write_problem(w, r, p).await;
+                    }
+                    Err(e) => write_problem(w, r, request_problem(e)).await,
+                }
+            }),
+        ),
+    );
+
+    let p = "/api/v2/admin/request-users/{user_id}/usage";
+    v2.get(
+        p,
+        stack.v2(
+            p,
+            V2Class::ActingAdmin,
+            route!(stack, |s, w, r| {
+                let id = match r.url_param("user_id").parse::<i64>() {
+                    Ok(id) if id > 0 => id,
+                    _ => {
+                        return write_problem(
+                            w,
+                            r,
+                            problem("validation_failed", "Invalid account ID."),
+                        )
+                        .await;
+                    }
+                };
+                let account = match s.users.get_by_id(id).await {
+                    Ok(account) => account,
+                    Err(UserError::NotFound) => {
+                        return write_problem(w, r, problem("not_found", "Account not found."))
+                            .await;
+                    }
+                    Err(_) => {
+                        return write_problem(
+                            w,
+                            r,
+                            problem("internal_error", "An unexpected error occurred."),
+                        )
+                        .await;
+                    }
+                };
+                match store::effective_policy(
+                    &s.pool,
+                    id,
+                    &account.role,
+                    account.requests_allowed,
+                    account.access_group_id,
+                )
+                .await
+                {
+                    Ok(policy) => write_v2_json(w, &admin_usage(policy)).await,
+                    Err(e) => write_problem(w, r, request_problem(e)).await,
+                }
+            }),
+        ),
+    );
+}
+
+#[derive(Serialize, Deserialize, Default)]
+#[serde(default)]
+struct AdminRequestSettings {
+    requests_enabled: bool,
+    global_max_requests: i64,
+    global_window_days: i64,
+    global_auto_approval_enabled: bool,
+    force_dual_quality: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    watchlist_requests: Option<bool>,
+}
+
+fn admin_settings(s: store::Settings) -> AdminRequestSettings {
+    AdminRequestSettings {
+        requests_enabled: s.requests_enabled,
+        global_max_requests: s.global_max_requests,
+        global_window_days: s.global_window_days,
+        global_auto_approval_enabled: s.global_auto_approval_enabled,
+        force_dual_quality: s.force_dual_quality,
+        watchlist_requests: Some(s.watchlist_requests),
+    }
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct AdminRequestLimitBody {
+    limit_mode: String,
+    max_requests: Option<i64>,
+    window_days: Option<i64>,
+    approval_mode: String,
+}
+
+#[derive(Serialize)]
+struct AdminRequestUserLimit {
+    user_id: String,
+    limit_mode: String,
+    max_requests: Option<i64>,
+    window_days: Option<i64>,
+    approval_mode: String,
+}
+
+fn admin_user_limit(limit: store::UserLimit) -> AdminRequestUserLimit {
+    AdminRequestUserLimit {
+        user_id: limit.user_id.to_string(),
+        limit_mode: limit.limit_mode,
+        max_requests: limit.max_requests,
+        window_days: limit.window_days,
+        approval_mode: limit.approval_mode,
+    }
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct AdminRequestGroupLimitBody {
+    limit_mode: String,
+    max_requests: Option<i64>,
+    window_days: Option<i64>,
+    approval_mode: String,
+}
+
+#[derive(Serialize)]
+struct AdminRequestGroupLimit {
+    group_id: String,
+    limit_mode: String,
+    max_requests: Option<i64>,
+    window_days: Option<i64>,
+    approval_mode: String,
+}
+
+fn admin_group_limit(limit: store::GroupLimit) -> AdminRequestGroupLimit {
+    AdminRequestGroupLimit {
+        group_id: limit.group_id.to_string(),
+        limit_mode: limit.limit_mode,
+        max_requests: limit.max_requests,
+        window_days: limit.window_days,
+        approval_mode: limit.approval_mode,
+    }
+}
+
+fn mount_v2_request_limits(stack: &Arc<Stack>, v2: &Mux) {
+    let p = "/api/v2/admin/request-settings";
+    v2.get(
+        p,
+        stack.v2(
+            p,
+            V2Class::ActingAdmin,
+            route!(stack, |s, w, r| {
+                match store::get_settings(&s.pool).await {
+                    Ok(settings) => {
+                        w.header().set(
+                            "ETag",
+                            admin_tag(r, "settings", "global", settings.revision).to_wire(),
+                        );
+                        write_v2_json(w, &admin_settings(settings)).await;
+                    }
+                    Err(e) => write_problem(w, r, request_problem(e)).await,
+                }
+            }),
+        ),
+    );
+    v2.put(
+        p,
+        stack.v2_steps(
+            p,
+            V2_ADMIN_WRITE,
+            route!(stack, |s, w, r| {
+                let body: AdminRequestSettings = match decode_body(r) {
+                    Ok(body) => body,
+                    Err(p) => return write_problem(w, r, p).await,
+                };
+                let current = match store::get_settings(&s.pool).await {
+                    Ok(current) => current,
+                    Err(e) => return write_problem(w, r, request_problem(e)).await,
+                };
+                let expected = match admin_guard(
+                    r,
+                    &admin_tag(r, "settings", "global", current.revision),
+                    current.revision,
+                ) {
+                    Ok(expected) => expected,
+                    Err(p) => return write_problem(w, r, p).await,
+                };
+                let settings = store::Settings {
+                    requests_enabled: body.requests_enabled,
+                    global_max_requests: body.global_max_requests,
+                    global_window_days: body.global_window_days,
+                    global_auto_approval_enabled: body.global_auto_approval_enabled,
+                    force_dual_quality: body.force_dual_quality,
+                    watchlist_requests: body
+                        .watchlist_requests
+                        .unwrap_or(current.watchlist_requests),
+                    ..store::Settings::default()
+                };
+                match store::update_settings_conditional(&s.pool, settings, expected).await {
+                    Ok(settings) => {
+                        w.header().set(
+                            "ETag",
+                            admin_tag(r, "settings", "global", settings.revision).to_wire(),
+                        );
+                        write_v2_json(w, &admin_settings(settings)).await;
+                    }
+                    Err(Error::StaleRevision) => {
+                        let current = match store::get_settings(&s.pool).await {
+                            Ok(current) => current,
+                            Err(e) => return write_problem(w, r, request_problem(e)).await,
+                        };
+                        let p = problem(
+                            "precondition_failed",
+                            "Request settings changed; reload before saving.",
+                        )
+                        .with_header(
+                            "ETag",
+                            admin_tag(r, "settings", "global", current.revision).to_wire(),
+                        );
+                        write_problem(w, r, p).await;
+                    }
+                    Err(e) => write_problem(w, r, request_problem(e)).await,
+                }
+            }),
+        ),
+    );
+
+    let p = "/api/v2/admin/request-users/{user_id}/limit";
+    v2.get(
+        p,
+        stack.v2(
+            p,
+            V2Class::ActingAdmin,
+            route!(stack, |s, w, r| {
+                let id = match r.url_param("user_id").parse::<i64>() {
+                    Ok(id) if id > 0 => id,
+                    _ => {
+                        return write_problem(
+                            w,
+                            r,
+                            problem("validation_failed", "Invalid account ID."),
+                        )
+                        .await;
+                    }
+                };
+                match store::get_user_limit(&s.pool, id).await {
+                    Ok(limit) => {
+                        w.header().set(
+                            "ETag",
+                            admin_tag(r, "limit", r.url_param("user_id"), limit.revision).to_wire(),
+                        );
+                        write_v2_json(w, &admin_user_limit(limit)).await;
+                    }
+                    Err(e) => write_problem(w, r, request_problem(e)).await,
+                }
+            }),
+        ),
+    );
+    v2.put(
+        p,
+        stack.v2_steps(
+            p,
+            V2_ADMIN_WRITE,
+            route!(stack, |s, w, r| {
+                let body: AdminRequestLimitBody = match decode_body(r) {
+                    Ok(body) => body,
+                    Err(p) => return write_problem(w, r, p).await,
+                };
+                let id = match r.url_param("user_id").parse::<i64>() {
+                    Ok(id) if id > 0 => id,
+                    _ => {
+                        return write_problem(
+                            w,
+                            r,
+                            problem("validation_failed", "Invalid account ID."),
+                        )
+                        .await;
+                    }
+                };
+                let current = match store::get_user_limit(&s.pool, id).await {
+                    Ok(current) => current,
+                    Err(e) => return write_problem(w, r, request_problem(e)).await,
+                };
+                let expected = match admin_guard(
+                    r,
+                    &admin_tag(r, "limit", r.url_param("user_id"), current.revision),
+                    current.revision,
+                ) {
+                    Ok(expected) => expected,
+                    Err(p) => return write_problem(w, r, p).await,
+                };
+                let limit = store::UserLimit {
+                    user_id: id,
+                    limit_mode: body.limit_mode,
+                    max_requests: body.max_requests,
+                    window_days: body.window_days,
+                    approval_mode: body.approval_mode,
+                    ..store::UserLimit::default()
+                };
+                match store::upsert_user_limit_conditional(&s.pool, limit, expected).await {
+                    Ok(limit) => {
+                        w.header().set(
+                            "ETag",
+                            admin_tag(r, "limit", r.url_param("user_id"), limit.revision).to_wire(),
+                        );
+                        write_v2_json(w, &admin_user_limit(limit)).await;
+                    }
+                    Err(Error::StaleRevision) => {
+                        let current = match store::get_user_limit(&s.pool, id).await {
+                            Ok(current) => current,
+                            Err(e) => return write_problem(w, r, request_problem(e)).await,
+                        };
+                        let p = problem(
+                            "precondition_failed",
+                            "The account limit changed; reload before saving.",
+                        )
+                        .with_header(
+                            "ETag",
+                            admin_tag(r, "limit", r.url_param("user_id"), current.revision)
+                                .to_wire(),
+                        );
+                        write_problem(w, r, p).await;
+                    }
+                    Err(e) => write_problem(w, r, request_problem(e)).await,
+                }
+            }),
+        ),
+    );
+
+    let p = "/api/v2/admin/request-groups/{group_id}/limit";
+    v2.get(
+        p,
+        stack.v2(
+            p,
+            V2Class::ActingAdmin,
+            route!(stack, |s, w, r| {
+                let id = match r.url_param("group_id").parse::<i64>() {
+                    Ok(id) if id > 0 => id,
+                    _ => {
+                        return write_problem(
+                            w,
+                            r,
+                            problem("validation_failed", "Invalid access group ID."),
+                        )
+                        .await;
+                    }
+                };
+                match store::get_group_limit(&s.pool, id).await {
+                    Ok(limit) => {
+                        w.header().set(
+                            "ETag",
+                            admin_tag(r, "group-limit", r.url_param("group_id"), limit.revision)
+                                .to_wire(),
+                        );
+                        write_v2_json(w, &admin_group_limit(limit)).await;
+                    }
+                    Err(e) => write_problem(w, r, request_problem(e)).await,
+                }
+            }),
+        ),
+    );
+    v2.put(
+        p,
+        stack.v2_steps(
+            p,
+            V2_ADMIN_WRITE,
+            route!(stack, |s, w, r| {
+                let body: AdminRequestGroupLimitBody = match decode_body(r) {
+                    Ok(body) => body,
+                    Err(p) => return write_problem(w, r, p).await,
+                };
+                let id = match r.url_param("group_id").parse::<i64>() {
+                    Ok(id) if id > 0 => id,
+                    _ => {
+                        return write_problem(
+                            w,
+                            r,
+                            problem("validation_failed", "Invalid access group ID."),
+                        )
+                        .await;
+                    }
+                };
+                let current = match store::get_group_limit(&s.pool, id).await {
+                    Ok(current) => current,
+                    Err(e) => return write_problem(w, r, request_problem(e)).await,
+                };
+                let expected = match admin_guard(
+                    r,
+                    &admin_tag(r, "group-limit", r.url_param("group_id"), current.revision),
+                    current.revision,
+                ) {
+                    Ok(expected) => expected,
+                    Err(p) => return write_problem(w, r, p).await,
+                };
+                let limit = store::GroupLimit {
+                    group_id: id,
+                    limit_mode: body.limit_mode,
+                    max_requests: body.max_requests,
+                    window_days: body.window_days,
+                    approval_mode: body.approval_mode,
+                    ..store::GroupLimit::default()
+                };
+                match store::upsert_group_limit_conditional(&s.pool, limit, expected).await {
+                    Ok(limit) => {
+                        w.header().set(
+                            "ETag",
+                            admin_tag(r, "group-limit", r.url_param("group_id"), limit.revision)
+                                .to_wire(),
+                        );
+                        write_v2_json(w, &admin_group_limit(limit)).await;
+                    }
+                    Err(Error::StaleRevision) => {
+                        let current = match store::get_group_limit(&s.pool, id).await {
+                            Ok(current) => current,
+                            Err(e) => return write_problem(w, r, request_problem(e)).await,
+                        };
+                        let p = problem(
+                            "precondition_failed",
+                            "The access group's request limit changed; reload before saving.",
+                        )
+                        .with_header(
+                            "ETag",
+                            admin_tag(r, "group-limit", r.url_param("group_id"), current.revision)
+                                .to_wire(),
+                        );
+                        write_problem(w, r, p).await;
+                    }
                     Err(e) => write_problem(w, r, request_problem(e)).await,
                 }
             }),
@@ -1770,4 +2354,116 @@ fn mount_v2_integrations(stack: &Arc<Stack>, v2: &Mux) {
 pub fn mount(stack: &Arc<Stack>, api: &Mux, v2: &Mux) {
     mount_v1(stack, api);
     mount_v2(stack, v2);
+}
+
+#[derive(Serialize)]
+struct V2DiscoverLayout {
+    customized: bool,
+    rows: Vec<V2DiscoverRow>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    updated_at: Option<Instant>,
+    max_rows: i32,
+}
+
+#[derive(Serialize)]
+struct V2DiscoverRow {
+    #[serde(flatten)]
+    row: store::DiscoverRow,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<V2DiscoverSource>,
+}
+
+#[derive(Serialize)]
+struct V2DiscoverSource {
+    state: &'static str,
+    entries: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    refreshed_at: Option<Instant>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    error: String,
+}
+
+fn v2_discover_layout(mut layout: store::DiscoverLayout) -> V2DiscoverLayout {
+    V2DiscoverLayout {
+        customized: layout.customized,
+        rows: layout
+            .rows
+            .into_iter()
+            .map(|row| {
+                let source = layout.sources.remove(&row.id).map(|s| V2DiscoverSource {
+                    state: s.state,
+                    entries: s.entries,
+                    refreshed_at: s.refreshed_at.map(instant),
+                    error: s.error,
+                });
+                V2DiscoverRow { row, source }
+            })
+            .collect(),
+        updated_at: layout.updated_at.map(instant),
+        max_rows: 30,
+    }
+}
+
+fn mount_v2_discover_layout(stack: &Arc<Stack>, v2: &Mux) {
+    // PUT remains on Go: saving triggers the list refresher's outbound fetches.
+    let p = "/api/v2/admin/request-discover/layout";
+    v2.get(
+        p,
+        stack.v2(
+            p,
+            V2Class::ActingAdmin,
+            route!(stack, |s, w, r| {
+                match store::get_discover_layout(&s.pool).await {
+                    Ok(layout) => {
+                        w.header().set(
+                            "ETag",
+                            admin_tag(r, "discover-layout", "global", layout.revision).to_wire(),
+                        );
+                        write_v2_json(w, &v2_discover_layout(layout)).await;
+                    }
+                    Err(e) => write_problem(w, r, request_problem(e)).await,
+                }
+            }),
+        ),
+    );
+    v2.delete(
+        p,
+        stack.v2_steps(
+            p,
+            V2_ADMIN_WRITE,
+            route!(stack, |s, w, r| {
+                let current = match store::get_discover_layout(&s.pool).await {
+                    Ok(c) => c,
+                    Err(e) => return write_problem(w, r, request_problem(e)).await,
+                };
+                let expected = match admin_guard(
+                    r,
+                    &admin_tag(r, "discover-layout", "global", current.revision),
+                    current.revision,
+                ) {
+                    Ok(v) => v,
+                    Err(p) => return write_problem(w, r, p).await,
+                };
+                match store::reset_discover_layout(&s.pool, expected).await {
+                    Ok(()) => w.write_header(204).await,
+                    Err(Error::StaleRevision) => {
+                        let current = match store::get_discover_layout(&s.pool).await {
+                            Ok(c) => c,
+                            Err(e) => return write_problem(w, r, request_problem(e)).await,
+                        };
+                        let p = problem(
+                            "precondition_failed",
+                            "The Discover layout changed; reload before saving.",
+                        )
+                        .with_header(
+                            "ETag",
+                            admin_tag(r, "discover-layout", "global", current.revision).to_wire(),
+                        );
+                        write_problem(w, r, p).await;
+                    }
+                    Err(e) => write_problem(w, r, request_problem(e)).await,
+                }
+            }),
+        ),
+    );
 }

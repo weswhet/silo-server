@@ -504,9 +504,9 @@ struct UpdateRequest {
     max_playback_quality: Option<String>,
 }
 
-type Sync = (String, Option<String>);
+pub(super) type Sync = (String, Option<String>);
 
-fn string_sync(out: &mut Vec<Sync>, key: &str, raw: Option<&str>) -> Result<(), String> {
+pub(super) fn string_sync(out: &mut Vec<Sync>, key: &str, raw: Option<&str>) -> Result<(), String> {
     let Some(raw) = raw else {
         return Ok(());
     };
@@ -533,7 +533,7 @@ fn string_sync(out: &mut Vec<Sync>, key: &str, raw: Option<&str>) -> Result<(), 
 
 /// `planProfileSettingsSync`.
 #[allow(clippy::too_many_arguments)]
-fn plan_sync(
+pub(super) fn plan_sync(
     audio: Option<&str>,
     subtitle: Option<&str>,
     metadata: Option<&str>,
