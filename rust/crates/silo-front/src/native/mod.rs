@@ -27,6 +27,7 @@ pub mod profiles;
 pub mod requests;
 pub mod settings;
 pub mod system;
+pub mod watch_state;
 
 use std::sync::Arc;
 
@@ -60,6 +61,7 @@ pub const DOMAINS: &[&[NativeRow]] = &[
     requests::ROWS,
     library_admin::ROWS,
     playback::ROWS,
+    watch_state::ROWS,
 ];
 
 const fn all_in_table() -> bool {
@@ -238,6 +240,7 @@ pub fn main_handler(inputs: &NativeInputs) -> BoxHandler {
         discovery::mount(stack, &api, &v2);
         library_admin::mount(stack, &v2);
         playback::mount(stack, &v2);
+        watch_state::mount(stack, &v2);
     }
 
     api.handle("/api/v2/*", Arc::new(v2));

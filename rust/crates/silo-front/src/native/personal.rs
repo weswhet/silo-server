@@ -264,7 +264,7 @@ struct StatePayload<'a> {
 
 /// `publishUserStateEvent`.
 #[allow(clippy::too_many_arguments)]
-async fn publish_state(
+pub(super) async fn publish_state(
     s: &Stack,
     user: i64,
     profile: &str,
