@@ -16,6 +16,7 @@ use silo_api_v2::cursor::CursorScope;
 use silo_api_v2::precondition::evaluate_guarded_preconditions;
 use silo_api_v2::problem::{Problem, ProblemError};
 use silo_api_v2::wire::{Instant, paginated};
+use silo_auth::user::UserError;
 use silo_core::apiv2::{EntityTag, render_etag};
 use silo_gate::mw::auth::get_profile_id;
 use silo_gocompat::json::{Decoder, unmarshal};
@@ -37,6 +38,9 @@ use crate::rows::NativeRow;
 use crate::rows::Surface::{ApiV1, ApiV2};
 
 pub const ROWS: &[NativeRow] = &[
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/request-routing"),
+    NativeRow::new(ApiV2, "PUT", "/api/v2/admin/request-routing"),
+    NativeRow::new(ApiV2, "GET", "/api/v2/admin/request-users/{user_id}/usage"),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/request-settings"),
     NativeRow::new(ApiV2, "PUT", "/api/v2/admin/request-settings"),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/request-users/{user_id}/limit"),
@@ -1155,6 +1159,7 @@ fn mount_v2(stack: &Arc<Stack>, v2: &Mux) {
 
 fn mount_v2_admin(stack: &Arc<Stack>, v2: &Mux) {
     mount_v2_request_limits(stack, v2);
+    mount_v2_request_routing_usage(stack, v2);
     let p = "/api/v2/admin/requests/capabilities";
     v2.get(
         p,
@@ -1330,6 +1335,198 @@ fn mount_v2_admin(stack: &Arc<Stack>, v2: &Mux) {
                 let body: ReasonBody = unmarshal(&raw_body(r)).unwrap_or_default();
                 match store::cancel(&s.pool, &v, r.url_param("id"), &body.reason, true).await {
                     Ok(req) => write_v2_json(w, &v2_request(req, &v)).await,
+                    Err(e) => write_problem(w, r, request_problem(e)).await,
+                }
+            }),
+        ),
+    );
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct AdminRequestRoutingBody {
+    mode: String,
+}
+
+#[derive(Serialize)]
+struct AdminRequestStandardDestination {
+    media_type: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    hd_integration_id: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    uhd_integration_id: String,
+}
+
+#[derive(Serialize)]
+struct AdminRequestRouting {
+    mode: String,
+    standard: Vec<AdminRequestStandardDestination>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    standard_unavailable_reason: String,
+}
+
+fn admin_routing(o: store::RoutingOverview) -> AdminRequestRouting {
+    AdminRequestRouting {
+        mode: o.mode,
+        standard: o
+            .standard
+            .into_iter()
+            .map(|d| AdminRequestStandardDestination {
+                media_type: d.media_type,
+                hd_integration_id: d.hd_integration_id,
+                uhd_integration_id: d.uhd_integration_id,
+            })
+            .collect(),
+        standard_unavailable_reason: o.standard_blocker,
+    }
+}
+
+#[derive(Serialize)]
+struct AdminRequestUserUsage {
+    requests_enabled: bool,
+    allowed: bool,
+    unlimited: bool,
+    used: i64,
+    max_requests: i64,
+    window_days: i64,
+    window_start: Instant,
+    remaining: i64,
+    auto_approve: bool,
+}
+
+fn admin_usage(p: store::EffectivePolicy) -> AdminRequestUserUsage {
+    AdminRequestUserUsage {
+        requests_enabled: p.requests_enabled,
+        allowed: !p.blocked,
+        unlimited: p.unlimited,
+        used: p.used,
+        max_requests: p.max_requests,
+        window_days: p.window_days,
+        window_start: instant(p.window_start),
+        remaining: p.remaining,
+        auto_approve: p.auto_approve,
+    }
+}
+
+fn mount_v2_request_routing_usage(stack: &Arc<Stack>, v2: &Mux) {
+    let p = "/api/v2/admin/request-routing";
+    v2.get(
+        p,
+        stack.v2(
+            p,
+            V2Class::ActingAdmin,
+            route!(stack, |s, w, r| {
+                match store::get_routing_overview(&s.pool, &s.cipher).await {
+                    Ok(o) => {
+                        w.header().set(
+                            "ETag",
+                            admin_tag(r, "routing", "global", o.revision).to_wire(),
+                        );
+                        write_v2_json(w, &admin_routing(o)).await;
+                    }
+                    Err(e) => write_problem(w, r, request_problem(e)).await,
+                }
+            }),
+        ),
+    );
+    v2.put(
+        p,
+        stack.v2_steps(
+            p,
+            V2_ADMIN_WRITE,
+            route!(stack, |s, w, r| {
+                let body: AdminRequestRoutingBody = match decode_body(r) {
+                    Ok(body) => body,
+                    Err(p) => return write_problem(w, r, p).await,
+                };
+                let current = match store::get_routing_overview(&s.pool, &s.cipher).await {
+                    Ok(current) => current,
+                    Err(e) => return write_problem(w, r, request_problem(e)).await,
+                };
+                let expected = match admin_guard(
+                    r,
+                    &admin_tag(r, "routing", "global", current.revision),
+                    current.revision,
+                ) {
+                    Ok(expected) => expected,
+                    Err(p) => return write_problem(w, r, p).await,
+                };
+                match store::update_routing_mode_conditional(
+                    &s.pool, &s.cipher, &body.mode, expected,
+                )
+                .await
+                {
+                    Ok(o) => {
+                        w.header().set(
+                            "ETag",
+                            admin_tag(r, "routing", "global", o.revision).to_wire(),
+                        );
+                        write_v2_json(w, &admin_routing(o)).await;
+                    }
+                    Err(Error::StaleRevision) => {
+                        let current = match store::get_routing_overview(&s.pool, &s.cipher).await {
+                            Ok(current) => current,
+                            Err(e) => return write_problem(w, r, request_problem(e)).await,
+                        };
+                        let p = problem(
+                            "precondition_failed",
+                            "Request routing changed; reload before saving.",
+                        )
+                        .with_header(
+                            "ETag",
+                            admin_tag(r, "routing", "global", current.revision).to_wire(),
+                        );
+                        write_problem(w, r, p).await;
+                    }
+                    Err(e) => write_problem(w, r, request_problem(e)).await,
+                }
+            }),
+        ),
+    );
+
+    let p = "/api/v2/admin/request-users/{user_id}/usage";
+    v2.get(
+        p,
+        stack.v2(
+            p,
+            V2Class::ActingAdmin,
+            route!(stack, |s, w, r| {
+                let id = match r.url_param("user_id").parse::<i64>() {
+                    Ok(id) if id > 0 => id,
+                    _ => {
+                        return write_problem(
+                            w,
+                            r,
+                            problem("validation_failed", "Invalid account ID."),
+                        )
+                        .await;
+                    }
+                };
+                let account = match s.users.get_by_id(id).await {
+                    Ok(account) => account,
+                    Err(UserError::NotFound) => {
+                        return write_problem(w, r, problem("not_found", "Account not found."))
+                            .await;
+                    }
+                    Err(_) => {
+                        return write_problem(
+                            w,
+                            r,
+                            problem("internal_error", "An unexpected error occurred."),
+                        )
+                        .await;
+                    }
+                };
+                match store::effective_policy(
+                    &s.pool,
+                    id,
+                    &account.role,
+                    account.requests_allowed,
+                    account.access_group_id,
+                )
+                .await
+                {
+                    Ok(policy) => write_v2_json(w, &admin_usage(policy)).await,
                     Err(e) => write_problem(w, r, request_problem(e)).await,
                 }
             }),

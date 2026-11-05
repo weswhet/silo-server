@@ -531,6 +531,101 @@ fn v2_admin_limits(f: &mut Flows) {
     );
 }
 
+fn v2_admin_routing_usage(f: &mut Flows) {
+    let routing = "/api/v2/admin/request-routing";
+    go(f, ApiV2, "GET", routing, "routing_get", admin());
+    for (name, headers, body) in [
+        (
+            "routing_advanced",
+            &[("If-Match", "*")][..],
+            r#"{"mode":"advanced"}"#,
+        ),
+        (
+            "routing_standard",
+            &[("If-Match", "*")][..],
+            r#"{"mode":"standard"}"#,
+        ),
+        ("routing_no_precondition", &[][..], r#"{"mode":"advanced"}"#),
+        (
+            "routing_stale",
+            &[("If-Match", "\"stale\"")][..],
+            r#"{"mode":"advanced"}"#,
+        ),
+        (
+            "routing_invalid",
+            &[("If-Match", "*")][..],
+            r#"{"mode":"invalid"}"#,
+        ),
+    ] {
+        go(
+            f,
+            ApiV2,
+            "PUT",
+            routing,
+            name,
+            Call {
+                body: Some(body),
+                headers,
+                ..admin()
+            },
+        );
+    }
+    go(f, ApiV2, "GET", routing, "routing_after", admin());
+
+    let usage = "/api/v2/admin/request-users/{user_id}/usage";
+    for (name, id) in [
+        ("usage_user", 2),
+        ("usage_admin", 1),
+        ("usage_missing", 999999),
+    ] {
+        let at = format!("/api/v2/admin/request-users/{id}/usage");
+        go(
+            f,
+            ApiV2,
+            "GET",
+            usage,
+            name,
+            Call {
+                at: Some(&at),
+                ..admin()
+            },
+        );
+    }
+    go(
+        f,
+        ApiV2,
+        "PUT",
+        "/api/v2/admin/request-users/{user_id}/limit",
+        "usage_custom_limit",
+        Call {
+            at: Some("/api/v2/admin/request-users/2/limit"),
+            body: Some(
+                r#"{"limit_mode":"custom","max_requests":3,"window_days":14,"approval_mode":"auto"}"#,
+            ),
+            headers: &[("If-Match", "*")],
+            ..admin()
+        },
+    );
+    go(
+        f,
+        ApiV2,
+        "GET",
+        usage,
+        "usage_after_custom_limit",
+        Call {
+            at: Some("/api/v2/admin/request-users/2/usage"),
+            ..admin()
+        },
+    );
+    // The seed's child belongs to user 2; the admin account has no child profile.
+    f.step(Step {
+        identity: Identity::Kid,
+        at: Some("/api/v2/admin/request-users/2/usage"),
+        profile: Some("${kid_profile_id}"),
+        ..Step::new(ApiV2, "GET", usage, "requests:v2:usage_kid")
+    });
+}
+
 fn v2_routes(f: &mut Flows) {
     let root = "/api/v2/admin/request-routes";
     let one = "/api/v2/admin/request-routes/{id}";
@@ -826,6 +921,7 @@ pub(crate) fn add(b: &mut Builder) {
     v2_requests(f);
     v2_admin(f);
     v2_admin_limits(f);
+    v2_admin_routing_usage(f);
     v2_routes(f);
     v2_integrations(f);
 }
