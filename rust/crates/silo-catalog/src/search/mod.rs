@@ -1,4 +1,5 @@
-//! Catalog search, ported from `internal/catalog`'s search files. [`query`] holds the query
-//! parser and title normalization (`search_query.go`, `search_fold.go`).
+//! Catalog search: query parsing, PostgreSQL builders, and fuzzy title reranking.
 
+pub mod fuzzy;
 pub mod query;
+pub mod sql;

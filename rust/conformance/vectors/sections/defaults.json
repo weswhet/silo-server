@@ -1,0 +1,3871 @@
+{
+ "clamp": [
+  [
+   -1,
+   -1
+  ],
+  [
+   0,
+   0
+  ],
+  [
+   1,
+   1
+  ],
+  [
+   100,
+   100
+  ],
+  [
+   499,
+   499
+  ],
+  [
+   500,
+   500
+  ],
+  [
+   501,
+   500
+  ],
+  [
+   100000,
+   500
+  ]
+ ],
+ "continue_parse": [
+  {
+   "config": "",
+   "error": false,
+   "from_config": "watching",
+   "type": "watching"
+  },
+  {
+   "config": "{}",
+   "error": false,
+   "from_config": "watching",
+   "type": "watching"
+  },
+  {
+   "config": "{\"continue_type\":\"listening\"}",
+   "error": false,
+   "from_config": "listening",
+   "type": "listening"
+  },
+  {
+   "config": "{\"continue_type\":\" READING \"}",
+   "error": false,
+   "from_config": "reading",
+   "type": "reading"
+  },
+  {
+   "config": "{\"continue_type\":\"bogus\"}",
+   "error": true,
+   "from_config": "watching",
+   "type": "watching"
+  },
+  {
+   "config": "{\"filter_type\":\"audiobook\"}",
+   "error": false,
+   "from_config": "listening",
+   "type": "listening"
+  },
+  {
+   "config": "{\"filter_type\":\"Ebook\"}",
+   "error": false,
+   "from_config": "reading",
+   "type": "reading"
+  },
+  {
+   "config": "{\"media_scope\":\"audiobook\"}",
+   "error": false,
+   "from_config": "listening",
+   "type": "listening"
+  },
+  {
+   "config": "{\"media_scope\":\" ebook\"}",
+   "error": false,
+   "from_config": "reading",
+   "type": "reading"
+  },
+  {
+   "config": "{\"filter_type\":\"movie\",\"media_scope\":\"ebook\"}",
+   "error": false,
+   "from_config": "reading",
+   "type": "reading"
+  },
+  {
+   "config": "not json",
+   "error": true,
+   "from_config": "watching",
+   "type": "watching"
+  },
+  {
+   "config": "{\"continue_type\":5}",
+   "error": true,
+   "from_config": "watching",
+   "type": "watching"
+  },
+  {
+   "config": "null",
+   "error": false,
+   "from_config": "watching",
+   "type": "watching"
+  },
+  {
+   "config": "{\"continue_type\":\"\",\"filter_type\":\"ebook\"}",
+   "error": false,
+   "from_config": "reading",
+   "type": "reading"
+  }
+ ],
+ "continue_types": [
+  {
+   "config": "{\"continue_type\":\"watching\"}",
+   "matches": [
+    "movie",
+    "episode"
+   ],
+   "next_up": true,
+   "type": "watching",
+   "valid": true
+  },
+  {
+   "config": "{\"continue_type\":\"listening\"}",
+   "matches": [
+    "audiobook"
+   ],
+   "next_up": false,
+   "type": "listening",
+   "valid": true
+  },
+  {
+   "config": "{\"continue_type\":\"reading\"}",
+   "matches": [
+    "ebook"
+   ],
+   "next_up": false,
+   "type": "reading",
+   "valid": true
+  },
+  {
+   "config": "{\"continue_type\":\"watching\"}",
+   "matches": null,
+   "next_up": false,
+   "type": "bogus",
+   "valid": false
+  },
+  {
+   "config": "{\"continue_type\":\"watching\"}",
+   "matches": null,
+   "next_up": false,
+   "type": "",
+   "valid": false
+  }
+ ],
+ "home": [
+  {
+   "libraries": [],
+   "sections": [
+    {
+     "id": "default-continue-watching",
+     "scope": "home",
+     "library_id": null,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Watching",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "continue_type": "watching"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-trending-discover",
+     "scope": "home",
+     "library_id": null,
+     "position": 1,
+     "section_type": "trending_discover",
+     "title": "Trending This Week",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "source": "tmdb",
+      "window": "week"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-movies",
+     "scope": "home",
+     "library_id": null,
+     "position": 2,
+     "section_type": "recently_added",
+     "title": "Recently Added Movies",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "movie",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-tv",
+     "scope": "home",
+     "library_id": null,
+     "position": 3,
+     "section_type": "recently_added",
+     "title": "Recently Added TV",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "series",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recommended-for-you",
+     "scope": "home",
+     "library_id": null,
+     "position": 4,
+     "section_type": "recommended_for_you",
+     "title": "Recommended for You",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-because-you-watched",
+     "scope": "home",
+     "library_id": null,
+     "position": 5,
+     "section_type": "because_you_watched",
+     "title": "Because You Watched",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-returning-shows",
+     "scope": "home",
+     "library_id": null,
+     "position": 6,
+     "section_type": "returning_shows",
+     "title": "Returning Shows",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-top-rated",
+     "scope": "home",
+     "library_id": null,
+     "position": 7,
+     "section_type": "critically_acclaimed",
+     "title": "Top Rated",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-hidden-gems",
+     "scope": "home",
+     "library_id": null,
+     "position": 8,
+     "section_type": "hidden_gems",
+     "title": "Hidden Gems",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "min_rating": 7.5
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-seasonal",
+     "scope": "home",
+     "library_id": null,
+     "position": 9,
+     "section_type": "seasonal_themed",
+     "title": "Seasonal Picks",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "enabled_themes": [
+       "halloween",
+       "christmas",
+       "new_year",
+       "valentines",
+       "st_patricks",
+       "easter",
+       "thanksgiving",
+       "summer_blockbuster",
+       "saturday_morning"
+      ]
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ]
+  },
+  {
+   "libraries": [
+    {
+     "id": 1,
+     "name": "Movies",
+     "type": "movies"
+    },
+    {
+     "id": 2,
+     "name": "TV",
+     "type": "series"
+    }
+   ],
+   "sections": [
+    {
+     "id": "default-continue-watching",
+     "scope": "home",
+     "library_id": null,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Watching",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "continue_type": "watching"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-trending-discover",
+     "scope": "home",
+     "library_id": null,
+     "position": 1,
+     "section_type": "trending_discover",
+     "title": "Trending This Week",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "source": "tmdb",
+      "window": "week"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-movies",
+     "scope": "home",
+     "library_id": null,
+     "position": 2,
+     "section_type": "recently_added",
+     "title": "Recently Added Movies",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "movie",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-tv",
+     "scope": "home",
+     "library_id": null,
+     "position": 3,
+     "section_type": "recently_added",
+     "title": "Recently Added TV",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "series",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recommended-for-you",
+     "scope": "home",
+     "library_id": null,
+     "position": 4,
+     "section_type": "recommended_for_you",
+     "title": "Recommended for You",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-because-you-watched",
+     "scope": "home",
+     "library_id": null,
+     "position": 5,
+     "section_type": "because_you_watched",
+     "title": "Because You Watched",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-returning-shows",
+     "scope": "home",
+     "library_id": null,
+     "position": 6,
+     "section_type": "returning_shows",
+     "title": "Returning Shows",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-top-rated",
+     "scope": "home",
+     "library_id": null,
+     "position": 7,
+     "section_type": "critically_acclaimed",
+     "title": "Top Rated",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-hidden-gems",
+     "scope": "home",
+     "library_id": null,
+     "position": 8,
+     "section_type": "hidden_gems",
+     "title": "Hidden Gems",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "min_rating": 7.5
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-seasonal",
+     "scope": "home",
+     "library_id": null,
+     "position": 9,
+     "section_type": "seasonal_themed",
+     "title": "Seasonal Picks",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "enabled_themes": [
+       "halloween",
+       "christmas",
+       "new_year",
+       "valentines",
+       "st_patricks",
+       "easter",
+       "thanksgiving",
+       "summer_blockbuster",
+       "saturday_morning"
+      ]
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ]
+  },
+  {
+   "libraries": [
+    {
+     "id": 3,
+     "name": "Mixed",
+     "type": "mixed"
+    },
+    {
+     "id": 4,
+     "name": "Books",
+     "type": "audiobooks"
+    }
+   ],
+   "sections": [
+    {
+     "id": "default-continue-watching",
+     "scope": "home",
+     "library_id": null,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Watching",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "continue_type": "watching"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-continue-listening",
+     "scope": "home",
+     "library_id": null,
+     "position": 1,
+     "section_type": "continue_watching",
+     "title": "Continue Listening",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "continue_type": "listening"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-trending-discover",
+     "scope": "home",
+     "library_id": null,
+     "position": 2,
+     "section_type": "trending_discover",
+     "title": "Trending This Week",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "source": "tmdb",
+      "window": "week"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-movies",
+     "scope": "home",
+     "library_id": null,
+     "position": 3,
+     "section_type": "recently_added",
+     "title": "Recently Added Movies",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "movie",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-tv",
+     "scope": "home",
+     "library_id": null,
+     "position": 4,
+     "section_type": "recently_added",
+     "title": "Recently Added TV",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "series",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-home-recently_added-library-4",
+     "scope": "home",
+     "library_id": null,
+     "position": 5,
+     "section_type": "recently_added",
+     "title": "Recently Added in Books",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "filter_library_id": 4,
+      "generated_library_id": null,
+      "generated_kind": "",
+      "generated_source": "home_library_recent"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-home-recently_released-library-4",
+     "scope": "home",
+     "library_id": null,
+     "position": 6,
+     "section_type": "recently_released",
+     "title": "Recently Released in Books",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "filter_library_id": 4,
+      "generated_library_id": null,
+      "generated_kind": "",
+      "generated_source": "home_library_recent"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recommended-for-you",
+     "scope": "home",
+     "library_id": null,
+     "position": 7,
+     "section_type": "recommended_for_you",
+     "title": "Recommended for You",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-because-you-watched",
+     "scope": "home",
+     "library_id": null,
+     "position": 8,
+     "section_type": "because_you_watched",
+     "title": "Because You Watched",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-returning-shows",
+     "scope": "home",
+     "library_id": null,
+     "position": 9,
+     "section_type": "returning_shows",
+     "title": "Returning Shows",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-top-rated",
+     "scope": "home",
+     "library_id": null,
+     "position": 10,
+     "section_type": "critically_acclaimed",
+     "title": "Top Rated",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-hidden-gems",
+     "scope": "home",
+     "library_id": null,
+     "position": 11,
+     "section_type": "hidden_gems",
+     "title": "Hidden Gems",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "min_rating": 7.5
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-seasonal",
+     "scope": "home",
+     "library_id": null,
+     "position": 12,
+     "section_type": "seasonal_themed",
+     "title": "Seasonal Picks",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "enabled_themes": [
+       "halloween",
+       "christmas",
+       "new_year",
+       "valentines",
+       "st_patricks",
+       "easter",
+       "thanksgiving",
+       "summer_blockbuster",
+       "saturday_morning"
+      ]
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ]
+  },
+  {
+   "libraries": [
+    {
+     "id": 5,
+     "name": "Novels",
+     "type": "ebook"
+    },
+    {
+     "id": 6,
+     "name": "Comics",
+     "type": "manga"
+    },
+    {
+     "id": 7,
+     "name": "Pods",
+     "type": "podcasts"
+    }
+   ],
+   "sections": [
+    {
+     "id": "default-continue-watching",
+     "scope": "home",
+     "library_id": null,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Watching",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "continue_type": "watching"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-trending-discover",
+     "scope": "home",
+     "library_id": null,
+     "position": 1,
+     "section_type": "trending_discover",
+     "title": "Trending This Week",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "source": "tmdb",
+      "window": "week"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-movies",
+     "scope": "home",
+     "library_id": null,
+     "position": 2,
+     "section_type": "recently_added",
+     "title": "Recently Added Movies",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "movie",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-tv",
+     "scope": "home",
+     "library_id": null,
+     "position": 3,
+     "section_type": "recently_added",
+     "title": "Recently Added TV",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "series",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-home-recently_added-library-5",
+     "scope": "home",
+     "library_id": null,
+     "position": 4,
+     "section_type": "recently_added",
+     "title": "Recently Added in Novels",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "filter_library_id": 5,
+      "generated_library_id": null,
+      "generated_kind": "",
+      "generated_source": "home_library_recent"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-home-recently_released-library-5",
+     "scope": "home",
+     "library_id": null,
+     "position": 5,
+     "section_type": "recently_released",
+     "title": "Recently Released in Novels",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "filter_library_id": 5,
+      "generated_library_id": null,
+      "generated_kind": "",
+      "generated_source": "home_library_recent"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-home-recently_added-library-6",
+     "scope": "home",
+     "library_id": null,
+     "position": 6,
+     "section_type": "recently_added",
+     "title": "Recently Added in Comics",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "library_ids": [
+       6
+      ],
+      "media_scope": "manga",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      },
+      "generated_library_id": 6,
+      "generated_source": "home_library_recent"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-home-recently_released-library-6",
+     "scope": "home",
+     "library_id": null,
+     "position": 7,
+     "section_type": "recently_released",
+     "title": "Recently Released in Comics",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "library_ids": [
+       6
+      ],
+      "media_scope": "manga",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      },
+      "generated_library_id": 6,
+      "generated_source": "home_library_recent"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-home-recently_added-library-7",
+     "scope": "home",
+     "library_id": null,
+     "position": 8,
+     "section_type": "recently_added",
+     "title": "Recently Added in Pods",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "filter_library_id": 7,
+      "generated_library_id": null,
+      "generated_kind": "",
+      "generated_source": "home_library_recent"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-home-recently_released-library-7",
+     "scope": "home",
+     "library_id": null,
+     "position": 9,
+     "section_type": "recently_released",
+     "title": "Recently Released in Pods",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "filter_library_id": 7,
+      "generated_library_id": null,
+      "generated_kind": "",
+      "generated_source": "home_library_recent"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recommended-for-you",
+     "scope": "home",
+     "library_id": null,
+     "position": 10,
+     "section_type": "recommended_for_you",
+     "title": "Recommended for You",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-because-you-watched",
+     "scope": "home",
+     "library_id": null,
+     "position": 11,
+     "section_type": "because_you_watched",
+     "title": "Because You Watched",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-returning-shows",
+     "scope": "home",
+     "library_id": null,
+     "position": 12,
+     "section_type": "returning_shows",
+     "title": "Returning Shows",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-top-rated",
+     "scope": "home",
+     "library_id": null,
+     "position": 13,
+     "section_type": "critically_acclaimed",
+     "title": "Top Rated",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-hidden-gems",
+     "scope": "home",
+     "library_id": null,
+     "position": 14,
+     "section_type": "hidden_gems",
+     "title": "Hidden Gems",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "min_rating": 7.5
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-seasonal",
+     "scope": "home",
+     "library_id": null,
+     "position": 15,
+     "section_type": "seasonal_themed",
+     "title": "Seasonal Picks",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "enabled_themes": [
+       "halloween",
+       "christmas",
+       "new_year",
+       "valentines",
+       "st_patricks",
+       "easter",
+       "thanksgiving",
+       "summer_blockbuster",
+       "saturday_morning"
+      ]
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ]
+  },
+  {
+   "libraries": [
+    {
+     "id": 8,
+     "name": "Shows",
+     "type": "series"
+    },
+    {
+     "id": 9,
+     "name": " Audio ",
+     "type": "Audiobook"
+    },
+    {
+     "id": 10,
+     "name": "Films",
+     "type": "Movie"
+    },
+    {
+     "id": 11,
+     "name": "Other",
+     "type": ""
+    }
+   ],
+   "sections": [
+    {
+     "id": "default-continue-watching",
+     "scope": "home",
+     "library_id": null,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Watching",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "continue_type": "watching"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-continue-listening",
+     "scope": "home",
+     "library_id": null,
+     "position": 1,
+     "section_type": "continue_watching",
+     "title": "Continue Listening",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "continue_type": "listening"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-trending-discover",
+     "scope": "home",
+     "library_id": null,
+     "position": 2,
+     "section_type": "trending_discover",
+     "title": "Trending This Week",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "source": "tmdb",
+      "window": "week"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-movies",
+     "scope": "home",
+     "library_id": null,
+     "position": 3,
+     "section_type": "recently_added",
+     "title": "Recently Added Movies",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "movie",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-tv",
+     "scope": "home",
+     "library_id": null,
+     "position": 4,
+     "section_type": "recently_added",
+     "title": "Recently Added TV",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "series",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-home-recently_added-library-9",
+     "scope": "home",
+     "library_id": null,
+     "position": 5,
+     "section_type": "recently_added",
+     "title": "Recently Added in  Audio ",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "filter_library_id": 9,
+      "generated_library_id": null,
+      "generated_kind": "",
+      "generated_source": "home_library_recent"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-home-recently_released-library-9",
+     "scope": "home",
+     "library_id": null,
+     "position": 6,
+     "section_type": "recently_released",
+     "title": "Recently Released in  Audio ",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "filter_library_id": 9,
+      "generated_library_id": null,
+      "generated_kind": "",
+      "generated_source": "home_library_recent"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-home-recently_added-library-11",
+     "scope": "home",
+     "library_id": null,
+     "position": 7,
+     "section_type": "recently_added",
+     "title": "Recently Added in Other",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "filter_library_id": 11,
+      "generated_library_id": null,
+      "generated_kind": "",
+      "generated_source": "home_library_recent"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-home-recently_released-library-11",
+     "scope": "home",
+     "library_id": null,
+     "position": 8,
+     "section_type": "recently_released",
+     "title": "Recently Released in Other",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "filter_library_id": 11,
+      "generated_library_id": null,
+      "generated_kind": "",
+      "generated_source": "home_library_recent"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recommended-for-you",
+     "scope": "home",
+     "library_id": null,
+     "position": 9,
+     "section_type": "recommended_for_you",
+     "title": "Recommended for You",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-because-you-watched",
+     "scope": "home",
+     "library_id": null,
+     "position": 10,
+     "section_type": "because_you_watched",
+     "title": "Because You Watched",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-returning-shows",
+     "scope": "home",
+     "library_id": null,
+     "position": 11,
+     "section_type": "returning_shows",
+     "title": "Returning Shows",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-top-rated",
+     "scope": "home",
+     "library_id": null,
+     "position": 12,
+     "section_type": "critically_acclaimed",
+     "title": "Top Rated",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-hidden-gems",
+     "scope": "home",
+     "library_id": null,
+     "position": 13,
+     "section_type": "hidden_gems",
+     "title": "Hidden Gems",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "min_rating": 7.5
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-seasonal",
+     "scope": "home",
+     "library_id": null,
+     "position": 14,
+     "section_type": "seasonal_themed",
+     "title": "Seasonal Picks",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "enabled_themes": [
+       "halloween",
+       "christmas",
+       "new_year",
+       "valentines",
+       "st_patricks",
+       "easter",
+       "thanksgiving",
+       "summer_blockbuster",
+       "saturday_morning"
+      ]
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ]
+  }
+ ],
+ "library": [
+  {
+   "library_id": null,
+   "sections": [
+    {
+     "id": "default-continue-watching",
+     "scope": "library",
+     "library_id": null,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Watching",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "continue_type": "watching"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-movies",
+     "scope": "library",
+     "library_id": null,
+     "position": 1,
+     "section_type": "recently_added",
+     "title": "Recently Added Movies",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "movie",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released-movies",
+     "scope": "library",
+     "library_id": null,
+     "position": 2,
+     "section_type": "recently_released",
+     "title": "Recently Released Movies",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "movie",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-top-rated-movies",
+     "scope": "library",
+     "library_id": null,
+     "position": 3,
+     "section_type": "custom_filter",
+     "title": "Top Rated Movies",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "movie",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "rating_imdb",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recommended-for-you",
+     "scope": "library",
+     "library_id": null,
+     "position": 4,
+     "section_type": "recommended_for_you",
+     "title": "Recommended for You",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-random-movies",
+     "scope": "library",
+     "library_id": null,
+     "position": 5,
+     "section_type": "random",
+     "title": "Random Picks",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "movie",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "movies"
+  },
+  {
+   "library_id": 7,
+   "sections": [
+    {
+     "id": "default-continue-watching",
+     "scope": "library",
+     "library_id": 7,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Watching",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "continue_type": "watching"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-movies",
+     "scope": "library",
+     "library_id": 7,
+     "position": 1,
+     "section_type": "recently_added",
+     "title": "Recently Added Movies",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "movie",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released-movies",
+     "scope": "library",
+     "library_id": 7,
+     "position": 2,
+     "section_type": "recently_released",
+     "title": "Recently Released Movies",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "movie",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-top-rated-movies",
+     "scope": "library",
+     "library_id": 7,
+     "position": 3,
+     "section_type": "custom_filter",
+     "title": "Top Rated Movies",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "movie",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "rating_imdb",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recommended-for-you",
+     "scope": "library",
+     "library_id": 7,
+     "position": 4,
+     "section_type": "recommended_for_you",
+     "title": "Recommended for You",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-random-movies",
+     "scope": "library",
+     "library_id": 7,
+     "position": 5,
+     "section_type": "random",
+     "title": "Random Picks",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "movie",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "movies"
+  },
+  {
+   "library_id": null,
+   "sections": [
+    {
+     "id": "default-continue-watching",
+     "scope": "library",
+     "library_id": null,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Watching",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "continue_type": "watching"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-movies",
+     "scope": "library",
+     "library_id": null,
+     "position": 1,
+     "section_type": "recently_added",
+     "title": "Recently Added Movies",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "movie",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released-movies",
+     "scope": "library",
+     "library_id": null,
+     "position": 2,
+     "section_type": "recently_released",
+     "title": "Recently Released Movies",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "movie",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-top-rated-movies",
+     "scope": "library",
+     "library_id": null,
+     "position": 3,
+     "section_type": "custom_filter",
+     "title": "Top Rated Movies",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "movie",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "rating_imdb",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recommended-for-you",
+     "scope": "library",
+     "library_id": null,
+     "position": 4,
+     "section_type": "recommended_for_you",
+     "title": "Recommended for You",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-random-movies",
+     "scope": "library",
+     "library_id": null,
+     "position": 5,
+     "section_type": "random",
+     "title": "Random Picks",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "movie",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "movie"
+  },
+  {
+   "library_id": 7,
+   "sections": [
+    {
+     "id": "default-continue-watching",
+     "scope": "library",
+     "library_id": 7,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Watching",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "continue_type": "watching"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-movies",
+     "scope": "library",
+     "library_id": 7,
+     "position": 1,
+     "section_type": "recently_added",
+     "title": "Recently Added Movies",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "movie",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released-movies",
+     "scope": "library",
+     "library_id": 7,
+     "position": 2,
+     "section_type": "recently_released",
+     "title": "Recently Released Movies",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "movie",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-top-rated-movies",
+     "scope": "library",
+     "library_id": 7,
+     "position": 3,
+     "section_type": "custom_filter",
+     "title": "Top Rated Movies",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "movie",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "rating_imdb",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recommended-for-you",
+     "scope": "library",
+     "library_id": 7,
+     "position": 4,
+     "section_type": "recommended_for_you",
+     "title": "Recommended for You",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-random-movies",
+     "scope": "library",
+     "library_id": 7,
+     "position": 5,
+     "section_type": "random",
+     "title": "Random Picks",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "movie",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "movie"
+  },
+  {
+   "library_id": null,
+   "sections": [
+    {
+     "id": "default-continue-watching",
+     "scope": "library",
+     "library_id": null,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Watching",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "continue_type": "watching"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-tv",
+     "scope": "library",
+     "library_id": null,
+     "position": 1,
+     "section_type": "recently_added",
+     "title": "Recently Added TV",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "series",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-returning-shows",
+     "scope": "library",
+     "library_id": null,
+     "position": 2,
+     "section_type": "returning_shows",
+     "title": "Returning Shows",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released-episodes",
+     "scope": "library",
+     "library_id": null,
+     "position": 3,
+     "section_type": "custom_filter",
+     "title": "Recently Released Episodes",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "episode",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "release_date",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-top-rated-tv",
+     "scope": "library",
+     "library_id": null,
+     "position": 4,
+     "section_type": "custom_filter",
+     "title": "Top Rated TV",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "series",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "rating_imdb",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recommended-for-you",
+     "scope": "library",
+     "library_id": null,
+     "position": 5,
+     "section_type": "recommended_for_you",
+     "title": "Recommended for You",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-random-tv",
+     "scope": "library",
+     "library_id": null,
+     "position": 6,
+     "section_type": "random",
+     "title": "Random Picks",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "series",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "series"
+  },
+  {
+   "library_id": 7,
+   "sections": [
+    {
+     "id": "default-continue-watching",
+     "scope": "library",
+     "library_id": 7,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Watching",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "continue_type": "watching"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-tv",
+     "scope": "library",
+     "library_id": 7,
+     "position": 1,
+     "section_type": "recently_added",
+     "title": "Recently Added TV",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "series",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-returning-shows",
+     "scope": "library",
+     "library_id": 7,
+     "position": 2,
+     "section_type": "returning_shows",
+     "title": "Returning Shows",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released-episodes",
+     "scope": "library",
+     "library_id": 7,
+     "position": 3,
+     "section_type": "custom_filter",
+     "title": "Recently Released Episodes",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "episode",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "release_date",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-top-rated-tv",
+     "scope": "library",
+     "library_id": 7,
+     "position": 4,
+     "section_type": "custom_filter",
+     "title": "Top Rated TV",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "series",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "rating_imdb",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recommended-for-you",
+     "scope": "library",
+     "library_id": 7,
+     "position": 5,
+     "section_type": "recommended_for_you",
+     "title": "Recommended for You",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-random-tv",
+     "scope": "library",
+     "library_id": 7,
+     "position": 6,
+     "section_type": "random",
+     "title": "Random Picks",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "media_scope": "series",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "series"
+  },
+  {
+   "library_id": null,
+   "sections": [
+    {
+     "id": "default-continue-listening",
+     "scope": "library",
+     "library_id": null,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Listening",
+     "featured": true,
+     "item_limit": 20,
+     "config": {
+      "continue_type": "listening"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-next-in-series",
+     "scope": "library",
+     "library_id": null,
+     "position": 1,
+     "section_type": "next_in_series",
+     "title": "Next in Your Series",
+     "featured": false,
+     "item_limit": 20,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-audiobooks",
+     "scope": "library",
+     "library_id": null,
+     "position": 2,
+     "section_type": "recently_added",
+     "title": "Recently Added Audiobooks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "audiobook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released-audiobooks",
+     "scope": "library",
+     "library_id": null,
+     "position": 3,
+     "section_type": "recently_released",
+     "title": "Recently Released Audiobooks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "audiobook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recommended-for-you",
+     "scope": "library",
+     "library_id": null,
+     "position": 4,
+     "section_type": "recommended_for_you",
+     "title": "Recommended for You",
+     "featured": false,
+     "item_limit": 20,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-random-audiobooks",
+     "scope": "library",
+     "library_id": null,
+     "position": 5,
+     "section_type": "random",
+     "title": "Random Picks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "audiobook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "audiobooks"
+  },
+  {
+   "library_id": 7,
+   "sections": [
+    {
+     "id": "default-continue-listening",
+     "scope": "library",
+     "library_id": 7,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Listening",
+     "featured": true,
+     "item_limit": 20,
+     "config": {
+      "continue_type": "listening"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-next-in-series",
+     "scope": "library",
+     "library_id": 7,
+     "position": 1,
+     "section_type": "next_in_series",
+     "title": "Next in Your Series",
+     "featured": false,
+     "item_limit": 20,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-audiobooks",
+     "scope": "library",
+     "library_id": 7,
+     "position": 2,
+     "section_type": "recently_added",
+     "title": "Recently Added Audiobooks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "audiobook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released-audiobooks",
+     "scope": "library",
+     "library_id": 7,
+     "position": 3,
+     "section_type": "recently_released",
+     "title": "Recently Released Audiobooks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "audiobook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recommended-for-you",
+     "scope": "library",
+     "library_id": 7,
+     "position": 4,
+     "section_type": "recommended_for_you",
+     "title": "Recommended for You",
+     "featured": false,
+     "item_limit": 20,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-random-audiobooks",
+     "scope": "library",
+     "library_id": 7,
+     "position": 5,
+     "section_type": "random",
+     "title": "Random Picks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "audiobook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "audiobooks"
+  },
+  {
+   "library_id": null,
+   "sections": [
+    {
+     "id": "default-continue-listening",
+     "scope": "library",
+     "library_id": null,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Listening",
+     "featured": true,
+     "item_limit": 20,
+     "config": {
+      "continue_type": "listening"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-next-in-series",
+     "scope": "library",
+     "library_id": null,
+     "position": 1,
+     "section_type": "next_in_series",
+     "title": "Next in Your Series",
+     "featured": false,
+     "item_limit": 20,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-audiobooks",
+     "scope": "library",
+     "library_id": null,
+     "position": 2,
+     "section_type": "recently_added",
+     "title": "Recently Added Audiobooks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "audiobook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released-audiobooks",
+     "scope": "library",
+     "library_id": null,
+     "position": 3,
+     "section_type": "recently_released",
+     "title": "Recently Released Audiobooks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "audiobook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recommended-for-you",
+     "scope": "library",
+     "library_id": null,
+     "position": 4,
+     "section_type": "recommended_for_you",
+     "title": "Recommended for You",
+     "featured": false,
+     "item_limit": 20,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-random-audiobooks",
+     "scope": "library",
+     "library_id": null,
+     "position": 5,
+     "section_type": "random",
+     "title": "Random Picks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "audiobook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "audiobook"
+  },
+  {
+   "library_id": 7,
+   "sections": [
+    {
+     "id": "default-continue-listening",
+     "scope": "library",
+     "library_id": 7,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Listening",
+     "featured": true,
+     "item_limit": 20,
+     "config": {
+      "continue_type": "listening"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-next-in-series",
+     "scope": "library",
+     "library_id": 7,
+     "position": 1,
+     "section_type": "next_in_series",
+     "title": "Next in Your Series",
+     "featured": false,
+     "item_limit": 20,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-audiobooks",
+     "scope": "library",
+     "library_id": 7,
+     "position": 2,
+     "section_type": "recently_added",
+     "title": "Recently Added Audiobooks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "audiobook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released-audiobooks",
+     "scope": "library",
+     "library_id": 7,
+     "position": 3,
+     "section_type": "recently_released",
+     "title": "Recently Released Audiobooks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "audiobook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recommended-for-you",
+     "scope": "library",
+     "library_id": 7,
+     "position": 4,
+     "section_type": "recommended_for_you",
+     "title": "Recommended for You",
+     "featured": false,
+     "item_limit": 20,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-random-audiobooks",
+     "scope": "library",
+     "library_id": 7,
+     "position": 5,
+     "section_type": "random",
+     "title": "Random Picks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "audiobook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "audiobook"
+  },
+  {
+   "library_id": null,
+   "sections": [
+    {
+     "id": "default-continue-reading",
+     "scope": "library",
+     "library_id": null,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Reading",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "continue_type": "reading"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-ebooks",
+     "scope": "library",
+     "library_id": null,
+     "position": 1,
+     "section_type": "recently_added",
+     "title": "Recently Added Ebooks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "ebook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released-ebooks",
+     "scope": "library",
+     "library_id": null,
+     "position": 2,
+     "section_type": "recently_released",
+     "title": "Recently Released Ebooks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "ebook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recommended-for-you",
+     "scope": "library",
+     "library_id": null,
+     "position": 3,
+     "section_type": "recommended_for_you",
+     "title": "Recommended for You",
+     "featured": false,
+     "item_limit": 20,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-random-ebooks",
+     "scope": "library",
+     "library_id": null,
+     "position": 4,
+     "section_type": "random",
+     "title": "Random Picks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "ebook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "ebooks"
+  },
+  {
+   "library_id": 7,
+   "sections": [
+    {
+     "id": "default-continue-reading",
+     "scope": "library",
+     "library_id": 7,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Reading",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "continue_type": "reading"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-ebooks",
+     "scope": "library",
+     "library_id": 7,
+     "position": 1,
+     "section_type": "recently_added",
+     "title": "Recently Added Ebooks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "ebook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released-ebooks",
+     "scope": "library",
+     "library_id": 7,
+     "position": 2,
+     "section_type": "recently_released",
+     "title": "Recently Released Ebooks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "ebook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recommended-for-you",
+     "scope": "library",
+     "library_id": 7,
+     "position": 3,
+     "section_type": "recommended_for_you",
+     "title": "Recommended for You",
+     "featured": false,
+     "item_limit": 20,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-random-ebooks",
+     "scope": "library",
+     "library_id": 7,
+     "position": 4,
+     "section_type": "random",
+     "title": "Random Picks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "ebook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "ebooks"
+  },
+  {
+   "library_id": null,
+   "sections": [
+    {
+     "id": "default-continue-reading",
+     "scope": "library",
+     "library_id": null,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Reading",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "continue_type": "reading"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-ebooks",
+     "scope": "library",
+     "library_id": null,
+     "position": 1,
+     "section_type": "recently_added",
+     "title": "Recently Added Ebooks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "ebook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released-ebooks",
+     "scope": "library",
+     "library_id": null,
+     "position": 2,
+     "section_type": "recently_released",
+     "title": "Recently Released Ebooks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "ebook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recommended-for-you",
+     "scope": "library",
+     "library_id": null,
+     "position": 3,
+     "section_type": "recommended_for_you",
+     "title": "Recommended for You",
+     "featured": false,
+     "item_limit": 20,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-random-ebooks",
+     "scope": "library",
+     "library_id": null,
+     "position": 4,
+     "section_type": "random",
+     "title": "Random Picks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "ebook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "ebook"
+  },
+  {
+   "library_id": 7,
+   "sections": [
+    {
+     "id": "default-continue-reading",
+     "scope": "library",
+     "library_id": 7,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Reading",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "continue_type": "reading"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-ebooks",
+     "scope": "library",
+     "library_id": 7,
+     "position": 1,
+     "section_type": "recently_added",
+     "title": "Recently Added Ebooks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "ebook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released-ebooks",
+     "scope": "library",
+     "library_id": 7,
+     "position": 2,
+     "section_type": "recently_released",
+     "title": "Recently Released Ebooks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "ebook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recommended-for-you",
+     "scope": "library",
+     "library_id": 7,
+     "position": 3,
+     "section_type": "recommended_for_you",
+     "title": "Recommended for You",
+     "featured": false,
+     "item_limit": 20,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-random-ebooks",
+     "scope": "library",
+     "library_id": 7,
+     "position": 4,
+     "section_type": "random",
+     "title": "Random Picks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "ebook",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "ebook"
+  },
+  {
+   "library_id": null,
+   "sections": [
+    {
+     "id": "default-continue-reading",
+     "scope": "library",
+     "library_id": null,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Reading",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "continue_type": "reading"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-manga",
+     "scope": "library",
+     "library_id": null,
+     "position": 1,
+     "section_type": "recently_added",
+     "title": "Recently Added Manga",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "manga",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released-manga",
+     "scope": "library",
+     "library_id": null,
+     "position": 2,
+     "section_type": "recently_released",
+     "title": "Recently Released Manga",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "manga",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recommended-for-you",
+     "scope": "library",
+     "library_id": null,
+     "position": 3,
+     "section_type": "recommended_for_you",
+     "title": "Recommended for You",
+     "featured": false,
+     "item_limit": 20,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-random-manga",
+     "scope": "library",
+     "library_id": null,
+     "position": 4,
+     "section_type": "random",
+     "title": "Random Picks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "manga",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "manga"
+  },
+  {
+   "library_id": 7,
+   "sections": [
+    {
+     "id": "default-continue-reading",
+     "scope": "library",
+     "library_id": 7,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Reading",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "continue_type": "reading"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added-manga",
+     "scope": "library",
+     "library_id": 7,
+     "position": 1,
+     "section_type": "recently_added",
+     "title": "Recently Added Manga",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "manga",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released-manga",
+     "scope": "library",
+     "library_id": 7,
+     "position": 2,
+     "section_type": "recently_released",
+     "title": "Recently Released Manga",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "manga",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recommended-for-you",
+     "scope": "library",
+     "library_id": 7,
+     "position": 3,
+     "section_type": "recommended_for_you",
+     "title": "Recommended for You",
+     "featured": false,
+     "item_limit": 20,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-random-manga",
+     "scope": "library",
+     "library_id": 7,
+     "position": 4,
+     "section_type": "random",
+     "title": "Random Picks",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "media_scope": "manga",
+      "match": "all",
+      "groups": [],
+      "sort": {
+       "field": "added_at",
+       "order": "desc"
+      }
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "manga"
+  },
+  {
+   "library_id": null,
+   "sections": [
+    {
+     "id": "default-continue-watching",
+     "scope": "library",
+     "library_id": null,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Watching",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "continue_type": "watching"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added",
+     "scope": "library",
+     "library_id": null,
+     "position": 1,
+     "section_type": "recently_added",
+     "title": "Recently Added",
+     "featured": false,
+     "item_limit": 20,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released",
+     "scope": "library",
+     "library_id": null,
+     "position": 2,
+     "section_type": "recently_released",
+     "title": "Recently Released",
+     "featured": false,
+     "item_limit": 20,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "podcasts"
+  },
+  {
+   "library_id": 7,
+   "sections": [
+    {
+     "id": "default-continue-watching",
+     "scope": "library",
+     "library_id": 7,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Watching",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "continue_type": "watching"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added",
+     "scope": "library",
+     "library_id": 7,
+     "position": 1,
+     "section_type": "recently_added",
+     "title": "Recently Added",
+     "featured": false,
+     "item_limit": 20,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released",
+     "scope": "library",
+     "library_id": 7,
+     "position": 2,
+     "section_type": "recently_released",
+     "title": "Recently Released",
+     "featured": false,
+     "item_limit": 20,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "podcasts"
+  },
+  {
+   "library_id": null,
+   "sections": [
+    {
+     "id": "default-continue-watching",
+     "scope": "library",
+     "library_id": null,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Watching",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "continue_type": "watching"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added",
+     "scope": "library",
+     "library_id": null,
+     "position": 1,
+     "section_type": "recently_added",
+     "title": "Recently Added",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released",
+     "scope": "library",
+     "library_id": null,
+     "position": 2,
+     "section_type": "recently_released",
+     "title": "Recently Released",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "mixed"
+  },
+  {
+   "library_id": 7,
+   "sections": [
+    {
+     "id": "default-continue-watching",
+     "scope": "library",
+     "library_id": 7,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Watching",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "continue_type": "watching"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added",
+     "scope": "library",
+     "library_id": 7,
+     "position": 1,
+     "section_type": "recently_added",
+     "title": "Recently Added",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released",
+     "scope": "library",
+     "library_id": 7,
+     "position": 2,
+     "section_type": "recently_released",
+     "title": "Recently Released",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "mixed"
+  },
+  {
+   "library_id": null,
+   "sections": [
+    {
+     "id": "default-continue-watching",
+     "scope": "library",
+     "library_id": null,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Watching",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "continue_type": "watching"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added",
+     "scope": "library",
+     "library_id": null,
+     "position": 1,
+     "section_type": "recently_added",
+     "title": "Recently Added",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released",
+     "scope": "library",
+     "library_id": null,
+     "position": 2,
+     "section_type": "recently_released",
+     "title": "Recently Released",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "tv"
+  },
+  {
+   "library_id": 7,
+   "sections": [
+    {
+     "id": "default-continue-watching",
+     "scope": "library",
+     "library_id": 7,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Watching",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "continue_type": "watching"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added",
+     "scope": "library",
+     "library_id": 7,
+     "position": 1,
+     "section_type": "recently_added",
+     "title": "Recently Added",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released",
+     "scope": "library",
+     "library_id": 7,
+     "position": 2,
+     "section_type": "recently_released",
+     "title": "Recently Released",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "tv"
+  },
+  {
+   "library_id": null,
+   "sections": [
+    {
+     "id": "default-continue-watching",
+     "scope": "library",
+     "library_id": null,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Watching",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "continue_type": "watching"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added",
+     "scope": "library",
+     "library_id": null,
+     "position": 1,
+     "section_type": "recently_added",
+     "title": "Recently Added",
+     "featured": false,
+     "item_limit": 20,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released",
+     "scope": "library",
+     "library_id": null,
+     "position": 2,
+     "section_type": "recently_released",
+     "title": "Recently Released",
+     "featured": false,
+     "item_limit": 20,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": ""
+  },
+  {
+   "library_id": 7,
+   "sections": [
+    {
+     "id": "default-continue-watching",
+     "scope": "library",
+     "library_id": 7,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Watching",
+     "featured": false,
+     "item_limit": 20,
+     "config": {
+      "continue_type": "watching"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added",
+     "scope": "library",
+     "library_id": 7,
+     "position": 1,
+     "section_type": "recently_added",
+     "title": "Recently Added",
+     "featured": false,
+     "item_limit": 20,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released",
+     "scope": "library",
+     "library_id": 7,
+     "position": 2,
+     "section_type": "recently_released",
+     "title": "Recently Released",
+     "featured": false,
+     "item_limit": 20,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": ""
+  },
+  {
+   "library_id": null,
+   "sections": [
+    {
+     "id": "default-continue-watching",
+     "scope": "library",
+     "library_id": null,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Watching",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "continue_type": "watching"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added",
+     "scope": "library",
+     "library_id": null,
+     "position": 1,
+     "section_type": "recently_added",
+     "title": "Recently Added",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released",
+     "scope": "library",
+     "library_id": null,
+     "position": 2,
+     "section_type": "recently_released",
+     "title": "Recently Released",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "Movies"
+  },
+  {
+   "library_id": 7,
+   "sections": [
+    {
+     "id": "default-continue-watching",
+     "scope": "library",
+     "library_id": 7,
+     "position": 0,
+     "section_type": "continue_watching",
+     "title": "Continue Watching",
+     "featured": false,
+     "item_limit": 100,
+     "config": {
+      "continue_type": "watching"
+     },
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-added",
+     "scope": "library",
+     "library_id": 7,
+     "position": 1,
+     "section_type": "recently_added",
+     "title": "Recently Added",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    },
+    {
+     "id": "default-recently-released",
+     "scope": "library",
+     "library_id": 7,
+     "position": 2,
+     "section_type": "recently_released",
+     "title": "Recently Released",
+     "featured": false,
+     "item_limit": 100,
+     "config": {},
+     "enabled": true,
+     "created_at": "0001-01-01T00:00:00Z",
+     "updated_at": "0001-01-01T00:00:00Z"
+    }
+   ],
+   "type": "Movies"
+  }
+ ],
+ "library_fallback": [
+  {
+   "id": "default-continue-watching",
+   "scope": "library",
+   "library_id": 7,
+   "position": 0,
+   "section_type": "continue_watching",
+   "title": "Continue Watching",
+   "featured": false,
+   "item_limit": 100,
+   "config": {
+    "continue_type": "watching"
+   },
+   "enabled": true,
+   "created_at": "0001-01-01T00:00:00Z",
+   "updated_at": "0001-01-01T00:00:00Z"
+  },
+  {
+   "id": "default-recently-added",
+   "scope": "library",
+   "library_id": 7,
+   "position": 1,
+   "section_type": "recently_added",
+   "title": "Recently Added",
+   "featured": false,
+   "item_limit": 100,
+   "config": {},
+   "enabled": true,
+   "created_at": "0001-01-01T00:00:00Z",
+   "updated_at": "0001-01-01T00:00:00Z"
+  },
+  {
+   "id": "default-recently-released",
+   "scope": "library",
+   "library_id": 7,
+   "position": 2,
+   "section_type": "recently_released",
+   "title": "Recently Released",
+   "featured": false,
+   "item_limit": 100,
+   "config": {},
+   "enabled": true,
+   "created_at": "0001-01-01T00:00:00Z",
+   "updated_at": "0001-01-01T00:00:00Z"
+  }
+ ],
+ "library_kinds": [
+  {
+   "audiobook": false,
+   "type": "movies",
+   "video": true
+  },
+  {
+   "audiobook": false,
+   "type": "movie",
+   "video": true
+  },
+  {
+   "audiobook": false,
+   "type": "series",
+   "video": true
+  },
+  {
+   "audiobook": false,
+   "type": "tv",
+   "video": true
+  },
+  {
+   "audiobook": false,
+   "type": "show",
+   "video": true
+  },
+  {
+   "audiobook": false,
+   "type": "tvshows",
+   "video": true
+  },
+  {
+   "audiobook": false,
+   "type": "mixed",
+   "video": true
+  },
+  {
+   "audiobook": false,
+   "type": " Mixed ",
+   "video": true
+  },
+  {
+   "audiobook": true,
+   "type": "audiobook",
+   "video": false
+  },
+  {
+   "audiobook": true,
+   "type": "Audiobooks ",
+   "video": false
+  },
+  {
+   "audiobook": false,
+   "type": "ebook",
+   "video": false
+  },
+  {
+   "audiobook": false,
+   "type": "manga",
+   "video": false
+  },
+  {
+   "audiobook": false,
+   "type": "",
+   "video": false
+  },
+  {
+   "audiobook": false,
+   "type": "podcasts",
+   "video": false
+  }
+ ]
+}

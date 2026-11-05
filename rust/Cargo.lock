@@ -3079,6 +3079,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "silo-sections"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "silo-gocompat",
+]
+
+[[package]]
 name = "silo-server"
 version = "0.1.0"
 dependencies = [
