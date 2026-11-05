@@ -257,11 +257,11 @@ struct StatePayload<'a> {
     series_id: &'a str,
     change: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
+    played: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     is_favorite: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     in_watchlist: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    played: Option<bool>,
 }
 
 /// `publishUserStateEvent`.
