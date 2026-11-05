@@ -13,8 +13,12 @@
 //! Collection-group writes preserve Go transaction boundaries and have no process-local effects.
 //! Job cancellation stays on Go: running image-cache cleanup signals its in-process CancelRegistry;
 //! queued cleanup also publishes a realtime event. Mutating scan, autoscan, task, and storage
-//! transition actions stay on Go.
+//! transition actions stay on Go, except the connection, source-deletion, and webhook-lifecycle
+//! writes below. All seven use persisted state only: connection update does not probe, source
+//! deletion does not stop running work, and webhook changes do not contact a provider.
+//! None publishes events or signals the scheduler/poller; no requested write row is excluded.
 
+mod autoscan_writes;
 mod contributions;
 mod groups;
 mod trickplay;
@@ -44,6 +48,21 @@ use crate::rows::NativeRow;
 use crate::rows::Surface::ApiV2;
 
 pub const ROWS: &[NativeRow] = &[
+    NativeRow::new(ApiV2, "POST", "/api/v2/admin/autoscan/connections"),
+    NativeRow::new(ApiV2, "PUT", "/api/v2/admin/autoscan/connections/{id}"),
+    NativeRow::new(ApiV2, "DELETE", "/api/v2/admin/autoscan/connections/{id}"),
+    NativeRow::new(ApiV2, "DELETE", "/api/v2/admin/autoscan/sources/{id}"),
+    NativeRow::new(ApiV2, "POST", "/api/v2/admin/autoscan/sources/{id}/webhook"),
+    NativeRow::new(
+        ApiV2,
+        "DELETE",
+        "/api/v2/admin/autoscan/sources/{id}/webhook",
+    ),
+    NativeRow::new(
+        ApiV2,
+        "POST",
+        "/api/v2/admin/autoscan/sources/{id}/webhook/rotate",
+    ),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/trickplay/libraries"),
     NativeRow::new(ApiV2, "GET", "/api/v2/admin/files/{fileId}/contributions"),
     NativeRow::new(
@@ -174,6 +193,7 @@ pub fn mount_public(v2: &Mux) {
 }
 
 pub fn mount(stack: &Arc<Stack>, v2: &Mux) {
+    autoscan_writes::mount(stack, v2);
     contributions::mount(stack, v2);
     groups::mount(stack, v2);
     trickplay::mount(stack, v2);

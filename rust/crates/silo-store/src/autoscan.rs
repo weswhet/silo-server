@@ -1,4 +1,4 @@
-//! Read-only autoscan repository queries from `internal/autoscan`.
+//! Autoscan repository queries and persisted admin writes from `internal/autoscan`.
 //! All six inspection rows use persisted state; none require the plugin host or scheduler.
 use serde::{Deserialize, Serialize};
 use silo_core::secret::{Cipher, aad::row as row_aad};
@@ -597,4 +597,363 @@ async fn query_one(pool: &Pool, sql: &str, params: silo_pg::Params<'_>) -> Resul
         .into_iter()
         .next()
         .ok_or_else(|| "autoscan row not found".to_owned())
+}
+
+/// Repository writes distinguish absent identities from database and cipher failures.
+#[derive(Debug, thiserror::Error)]
+pub enum WriteError {
+    #[error("autoscan: not found")]
+    NotFound,
+    #[error("{0}")]
+    Other(String),
+}
+impl From<silo_pg::Error> for WriteError {
+    fn from(error: silo_pg::Error) -> Self {
+        if matches!(error, silo_pg::Error::NoRows) {
+            Self::NotFound
+        } else {
+            Self::Other(error.to_string())
+        }
+    }
+}
+fn write_id(id: &str) -> Result<Uuid, WriteError> {
+    Uuid::parse_str(id).map_err(|_| WriteError::NotFound)
+}
+fn nullable(value: &str) -> Option<&str> {
+    (!value.is_empty()).then_some(value)
+}
+fn scan_connection(row: &Row, cipher: &Cipher) -> Result<Connection, WriteError> {
+    let id = uuid_string(row, 0);
+    let encrypted = row.get::<_, Option<String>>(4).unwrap_or_default();
+    let plain = cipher
+        .decrypt_if_encrypted(
+            &encrypted,
+            row_aad("autoscan_connections", "api_key_ref", &id),
+        )
+        .map_err(|e| WriteError::Other(e.to_string()))?;
+    Ok(Connection {
+        id,
+        name: row.get(1),
+        kind: row.get(2),
+        base_url: row.get::<_, Option<String>>(3).unwrap_or_default(),
+        api_key_ref: String::from_utf8_lossy(&plain).into_owned(),
+        request_integration_id: row.get(5),
+    })
+}
+pub async fn create_connection(
+    pool: &Pool,
+    cipher: &Cipher,
+    c: &Connection,
+) -> Result<Connection, WriteError> {
+    let id = if trim_space(&c.id).is_empty() {
+        Uuid::new_v4().to_string()
+    } else {
+        trim_space(&c.id).to_owned()
+    };
+    let key = cipher
+        .encrypt(
+            trim_space(&c.api_key_ref),
+            row_aad("autoscan_connections", "api_key_ref", &id),
+        )
+        .map_err(|e| WriteError::Other(e.to_string()))?;
+    let uuid = Uuid::parse_str(&id).map_err(|e| WriteError::Other(e.to_string()))?;
+    let row = write_query_one(
+        pool,
+        &format!(
+            r#"
+		INSERT INTO autoscan_connections (id, name, kind, base_url, api_key_ref, request_integration_id)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING {CONNECTION_COLUMNS}"#
+        ),
+        &[
+            &uuid,
+            &c.name,
+            &c.kind,
+            &nullable(&c.base_url),
+            &nullable(&key),
+            &c.request_integration_id,
+        ],
+    )
+    .await?;
+    scan_connection(&row, cipher)
+}
+fn comparable_base_url(raw: &str) -> String {
+    let value = trim_space(raw);
+    let Ok(mut url) = silo_gocompat::url::parse(value) else {
+        return value.trim_end_matches('/').to_owned();
+    };
+    if url.host.is_empty() {
+        return value.trim_end_matches('/').to_owned();
+    }
+    url.scheme = to_lower(&url.scheme);
+    url.host = to_lower(&url.host);
+    let escaped = url.escaped_path().trim_end_matches('/').to_owned();
+    url.path =
+        String::from_utf8_lossy(&silo_gocompat::url::path_unescape(&escaped).unwrap_or_default())
+            .into_owned();
+    url.raw_path = escaped;
+    url.string()
+}
+fn upstream_differs(old_url: Option<&str>, old_link: Option<&str>, c: &Connection) -> bool {
+    let old_link = trim_space(old_link.unwrap_or_default());
+    let new_link = trim_space(c.request_integration_id.as_deref().unwrap_or_default());
+    if !old_link.is_empty() || !new_link.is_empty() {
+        return old_link != new_link;
+    }
+    comparable_base_url(old_url.unwrap_or_default()) != comparable_base_url(&c.base_url)
+}
+pub async fn update_connection(
+    pool: &Pool,
+    cipher: &Cipher,
+    c: &Connection,
+) -> Result<Connection, WriteError> {
+    let id = write_id(&c.id)?;
+    let key = cipher
+        .encrypt(
+            trim_space(&c.api_key_ref),
+            row_aad("autoscan_connections", "api_key_ref", &c.id),
+        )
+        .map_err(|e| WriteError::Other(e.to_string()))?;
+    let mut session = pool.acquire().await?;
+    let mut tx = session.begin().await?;
+    let old = tx
+        .query_one(
+            r#"
+		SELECT base_url, request_integration_id
+		FROM autoscan_connections
+		WHERE id = $1
+		FOR UPDATE"#,
+            &[&id],
+        )
+        .await?;
+    let row = tx
+        .query_one(
+            &format!(
+                r#"
+		UPDATE autoscan_connections
+		SET name = $2, kind = $3, base_url = $4,
+		    api_key_ref = CASE WHEN $5 = '' THEN api_key_ref ELSE $5 END,
+		    request_integration_id = $6, updated_at = now()
+		WHERE id = $1
+		RETURNING {CONNECTION_COLUMNS}"#
+            ),
+            &[
+                &id,
+                &c.name,
+                &c.kind,
+                &nullable(&c.base_url),
+                &key,
+                &c.request_integration_id,
+            ],
+        )
+        .await?;
+    let out = scan_connection(&row, cipher)?;
+    let old_url: Option<String> = old.get(0);
+    let old_link: Option<String> = old.get(1);
+    if upstream_differs(old_url.as_deref(), old_link.as_deref(), &out) {
+        tx.execute(
+            r#"
+			UPDATE autoscan_sources
+			SET marker = NULL, last_run_at = NULL, updated_at = now()
+			WHERE connection_id = $1 AND (marker IS NOT NULL OR last_run_at IS NOT NULL)"#,
+            &[&id],
+        )
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(out)
+}
+pub async fn delete_connection(pool: &Pool, id: &str) -> Result<(), WriteError> {
+    delete_row(pool, "DELETE FROM autoscan_connections WHERE id = $1", id).await
+}
+pub async fn delete_source(pool: &Pool, id: &str) -> Result<(), WriteError> {
+    delete_row(pool, "DELETE FROM autoscan_sources WHERE id = $1", id).await
+}
+pub async fn delete_webhook_endpoint(pool: &Pool, id: &str) -> Result<(), WriteError> {
+    delete_row(
+        pool,
+        "DELETE FROM autoscan_webhook_endpoints WHERE source_id = $1",
+        id,
+    )
+    .await
+}
+async fn delete_row(pool: &Pool, sql: &str, id: &str) -> Result<(), WriteError> {
+    let id = write_id(id)?;
+    if pool.execute(sql, &[&id]).await? == 0 {
+        return Err(WriteError::NotFound);
+    }
+    Ok(())
+}
+pub async fn get_source(pool: &Pool, id: &str) -> Result<Source, WriteError> {
+    let id = write_id(id)?;
+    let row = write_query_one(
+        pool,
+        &format!("SELECT {SOURCE_COLUMNS}\n\t\tFROM autoscan_sources WHERE id = $1"),
+        &[&id],
+    )
+    .await?;
+    scan_source(&row).map_err(WriteError::Other)
+}
+fn scan_webhook_endpoint(row: &Row) -> WebhookEndpoint {
+    WebhookEndpoint {
+        source_id: uuid_string(row, 0),
+        secret_suffix: row.get(1),
+        created_at: row.get(2),
+        rotated_at: row.get(3),
+        last_received_at: row.get(4),
+        last_error_at: row.get(5),
+        last_error_message: row.get(6),
+    }
+}
+pub async fn get_webhook_endpoint(pool: &Pool, id: &str) -> Result<WebhookEndpoint, WriteError> {
+    let id = write_id(id)?;
+    let row = write_query_one(
+        pool,
+        &format!(
+            "SELECT {WEBHOOK_COLUMNS}\n\t\tFROM autoscan_webhook_endpoints WHERE source_id = $1"
+        ),
+        &[&id],
+    )
+    .await?;
+    Ok(scan_webhook_endpoint(&row))
+}
+fn new_webhook_token() -> Result<(String, String, String), WriteError> {
+    let token = silo_core::apikey::mint_token(32)
+        .ok_or_else(|| WriteError::Other("generate webhook token: random source failed".into()))?;
+    let hash = silo_core::apikey::hash_webhook_token(token.as_bytes());
+    let suffix = token[token.len() - silo_core::apikey::WEBHOOK_SECRET_SUFFIX_LEN..].to_owned();
+    Ok((token, hash, suffix))
+}
+pub async fn create_webhook_endpoint(
+    pool: &Pool,
+    cipher: &Cipher,
+    source_id: &str,
+) -> Result<(WebhookEndpoint, String), WriteError> {
+    let id = write_id(source_id)?;
+    let (token, hash, suffix) = new_webhook_token()?;
+    let encrypted = cipher
+        .encrypt(
+            &token,
+            row_aad("autoscan_webhook_endpoints", "secret_ref", source_id),
+        )
+        .map_err(|e| WriteError::Other(e.to_string()))?;
+    let result = write_query_one(
+        pool,
+        &format!(
+            r#"
+		INSERT INTO autoscan_webhook_endpoints (source_id, secret_hash, secret_ref, secret_suffix)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (source_id) DO NOTHING
+		RETURNING {WEBHOOK_COLUMNS}"#
+        ),
+        &[&id, &hash, &encrypted, &suffix],
+    )
+    .await;
+    match result {
+        Ok(row) => Ok((scan_webhook_endpoint(&row), token)),
+        Err(silo_pg::Error::NoRows) => {
+            Ok((get_webhook_endpoint(pool, source_id).await?, String::new()))
+        }
+        Err(e) if e.code().is_some_and(|code| code.code() == "23503") => Err(WriteError::NotFound),
+        Err(e) => Err(e.into()),
+    }
+}
+pub async fn rotate_webhook_endpoint(
+    pool: &Pool,
+    cipher: &Cipher,
+    source_id: &str,
+) -> Result<(WebhookEndpoint, String), WriteError> {
+    let id = write_id(source_id)?;
+    let (token, hash, suffix) = new_webhook_token()?;
+    let encrypted = cipher
+        .encrypt(
+            &token,
+            row_aad("autoscan_webhook_endpoints", "secret_ref", source_id),
+        )
+        .map_err(|e| WriteError::Other(e.to_string()))?;
+    let row = write_query_one(
+        pool,
+        &format!(
+            r#"
+		UPDATE autoscan_webhook_endpoints
+		SET secret_hash = $2, secret_ref = $3, secret_suffix = $4, rotated_at = now()
+		WHERE source_id = $1
+		RETURNING {WEBHOOK_COLUMNS}"#
+        ),
+        &[&id, &hash, &encrypted, &suffix],
+    )
+    .await?;
+    Ok((scan_webhook_endpoint(&row), token))
+}
+
+#[cfg(test)]
+mod write_tests {
+    use super::*;
+
+    #[test]
+    fn upstream_identity_preserves_markers_only_for_the_same_server() {
+        let mut connection = Connection {
+            id: String::new(),
+            name: String::new(),
+            kind: String::new(),
+            base_url: "https://EXAMPLE.test/path/".into(),
+            api_key_ref: String::new(),
+            request_integration_id: None,
+        };
+        assert!(!upstream_differs(
+            Some(" HTTPS://example.test/path "),
+            None,
+            &connection
+        ));
+        assert!(upstream_differs(
+            Some("https://example.test/path%2F"),
+            None,
+            &connection
+        ));
+        assert!(upstream_differs(
+            Some("https://example.test/path?server=2"),
+            None,
+            &connection
+        ));
+        connection.request_integration_id = Some(" linked ".into());
+        assert!(!upstream_differs(
+            Some("https://different.test"),
+            Some("linked"),
+            &connection
+        ));
+        assert!(upstream_differs(
+            Some(&connection.base_url),
+            None,
+            &connection
+        ));
+        assert!(upstream_differs(None, Some("other"), &connection));
+    }
+
+    #[test]
+    fn webhook_tokens_keep_go_bearer_format_and_lookup_hash() {
+        let (token, hash, suffix) = new_webhook_token().unwrap();
+        assert_eq!(token.len(), 43);
+        assert!(
+            token
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
+        );
+        // A 32-byte raw base64url encoding ends with two zero padding bits.
+        assert!("AEIMQUYcgkosw048".contains(token.chars().last().unwrap()));
+        assert_eq!(hash, silo_core::hexgo::sha256_hex(&token));
+        assert_eq!(suffix, token[37..]);
+        assert_ne!(token, new_webhook_token().unwrap().0);
+    }
+}
+
+async fn write_query_one(
+    pool: &Pool,
+    sql: &str,
+    params: silo_pg::Params<'_>,
+) -> Result<Row, silo_pg::Error> {
+    pool.query(sql, params)
+        .await?
+        .into_iter()
+        .next()
+        .ok_or(silo_pg::Error::NoRows)
 }
