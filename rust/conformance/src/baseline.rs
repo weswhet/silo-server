@@ -5,6 +5,7 @@
 
 use crate::report::{FlakeSet, Regression, RouteReport, RouteState, SurfaceCounts};
 use crate::runner::RunOutput;
+use crate::scope::Scope;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -82,6 +83,8 @@ pub struct BaselineRoute {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Baseline {
+    #[serde(default)]
+    pub scope: Scope,
     pub schema_version: u32,
     pub candidate_kind: CandidateKind,
     pub runs: u32,
@@ -169,6 +172,7 @@ pub fn collect_flakes(runs: &[RunOutput]) -> BTreeMap<String, FlakeRecord> {
 
 pub fn record(
     kind: CandidateKind,
+    scope: Scope,
     runs: &[RunOutput],
     last: &[RouteReport],
     surfaces: BTreeMap<String, SurfaceCounts>,
@@ -216,6 +220,7 @@ pub fn record(
         })
         .collect();
     Baseline {
+        scope,
         schema_version: SCHEMA_VERSION,
         candidate_kind: kind,
         runs: runs.len() as u32,
@@ -556,12 +561,31 @@ mod tests {
         let reports = route_reports(routes, runs.last().unwrap(), &FlakeSet::new());
         record(
             kind,
+            Scope::Full,
             runs,
             &reports,
             BTreeMap::new(),
             "test",
             &ManualFlakes::default(),
         )
+    }
+
+    #[test]
+    fn scope_round_trips_and_defaults_for_existing_baselines() {
+        let mut base = baseline(CandidateKind::SelfCompare, &[run(vec![])], &[]);
+        base.scope = Scope::V2;
+        let mut value = serde_json::to_value(&base).unwrap();
+        assert_eq!(
+            serde_json::from_value::<Baseline>(value.clone())
+                .unwrap()
+                .scope,
+            Scope::V2
+        );
+        value.as_object_mut().unwrap().remove("scope");
+        assert_eq!(
+            serde_json::from_value::<Baseline>(value).unwrap().scope,
+            Scope::Full
+        );
     }
 
     fn kinds(c: &Comparison) -> Vec<String> {

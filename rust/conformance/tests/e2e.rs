@@ -450,10 +450,11 @@ fn identical_servers_match_even_with_their_own_generated_ids() {
         la.next_id, lb.next_id,
         "both servers must apply the same writes"
     );
-    assert!(la.log.iter().any(|l| l.contains("00001001")));
-    assert!(lb.log.iter().any(|l| l.contains("00002001")));
+    // Each unit replays the seed, and this fake has no reset, so the ids requested are later ones.
+    assert!(la.log.iter().any(|l| l.contains("/things/0000100")));
+    assert!(lb.log.iter().any(|l| l.contains("/things/0000200")));
     assert!(
-        !lb.log.iter().any(|l| l.contains("00001001")),
+        !lb.log.iter().any(|l| l.contains("0000100")),
         "candidate was sent a reference id"
     );
 }
@@ -561,6 +562,7 @@ fn a_proxied_answer_is_not_ported_and_a_regression_only_if_the_baseline_says_por
     let kinds = |kind| {
         let base = baseline::record(
             kind,
+            silo_conformance::scope::Scope::Full,
             std::slice::from_ref(&good),
             &good_reports,
             BTreeMap::new(),

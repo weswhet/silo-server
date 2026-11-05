@@ -17,6 +17,7 @@ use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::process::Command;
 use std::thread;
+use std::time::Instant;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Side {
@@ -24,6 +25,7 @@ pub enum Side {
     Candidate,
 }
 
+#[derive(Clone)]
 pub struct Config {
     /// Per surface, the (reference, candidate) base URLs. A surface absent here is
     /// not exercised and all its routes count as not matched.
@@ -125,12 +127,16 @@ pub struct CaseResult {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Event {
+    #[serde(default)]
+    pub elapsed_ms: u64,
     pub kind: String,
     pub detail: String,
 }
 
 #[derive(Default, Debug)]
 pub struct RunOutput {
+    pub elapsed_ms: u64,
+    pub unit_outputs: Vec<UnitOutput>,
     pub results: Vec<CaseResult>,
     pub rule_hits: BTreeMap<String, u64>,
     pub events: Vec<Event>,
@@ -139,7 +145,126 @@ pub struct RunOutput {
     pub stage_effects: Vec<String>,
 }
 
+/// Vector ranges recorded by one unit, or the final peers stage.
+#[derive(Debug)]
+pub struct UnitOutput {
+    pub name: String,
+    pub results: std::ops::Range<usize>,
+    pub events: std::ops::Range<usize>,
+    pub stage_effects: std::ops::Range<usize>,
+}
+
+pub const READ_CHUNKS: usize = 8;
+
+/// A case's rough cost in a unit, for cutting the reads stage into units of similar length.
+fn case_weight(case: &Case) -> usize {
+    match case.method.as_str() {
+        "GET" | "HEAD" | "OPTIONS" => 1,
+        _ => 6,
+    }
+}
+
+/// A group of cases sharing one reset and seed replay.
+#[derive(Clone, Debug)]
+pub struct Unit {
+    pub name: String,
+    pub cases: Vec<usize>,
+    /// Expected cost, from `case_weight`, for spreading units over lanes.
+    pub weight: usize,
+    pub compare_seed: bool,
+}
+
+/// Splits the plan at independent read boundaries and write stages.
+pub fn units(cases: &[Case]) -> Vec<Unit> {
+    let stages: [(&str, &[Phase]); 5] = [
+        ("reads and rejections", &[Phase::Reads, Phase::Rejections]),
+        ("v2 writes", &[Phase::MutateV2]),
+        ("v1 writes", &[Phase::MutateV1]),
+        ("v1 scenarios", &[Phase::MutateScenarios]),
+        ("compatibility writes", &[Phase::MutateCompat]),
+    ];
+    let mut out = Vec::new();
+    for (stage, (name, phases)) in stages.iter().enumerate() {
+        let indices: Vec<_> = phases
+            .iter()
+            .flat_map(|phase| {
+                cases
+                    .iter()
+                    .enumerate()
+                    .filter_map(move |(i, c)| (c.phase == *phase).then_some(i))
+            })
+            .collect();
+        if indices.is_empty() {
+            continue;
+        }
+        let mut cuts = Vec::new();
+        if stage == 0 {
+            let mut safe = vec![true; indices.len()];
+            let mut captured = BTreeMap::new();
+            for (position, &index) in indices.iter().enumerate() {
+                let case = &cases[index];
+                if position > 0 {
+                    safe[position] = case.route != cases[indices[position - 1]].route
+                        && !case.needs_empty_users
+                        && case.settle_on.is_none()
+                        && case.wait_ms == 0;
+                }
+                for fact in crate::scope::referenced_facts(case) {
+                    if let Some(&producer) = captured.get(&fact) {
+                        safe[producer + 1..=position].fill(false);
+                    }
+                }
+                for (fact, _) in &case.capture_facts {
+                    captured.entry(fact.clone()).or_insert(position);
+                }
+            }
+            let boundaries: Vec<_> = (1..indices.len()).filter(|&i| safe[i]).collect();
+            let count = READ_CHUNKS.min(boundaries.len() + 1);
+            // Cut by expected time, not case count: a write costs the effects comparison's polls.
+            let mut before = vec![0usize; indices.len() + 1];
+            for (position, &index) in indices.iter().enumerate() {
+                before[position + 1] = before[position] + case_weight(&cases[index]);
+            }
+            let total = before[indices.len()];
+            let mut previous = 0;
+            for chunk in 1..count {
+                let target = total * chunk / count;
+                let remaining = count - chunk - 1;
+                let eligible = boundaries.iter().copied().filter(|&i| i > previous);
+                let eligible: Vec<_> = eligible.collect();
+                let cut = *eligible[..eligible.len() - remaining]
+                    .iter()
+                    .min_by_key(|&&i| before[i].abs_diff(target))
+                    .unwrap();
+                cuts.push(cut);
+                previous = cut;
+            }
+        }
+        cuts.push(indices.len());
+        let mut start = 0;
+        for (chunk, end) in cuts.into_iter().enumerate() {
+            out.push(Unit {
+                name: if stage == 0 {
+                    format!("{name} {}/{READ_CHUNKS}", chunk + 1)
+                } else {
+                    (*name).to_string()
+                },
+                cases: indices[start..end].to_vec(),
+                weight: indices[start..end]
+                    .iter()
+                    .map(|&i| case_weight(&cases[i]))
+                    .sum(),
+                compare_seed: out.is_empty(),
+            });
+            start = end;
+        }
+    }
+    out
+}
+
 pub struct Runner<'a> {
+    started: Instant,
+    lane: Option<usize>,
     cfg: &'a Config,
     routes: &'a [Route],
     client: Client,
@@ -290,6 +415,8 @@ impl<'a> Runner<'a> {
             None => None,
         };
         Ok(Runner {
+            started: Instant::now(),
+            lane: None,
             effects,
             origin_log: cfg.origin_log.as_deref().map(OriginLog::new),
             cfg,
@@ -301,6 +428,35 @@ impl<'a> Runner<'a> {
             run_start,
             out: RunOutput::default(),
         })
+    }
+
+    /// Uses the same elapsed-time origin as other lanes.
+    pub fn with_start(mut self, started: Instant) -> Self {
+        self.started = started;
+        self
+    }
+
+    /// Labels progress from this lane.
+    pub fn with_lane(mut self, lane: usize) -> Self {
+        self.lane = Some(lane);
+        self
+    }
+
+    fn record_unit(&mut self, name: &str, start: (usize, usize, usize)) {
+        self.out.unit_outputs.push(UnitOutput {
+            name: name.to_string(),
+            results: start.0..self.out.results.len(),
+            events: start.1..self.out.events.len(),
+            stage_effects: start.2..self.out.stage_effects.len(),
+        });
+    }
+
+    fn output_position(&self) -> (usize, usize, usize) {
+        (
+            self.out.results.len(),
+            self.out.events.len(),
+            self.out.stage_effects.len(),
+        )
     }
 
     /// Compares what the stage logged, which batches and flushes on a timer.
@@ -321,9 +477,14 @@ impl<'a> Runner<'a> {
     fn event(&mut self, kind: &str, detail: impl Into<String>) {
         let detail = detail.into();
         if self.cfg.progress {
-            eprintln!("[conformance] {kind}: {detail}");
+            if let Some(lane) = self.lane {
+                eprintln!("[conformance] lane {lane}: {kind}: {detail}");
+            } else {
+                eprintln!("[conformance] {kind}: {detail}");
+            }
         }
         self.out.events.push(Event {
+            elapsed_ms: self.started.elapsed().as_millis() as u64,
             kind: kind.to_string(),
             detail,
         });
@@ -406,51 +567,70 @@ impl<'a> Runner<'a> {
         self.candidate.facts = b;
     }
 
-    pub fn run(mut self, cases: &[Case]) -> Result<RunOutput> {
+    pub fn run(self, cases: &[Case]) -> Result<RunOutput> {
+        self.run_units(cases, &units(cases), true)
+    }
+
+    pub fn run_units(mut self, cases: &[Case], units: &[Unit], peers: bool) -> Result<RunOutput> {
         let seed: Vec<&Case> = cases.iter().filter(|c| c.phase == Phase::Seed).collect();
-        let stages: [(&str, &[Phase]); 5] = [
-            ("reads and rejections", &[Phase::Reads, Phase::Rejections]),
-            ("v2 writes", &[Phase::MutateV2]),
-            ("v1 writes", &[Phase::MutateV1]),
-            ("v1 scenarios", &[Phase::MutateScenarios]),
-            ("compatibility writes", &[Phase::MutateCompat]),
-        ];
-        for (n, (name, phases)) in stages.iter().enumerate() {
-            self.reset(&format!("before stage: {name}"))?;
+        for unit in units {
+            let position = self.output_position();
+            let started = Instant::now();
+            self.reset(&format!("before unit: {}", unit.name))?;
+            self.reference = SideState::default();
+            self.candidate = SideState::default();
+            self.aliases = Aliases::default();
             self.bootstrap();
             for c in &seed {
-                // The first pass is compared; later passes only rebuild state.
-                self.run_case(c, n == 0)?;
+                self.run_case(c, unit.compare_seed)?;
             }
-            for phase in *phases {
-                let selected: Vec<&Case> = cases.iter().filter(|c| c.phase == *phase).collect();
-                self.event(
-                    "stage",
-                    format!("{name}: {phase:?}, {} cases", selected.len()),
-                );
-                for c in selected {
-                    self.run_case(c, true)?;
-                }
+            self.event(
+                "stage",
+                format!("{}: {} cases", unit.name, unit.cases.len()),
+            );
+            for &index in &unit.cases {
+                self.run_case(&cases[index], true)?;
             }
-            self.finish_stage(name);
+            self.finish_stage(&unit.name);
+            self.event(
+                "unit_done",
+                format!("{}: {} ms", unit.name, started.elapsed().as_millis()),
+            );
+            self.record_unit(&unit.name, position);
         }
+        if peers {
+            let position = self.output_position();
+            self.run_peers(cases)?;
+            self.record_unit("peers", position);
+        }
+        self.out.elapsed_ms = self.started.elapsed().as_millis() as u64;
+        Ok(self.out)
+    }
+
+    fn run_peers(&mut self, cases: &[Case]) -> Result<()> {
         let peers: Vec<&Case> = cases.iter().filter(|c| c.phase == Phase::Peers).collect();
+        if peers.is_empty() {
+            return Ok(());
+        }
         if self.cfg.sources.is_empty() {
             for c in peers {
                 self.out
                     .not_run
                     .insert(c.id.clone(), "no peer lab: pass --sources".to_string());
             }
-            return Ok(self.out);
+            return Ok(());
         }
         self.reset("before stage: peer addresses")?;
+        self.reference = SideState::default();
+        self.candidate = SideState::default();
+        self.aliases = Aliases::default();
         self.bootstrap();
         self.bootstrap_peers();
         self.event("stage", format!("peer addresses: {} cases", peers.len()));
         for c in peers {
             self.run_case(c, true)?;
         }
-        Ok(self.out)
+        Ok(())
     }
 
     /// What the peer cases need beyond the usual facts.
@@ -1091,4 +1271,117 @@ fn bootstrap_side(
         }
     }
     (facts, problems)
+}
+
+#[cfg(test)]
+mod unit_tests {
+    use super::*;
+
+    fn case(route: usize, phase: Phase) -> Case {
+        Case {
+            id: route.to_string(),
+            route,
+            name: route.to_string(),
+            phase,
+            identity: Identity::Anon,
+            method: "GET".into(),
+            path: "/items".into(),
+            query: vec![],
+            raw_query: None,
+            headers: vec![],
+            body: None,
+            content_type: None,
+            path_override: None,
+            capture_as: None,
+            may_mutate: false,
+            skip_body: None,
+            timeout_secs: 1,
+            sort_key: route.to_string(),
+            source: None,
+            host: None,
+            settle_on: None,
+            wait_ms: 0,
+            capture_facts: vec![],
+            needs_empty_users: false,
+        }
+    }
+
+    #[test]
+    fn reads_split_into_balanced_units_in_phase_order() {
+        let cases: Vec<_> = (0..24)
+            .map(|i| {
+                case(
+                    i,
+                    if i % 2 == 0 {
+                        Phase::Reads
+                    } else {
+                        Phase::Rejections
+                    },
+                )
+            })
+            .collect();
+        let units = units(&cases);
+        assert_eq!(units.len(), READ_CHUNKS);
+        assert!(units.iter().all(|u| u.cases.len() == 3));
+        assert_eq!(
+            units
+                .iter()
+                .flat_map(|u| u.cases.iter().copied())
+                .collect::<Vec<_>>(),
+            (0..24)
+                .step_by(2)
+                .chain((1..24).step_by(2))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(units[0].name, "reads and rejections 1/8");
+        assert_eq!(units[7].name, "reads and rejections 8/8");
+    }
+
+    #[test]
+    fn dependencies_keep_intervening_cases_together() {
+        let mut cases: Vec<_> = (0..12).map(|i| case(i, Phase::Reads)).collect();
+        cases[1]
+            .capture_facts
+            .push(("flow_item".into(), "/id".into()));
+        cases[7].headers.push(("X-Item".into(), "flow_item".into()));
+        cases[3]
+            .capture_facts
+            .push(("item_id".into(), "/id".into()));
+        cases[9].path = "/items/${item_id:int}".into();
+        let units = units(&cases);
+        let group = units.iter().find(|u| u.cases.contains(&1)).unwrap();
+        assert!(group.cases.contains(&9));
+    }
+
+    #[test]
+    fn route_groups_and_stateful_cases_do_not_start_chunks() {
+        let mut cases: Vec<_> = (0..12).map(|i| case(i, Phase::Reads)).collect();
+        cases[3].route = cases[2].route;
+        cases[6].needs_empty_users = true;
+        cases[8].settle_on = Some("/items".into());
+        cases[9].wait_ms = 1;
+        for unit in units(&cases).iter().skip(1) {
+            assert!(![3, 6, 8, 9].contains(&unit.cases[0]));
+        }
+    }
+
+    #[test]
+    fn only_first_nonempty_unit_compares_seed() {
+        let cases = [
+            case(0, Phase::Seed),
+            case(1, Phase::MutateV1),
+            case(2, Phase::MutateCompat),
+        ];
+        let units = units(&cases);
+        assert_eq!(
+            units.iter().map(|u| u.name.as_str()).collect::<Vec<_>>(),
+            ["v1 writes", "compatibility writes"]
+        );
+        assert_eq!(
+            units.iter().map(|u| u.compare_seed).collect::<Vec<_>>(),
+            [true, false]
+        );
+        assert!(super::units(&[]).is_empty());
+        assert!(super::units(&[case(0, Phase::Seed), case(1, Phase::Peers)]).is_empty());
+    }
 }

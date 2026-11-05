@@ -5,17 +5,13 @@
 #
 #   self-compare.sh [--up-only] [run arguments...]
 #
-# The second stack uses its own compose project and ports. Set CONF_B_* to change them.
+# The run's scope defaults to v2 (`--scope v2`); pass `--scope full` for every surface. The second stack uses
+# its own compose project and ports: CONF_PAIR or the CONF_B_* variables move it (see lib.sh).
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-B_PROJECT="${CONF_B_PROJECT:-silo-conformance-b}"
-B_RUN="${CONF_B_RUN:-$CONF_ROOT/.run/stack-b}"
-b_env=(
-  "CONF_PROJECT=$B_PROJECT" "CONF_RUN=$B_RUN"
-  "CONF_PG_PORT=${CONF_B_PG_PORT:-35432}" "CONF_REDIS_PORT=${CONF_B_REDIS_PORT:-36379}"
-  "CONF_API_PORT=${CONF_B_API_PORT:-38080}" "CONF_JF_PORT=${CONF_B_JF_PORT:-38096}"
-  "CONF_ABS_PORT=${CONF_B_ABS_PORT:-38378}" "CONF_METRICS_PORT=${CONF_B_METRICS_PORT:-39090}"
-)
+B_PROJECT="$CONF_B_PROJECT"
+B_RUN="$CONF_B_RUN"
+b_env=("${conf_b_env[@]}")
 mkdir -p "$B_RUN"
 
 up_only=false
@@ -35,8 +31,27 @@ fi
 
 b_port() { env "${b_env[@]}" sh -c "echo \$$1"; }
 cd "$CONF_REPO" || exit 1
-cargo build --quiet --manifest-path rust/Cargo.toml -j 3
-exec rust/target/debug/silo-conformance run \
+conf_build -p silo-conformance
+# CONF_LANES=N spreads the run over pairs CONF_PAIR..CONF_PAIR+N-1 (see front-compare.sh).
+lanes="${CONF_LANES:-1}"
+case "$lanes" in [1-9]) ;; *) conf_die "CONF_LANES must be 1-9" ;; esac
+[ "$((CONF_PAIR + lanes - 1))" -le 9 ] || conf_die "CONF_PAIR $CONF_PAIR leaves no room for $lanes lanes"
+lane_args=()
+pids=()
+for lane in $(seq 1 $((lanes - 1))); do
+  dir="$CONF_PAIR_RUN/lanes/$lane"
+  mkdir -p "$dir"
+  conf_pair_shell "$((CONF_PAIR + lane))" "$CONF_SCRIPTS_DIR/lane-up.sh" "$dir" --go >"$dir/up.log" 2>&1 &
+  pids+=($!)
+  lane_args+=(--lane "$dir/lane.json")
+done
+for pid in ${pids[@]+"${pids[@]}"}; do
+  wait "$pid" || conf_die "a lane did not come up; see $CONF_PAIR_RUN/lanes/*/up.log"
+done
+defaults=()
+case " $* " in *" --scope "* | *" --scope="*) ;; *) defaults+=(--scope v2) ;; esac
+case " $* " in *" --out "* | *" --out="*) ;; *) defaults+=(--out "$CONF_PAIR_RUN/report") ;; esac
+exec "$CONF_BIN/silo-conformance" run ${defaults[@]+"${defaults[@]}"} \
   --reference "http://127.0.0.1:$CONF_API_PORT" \
   --candidate "http://127.0.0.1:$(b_port CONF_API_PORT)" \
   --surface "jellycompat=http://127.0.0.1:$CONF_JF_PORT,http://127.0.0.1:$(b_port CONF_JF_PORT)" \
@@ -49,4 +64,5 @@ exec rust/target/debug/silo-conformance run \
   --effects-reference "pg=postgres://silo:silo@127.0.0.1:$CONF_PG_PORT/silo?sslmode=disable,redis=127.0.0.1:$CONF_REDIS_PORT" \
   --effects-candidate "pg=postgres://silo:silo@127.0.0.1:$(b_port CONF_PG_PORT)/silo?sslmode=disable,redis=127.0.0.1:$(b_port CONF_REDIS_PORT)" \
   --source-revision "$(conf_revision)" \
+  ${lane_args[@]+"${lane_args[@]}"} \
   "$@"

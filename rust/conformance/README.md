@@ -12,16 +12,16 @@ are relative to the repository root.
 
 ```sh
 rust/conformance/scripts/self-compare.sh --up-only     # both Go stacks
-cargo build --manifest-path rust/Cargo.toml
-rust/target/debug/silo-conformance list                # routes and cases, sends nothing
+cargo build --release --manifest-path rust/Cargo.toml
+rust/target/release/silo-conformance list                # routes and cases, sends nothing
 rust/conformance/scripts/self-compare.sh \
-  --baseline rust/conformance/baseline/expected.json   # Go vs Go, gate on regressions
+  --baseline rust/conformance/baseline/expected-v2.json   # Go vs Go, gate on regressions
 ```
 
 Against another candidate:
 
 ```sh
-rust/target/debug/silo-conformance run \
+rust/target/release/silo-conformance run \
   --reference http://127.0.0.1:28080 --candidate http://127.0.0.1:18080 \
   --surface jellycompat=http://127.0.0.1:28096,http://127.0.0.1:18096 \
   --surface abs=http://127.0.0.1:28378,http://127.0.0.1:18378 \
@@ -30,7 +30,69 @@ rust/target/debug/silo-conformance run \
   --baseline rust/conformance/baseline/expected.json
 ```
 
-Output goes to `--out` (default `rust/conformance/.run/report`): `report.json`,
+## Scope
+
+`--scope v2` plans and scores only the native API that 1.0 locks: `api_v2`, `api_v2_walked`, `root`, and
+`api_delegate`. It drops the `api_v1`, `jellycompat`, `abs`, `metrics`, debug, node, and peer cases, except
+seed cases, which rebuild the state every stage reads, and any case that captures a fact a kept case uses.
+Parity, surface counts, and baseline comparison then cover those four surfaces only. `self-compare.sh`,
+`front-compare.sh`, and `mutation-test.sh` default to `--scope v2`; pass `--scope full` for every surface.
+The binary itself defaults to `full`. A baseline records its scope, and a run against a baseline of another
+scope stops before sending anything. `list --scope v2` prints the scoped plan.
+
+## Speed
+
+The scripts build `rust/` in release mode (`CONF_PROFILE=debug` switches back) and run
+`rust/target/release/...`.
+
+The plan runs in units. The reads and rejections stage is cut into eight units of similar expected time (a write
+case counts six reads), only between routes and never between a case that captures a fact and a later case
+that uses it; each write stage is one unit. Every unit
+starts from a reset of both stacks and a replay of the seed cases, and per-side facts, created ids, and id
+aliases start empty, so units do not depend on each other. One lane runs them in order. `--lane FILE`
+(repeatable) adds another independent stack pair, described as JSON with `reference`, `candidate`,
+`surfaces`, the reset, empty-users, and effects commands, and `origin_log`; units then run on all lanes at
+once, largest first, and the results merge back in plan order, so a report reads the same for any lane count.
+Peer cases run on lane 0. Events carry `elapsed_ms`, and a `unit_done` event gives each unit's time.
+
+`CONF_LANES=N` makes `self-compare.sh` and `front-compare.sh` bring up pairs `CONF_PAIR` to
+`CONF_PAIR+N-1` (with `scripts/lane-up.sh`, which also starts a front per pair for `front-compare.sh`) and
+pass them as lanes. A pair's first start seeds it from scratch, which takes a few minutes. `CONF_ACTIVITY_DIR`
+and `CONF_FRONT_AFTER` need one lane.
+
+A v2 run took 1891 s before this (full plan, debug build, one stack pair) and about 445 s of run time on three
+lanes in release mode (about 500 s with lane startup), on a laptop whose Docker has 4 CPUs.
+
+The local client that sweeps new listeners (`conf_wait_listener_sweep`) also sweeps every listening port on the
+host now and then, Go vs Go included. Through a front, the candidate's Go gets those requests twice (on its own
+port and through the front), so a sweep that lands inside a unit shows as `stage_effect_differs` on
+`jellycompat request GET / 302` and `GET /web/ 404` rows, and the run needs repeating. One of the two
+three-lane front runs here met it.
+
+## Stack pairs
+
+`CONF_PAIR=N` (0 to 9) moves a whole pair: the reference becomes compose project `silo-conformance-pN`, the
+candidate `silo-conformance-pN-b`, every host port (both stacks, the front's listeners in `front-compare.sh`, and
+the mutation proxy's) moves up by `10*N`, and run state and reports go to `.run/pairN/`. Pair 0 is the default
+layout: projects `silo-conformance` and `silo-conformance-b`, ports 25432-29090 and 35432-39090, the front on
+18080-19090, the proxy on 48080-49090. Each of `CONF_PROJECT`, `CONF_B_PROJECT`, `CONF_*_PORT`,
+`CONF_B_*_PORT`, `CONF_FRONT_*_PORT`, and `CONF_MUT_*_PORT` still overrides its pair default (see
+`scripts/lib.sh`).
+
+```sh
+CONF_PAIR=1 rust/conformance/scripts/self-compare.sh --up-only
+CONF_PAIR=1 rust/conformance/scripts/front-compare.sh --baseline rust/conformance/baseline/expected-v2.json
+CONF_PAIR=2 rust/conformance/scripts/mutation-test.sh --baseline rust/conformance/baseline/expected-v2.json none
+```
+
+A pair takes about 0.8 GB of memory in Docker. Every stack publishes on `127.0.0.1` only, and the scripts
+reach it there, so a pair on another host runs with the whole harness on that host: check out the repository
+there, build with `cargo`, and run the same commands. Give the stacks there a project name of their own
+(`CONF_PAIR` does that) so they cannot touch anything else running on the host, cap their CPU with Docker if
+the host serves other work, and remove them with `docker compose -p <project> down -v` when done. The image
+builds from the checkout, so both hosts compare the same Go source only when they hold the same commit.
+
+Run output goes to `--out` (default `rust/conformance/.run/report`): `report.json`,
 `cases.jsonl` (every case with its differences) and `summary.txt`. The exit code is
 1 on any regression, 2 on a harness failure, otherwise 0.
 
@@ -66,16 +128,16 @@ value counts.
 Against the front, with a second Go stack behind it:
 
 ```sh
-cargo build --manifest-path rust/Cargo.toml -p silo-server -p silo-conformance
+cargo build --release --manifest-path rust/Cargo.toml -p silo-server -p silo-conformance
 DATABASE_URL='postgres://silo:silo@127.0.0.1:35432/silo?sslmode=disable' \
 SILO_FRONT_WEB_DIST=rust/conformance/baseline/web-dist \
 SILO_FRONT_ORIGIN_LOG=rust/conformance/.run/origin.jsonl \
-rust/target/debug/silo \
+rust/target/release/silo \
   --front main=127.0.0.1:18080,http://127.0.0.1:38080 \
   --front jellycompat=127.0.0.1:18096,http://127.0.0.1:38096 \
   --front abs=127.0.0.1:18378,http://127.0.0.1:38378 \
   --front metrics=127.0.0.1:19090,http://127.0.0.1:39090 &
-rust/target/debug/silo-conformance run \
+rust/target/release/silo-conformance run \
   --reference http://127.0.0.1:28080 --candidate http://127.0.0.1:18080 \
   --surface jellycompat=http://127.0.0.1:28096,http://127.0.0.1:18096 \
   --surface abs=http://127.0.0.1:28378,http://127.0.0.1:18378 \
@@ -240,13 +302,14 @@ and no other: every spelling the Jellyfin server accepts on `/Users/Me`, one per
 Jellyfin read in turn, and lower- and upper-case `Bearer` on the native and Audiobookshelf
 APIs.
 
-The order is a pure function of the sources, and cases run one at a time, so both
-servers stay in step:
+The order is a pure function of the sources, and within a lane cases run one at a time, so
+both servers stay in step (see Speed for units and lanes):
 
 1. Create the objects later routes need (`seed`).
 2. Reads, on the seed.
 3. Writes that should be refused, which should change nothing.
-4. Real writes in stages (v2, v1, v1 scenarios, compatibility), each from a reset database:
+4. Real writes in stages (v2, v1, v1 scenarios, compatibility), each from a reset database
+   (reads and rejections are eight such units too):
    creates, then updates, then deletes, children before parents.
 
 Ids a server generates stay on that server: path parameters and bodies are filled per
@@ -300,7 +363,7 @@ difference at that place.
 
 ```sh
 rust/conformance/scripts/self-compare.sh --up-only
-rust/conformance/scripts/mutation-test.sh --baseline rust/conformance/baseline/expected.json \
+rust/conformance/scripts/mutation-test.sh --baseline rust/conformance/baseline/expected-v2.json \
   none reserialize refuse_401 drop_field rule_out_of_format rule_in_format
 ```
 
@@ -335,10 +398,13 @@ seed. Facts named `flow_*` survive the liveness check's fresh login.
 
 ## Baselines
 
-`baseline/expected.json` is recorded from Go vs Go over several runs:
+`baseline/expected-v2.json` (scope `v2`) and `baseline/expected.json` (scope `full`) are recorded from Go vs
+Go over several runs:
 
 ```sh
-rust/conformance/scripts/self-compare.sh --runs 3 \
+CONF_LANES=3 rust/conformance/scripts/self-compare.sh --runs 3 \
+  --record-baseline rust/conformance/baseline/expected-v2.json
+rust/conformance/scripts/self-compare.sh --scope full --runs 3 \
   --record-baseline rust/conformance/baseline/expected.json
 ```
 

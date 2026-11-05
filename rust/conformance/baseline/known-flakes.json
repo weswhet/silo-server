@@ -59,7 +59,9 @@
     {
       "cases": [
         "api_v1 PUT /api/v1/watch-together/rooms/{room_id}/selection#valid",
-        "api_v1 PATCH /api/v1/watch-together/rooms/{room_id}/policy#valid"
+        "api_v1 PATCH /api/v1/watch-together/rooms/{room_id}/policy#valid",
+        "api_v2 PUT /api/v2/watch-together/rooms/{room_id}/selection#valid",
+        "api_v2 PATCH /api/v2/watch-together/rooms/{room_id}/policy#valid"
       ],
       "signatures": [
         "ValueMismatch $.room.anchor_updated_at"

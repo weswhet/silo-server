@@ -7,9 +7,85 @@ CONF_ROOT="$(cd "$CONF_SCRIPTS_DIR/.." && pwd)"
 CONF_REPO="$(cd "$CONF_ROOT/../.." && pwd)"
 CONF_BASELINE="$CONF_ROOT/baseline"
 CONF_SEED="$CONF_BASELINE/seed"
-# Gitignored: digests and verification output from the last run. A second stack
-# (see self-compare.sh) sets this so the two do not overwrite each other's state.
-CONF_RUN="${CONF_RUN:-$CONF_ROOT/.run}"
+
+# CONF_PAIR=N (1-9) moves a whole stack pair, so several pairs can run at once: the reference stack becomes
+# project silo-conformance-pN, the candidate silo-conformance-pN-b, every host port below moves up by 10*N, and
+# the run state goes to .run/pairN. Any variable set explicitly still wins. Pair 0, the default, is the
+# historical layout.
+CONF_PAIR="${CONF_PAIR:-0}"
+case "$CONF_PAIR" in [0-9]) ;; *) printf '[conformance] ERROR: CONF_PAIR must be 0-9\n' >&2; exit 1 ;; esac
+conf_off=$((CONF_PAIR * 10))
+if [ "$CONF_PAIR" = 0 ]; then
+  conf_pair_name=silo-conformance
+  conf_pair_run="$CONF_ROOT/.run"
+else
+  conf_pair_name="silo-conformance-p$CONF_PAIR"
+  conf_pair_run="$CONF_ROOT/.run/pair$CONF_PAIR"
+fi
+: "${CONF_PROJECT:=$conf_pair_name}"
+: "${CONF_PG_PORT:=$((25432 + conf_off))}" "${CONF_REDIS_PORT:=$((26379 + conf_off))}"
+: "${CONF_API_PORT:=$((28080 + conf_off))}" "${CONF_JF_PORT:=$((28096 + conf_off))}"
+: "${CONF_ABS_PORT:=$((28378 + conf_off))}" "${CONF_METRICS_PORT:=$((29090 + conf_off))}"
+# The candidate stack, which self-compare.sh, front-compare.sh and mutation-test.sh start next to the reference.
+: "${CONF_B_PROJECT:=$conf_pair_name-b}" "${CONF_B_RUN:=$conf_pair_run/stack-b}"
+: "${CONF_B_PG_PORT:=$((35432 + conf_off))}" "${CONF_B_REDIS_PORT:=$((36379 + conf_off))}"
+: "${CONF_B_API_PORT:=$((38080 + conf_off))}" "${CONF_B_JF_PORT:=$((38096 + conf_off))}"
+: "${CONF_B_ABS_PORT:=$((38378 + conf_off))}" "${CONF_B_METRICS_PORT:=$((39090 + conf_off))}"
+# The Rust front's listeners in front-compare.sh, and the mutation proxy's in mutation-test.sh.
+: "${CONF_FRONT_API_PORT:=$((18080 + conf_off))}" "${CONF_FRONT_JF_PORT:=$((18096 + conf_off))}"
+: "${CONF_FRONT_ABS_PORT:=$((18378 + conf_off))}" "${CONF_FRONT_METRICS_PORT:=$((19090 + conf_off))}"
+: "${CONF_MUT_API_PORT:=$((48080 + conf_off))}" "${CONF_MUT_JF_PORT:=$((48096 + conf_off))}"
+: "${CONF_MUT_ABS_PORT:=$((48378 + conf_off))}" "${CONF_MUT_METRICS_PORT:=$((49090 + conf_off))}"
+# Gitignored: digests and verification output from the last run. A second stack sets this so the two do not
+# overwrite each other's state.
+CONF_RUN="${CONF_RUN:-$conf_pair_run}"
+# Reports and logs of this pair's comparison runs.
+CONF_PAIR_RUN="$conf_pair_run"
+export CONF_PAIR CONF_B_PROJECT CONF_B_RUN CONF_B_PG_PORT CONF_B_REDIS_PORT CONF_B_API_PORT CONF_B_JF_PORT \
+  CONF_B_ABS_PORT CONF_B_METRICS_PORT
+
+# The environment that points these scripts at the reference stack, and at the candidate stack.
+conf_a_env=(
+  "CONF_PAIR=$CONF_PAIR" "CONF_PROJECT=$CONF_PROJECT" "CONF_RUN=$CONF_RUN"
+  "CONF_PG_PORT=$CONF_PG_PORT" "CONF_REDIS_PORT=$CONF_REDIS_PORT"
+  "CONF_API_PORT=$CONF_API_PORT" "CONF_JF_PORT=$CONF_JF_PORT"
+  "CONF_ABS_PORT=$CONF_ABS_PORT" "CONF_METRICS_PORT=$CONF_METRICS_PORT"
+)
+conf_b_env=(
+  "CONF_PAIR=$CONF_PAIR" "CONF_PROJECT=$CONF_B_PROJECT" "CONF_RUN=$CONF_B_RUN"
+  "CONF_PG_PORT=$CONF_B_PG_PORT" "CONF_REDIS_PORT=$CONF_B_REDIS_PORT"
+  "CONF_API_PORT=$CONF_B_API_PORT" "CONF_JF_PORT=$CONF_B_JF_PORT"
+  "CONF_ABS_PORT=$CONF_B_ABS_PORT" "CONF_METRICS_PORT=$CONF_B_METRICS_PORT"
+)
+
+# conf_pair_shell N CMD...: runs CMD for pair N, with every pair variable taken from N's defaults rather than
+# from this shell's environment.
+conf_pair_shell() {
+  local pair="$1" v unset_args=()
+  shift
+  for v in PROJECT RUN PG_PORT REDIS_PORT API_PORT JF_PORT ABS_PORT METRICS_PORT; do
+    unset_args+=(-u "CONF_$v" -u "CONF_B_$v")
+  done
+  for v in API JF ABS METRICS; do
+    unset_args+=(-u "CONF_FRONT_${v}_PORT" -u "CONF_MUT_${v}_PORT")
+  done
+  env "${unset_args[@]}" CONF_PAIR="$pair" "$@"
+}
+
+# Comparison runs use release builds: the front and the harness then cost the run little CPU. CONF_PROFILE=debug
+# switches back.
+CONF_PROFILE="${CONF_PROFILE:-release}"
+case "$CONF_PROFILE" in
+  release) conf_cargo_profile=(--release) ;;
+  debug) conf_cargo_profile=() ;;
+  *) printf '[conformance] ERROR: CONF_PROFILE must be release or debug\n' >&2; exit 1 ;;
+esac
+CONF_BIN="$CONF_REPO/rust/target/$CONF_PROFILE"
+# conf_build <cargo args...>: builds rust/ in the comparison profile.
+conf_build() {
+  cargo build --quiet --manifest-path "$CONF_REPO/rust/Cargo.toml" -j "${CONF_BUILD_JOBS:-4}" \
+    ${conf_cargo_profile[@]+"${conf_cargo_profile[@]}"} "$@"
+}
 
 set -a
 # shellcheck source=../baseline/fixture.env

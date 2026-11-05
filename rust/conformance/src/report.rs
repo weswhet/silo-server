@@ -7,6 +7,7 @@ use crate::model::{Route, Surface};
 use crate::normalize::RuleSpec;
 use crate::plan::Skip;
 use crate::runner::{CaseResult, Event, RunOutput};
+use crate::scope::Scope;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -122,6 +123,7 @@ pub struct Regression {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Report {
+    pub scope: Scope,
     pub schema_version: u32,
     pub partial: bool,
     pub surfaces: BTreeMap<String, SurfaceCounts>,
@@ -323,7 +325,7 @@ pub fn surface_counts(reports: &[RouteReport]) -> BTreeMap<String, SurfaceCounts
 }
 
 pub fn summary_text(report: &Report) -> String {
-    let mut s = String::new();
+    let mut s = format!("scope: {}\n", report.scope.name());
     s.push_str(&format!(
         "{:<15} {:>16} {:>8} {:>6} {:>8} {:>7} {:>6} {:>10} {:>13}\n",
         "surface",

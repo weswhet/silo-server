@@ -105,7 +105,7 @@ pub struct SiblingValue {
     pub equals: String,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Rule {
     pub spec: RuleSpec,
     route: Regex,
@@ -616,7 +616,7 @@ impl Rule {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Rules {
     pub rules: Vec<Rule>,
 }

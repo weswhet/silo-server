@@ -5,13 +5,14 @@ use silo_conformance::baseline::{self, Baseline, CandidateKind, ManualFlakes};
 use silo_conformance::model::{Surface, PROXY_MARKER_HEADER};
 use silo_conformance::normalize::Rules;
 use silo_conformance::report::{self, NormalizerUse, Report, RouteReport};
-use silo_conformance::runner::{self, Config, RunOutput, Runner};
-use silo_conformance::{http, plan, sources};
+use silo_conformance::runner::{self, Config, RunOutput};
+use silo_conformance::scope::{self, Scope};
+use silo_conformance::{http, lanes, plan, sources};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 #[derive(Parser)]
 #[command(
@@ -30,6 +31,8 @@ enum Cmd {
     List {
         #[arg(long)]
         repo: Option<PathBuf>,
+        #[arg(long, default_value = "full", value_parser = parse_scope)]
+        scope: Scope,
     },
     /// Replay the plan against both servers and report parity.
     Run(RunArgs),
@@ -37,6 +40,9 @@ enum Cmd {
 
 #[derive(clap::Args)]
 struct RunArgs {
+    /// Surface scope to plan and score.
+    #[arg(long, default_value = "full", value_parser = parse_scope)]
+    scope: Scope,
     /// Base URL of the reference server's main listener.
     #[arg(long)]
     reference: String,
@@ -48,6 +54,9 @@ struct RunArgs {
     /// routes are not exercised and count as not matched.
     #[arg(long = "surface", value_name = "SURFACE=REF,CAND")]
     surfaces: Vec<String>,
+    /// Another independent stack pair, described by a JSON file. Repeatable.
+    #[arg(long, value_name = "FILE")]
+    lane: Vec<PathBuf>,
     /// Repository root (default: found by walking up from the current directory).
     #[arg(long)]
     repo: Option<PathBuf>,
@@ -122,6 +131,10 @@ struct RunArgs {
     source_revision: String,
 }
 
+fn parse_scope(value: &str) -> std::result::Result<Scope, String> {
+    Scope::parse(value).ok_or_else(|| "scope must be full or v2".to_string())
+}
+
 fn find_repo(explicit: Option<PathBuf>) -> Result<PathBuf> {
     if let Some(p) = explicit {
         return Ok(p);
@@ -149,20 +162,25 @@ fn main() -> ExitCode {
 
 fn real_main() -> Result<ExitCode> {
     match Cli::parse().command {
-        Cmd::List { repo } => list(&find_repo(repo)?),
+        Cmd::List { repo, scope } => list(&find_repo(repo)?, scope),
         Cmd::Run(args) => run(args),
     }
 }
 
-fn list(repo: &Path) -> Result<ExitCode> {
+fn list(repo: &Path, scope: Scope) -> Result<ExitCode> {
     let src = sources::load(repo)?;
-    let p = plan::build(&src);
+    let mut p = plan::build(&src);
+    p.cases = scope::select(p.cases, &src.routes, scope);
+    println!("scope: {}", scope.name());
     let mut per_surface: BTreeMap<Surface, usize> = BTreeMap::new();
     for c in &p.cases {
         *per_surface.entry(src.routes[c.route].surface).or_default() += 1;
     }
     println!("{:<16} {:>7} {:>7}", "surface", "routes", "cases");
     for (s, total) in sources::surface_totals(&src.routes) {
+        if !scope.includes(s) {
+            continue;
+        }
         println!(
             "{:<16} {:>7} {:>7}",
             s.name(),
@@ -175,7 +193,13 @@ fn list(repo: &Path) -> Result<ExitCode> {
         *per_phase.entry(format!("{:?}", c.phase)).or_default() += 1;
     }
     println!("phases: {per_phase:?}");
-    println!("mutating routes: {}", sources::mutating_count(&src.routes));
+    let routes: Vec<_> = src
+        .routes
+        .iter()
+        .filter(|r| scope.includes(r.surface))
+        .cloned()
+        .collect();
+    println!("mutating routes: {}", sources::mutating_count(&routes));
     println!("skipped inputs: {}", p.skipped.len());
     for s in &p.skipped {
         println!("  {}: {}", s.what, s.reason);
@@ -204,7 +228,12 @@ fn parse_surfaces(args: &RunArgs) -> Result<BTreeMap<Surface, (String, String)>>
         let surface = Surface::parse(name).with_context(|| format!("unknown surface {name}"))?;
         urls.insert(surface, (a.to_string(), b.to_string()));
     }
-    for (surface, (a, b)) in &urls {
+    validate_surfaces(&urls)?;
+    Ok(urls)
+}
+
+fn validate_surfaces(urls: &BTreeMap<Surface, (String, String)>) -> Result<()> {
+    for (surface, (a, b)) in urls {
         if a.trim_end_matches('/') == b.trim_end_matches('/') {
             bail!(
                 "{} points both sides at {a}: writes would land twice and every value would trivially match",
@@ -212,7 +241,75 @@ fn parse_surfaces(args: &RunArgs) -> Result<BTreeMap<Surface, (String, String)>>
             );
         }
     }
-    Ok(urls)
+    Ok(())
+}
+
+#[derive(serde::Deserialize)]
+struct Lane {
+    reference: String,
+    candidate: String,
+    #[serde(default)]
+    surfaces: BTreeMap<String, (String, String)>,
+    #[serde(default)]
+    reset_reference: Option<String>,
+    #[serde(default)]
+    reset_candidate: Option<String>,
+    #[serde(default)]
+    empty_users_reference: Option<String>,
+    #[serde(default)]
+    empty_users_candidate: Option<String>,
+    #[serde(default)]
+    effects_reference: Option<String>,
+    #[serde(default)]
+    effects_candidate: Option<String>,
+    #[serde(default)]
+    origin_log: Option<String>,
+}
+
+impl Lane {
+    fn config(self, base: &Config, repo: &Path) -> Result<Config> {
+        let mut cfg = base.clone();
+        cfg.urls.clear();
+        for surface in [
+            Surface::ApiV2,
+            Surface::ApiV2Walked,
+            Surface::ApiV1,
+            Surface::ApiDelegate,
+            Surface::Root,
+        ] {
+            cfg.urls
+                .insert(surface, (self.reference.clone(), self.candidate.clone()));
+        }
+        for (name, urls) in self.surfaces {
+            let surface =
+                Surface::parse(&name).with_context(|| format!("unknown surface {name}"))?;
+            cfg.urls.insert(surface, urls);
+        }
+        validate_surfaces(&cfg.urls)?;
+        cfg.reset_reference = self.reset_reference;
+        cfg.reset_candidate = self.reset_candidate;
+        cfg.empty_users_reference = self.empty_users_reference;
+        cfg.empty_users_candidate = self.empty_users_candidate;
+        cfg.origin_log = self.origin_log.map(PathBuf::from);
+        cfg.effects = match (self.effects_reference, self.effects_candidate) {
+            (Some(reference), Some(candidate)) => {
+                let path = repo.join("rust/conformance/baseline/effects.json");
+                let config = serde_json::from_str(
+                    &fs::read_to_string(&path)
+                        .with_context(|| format!("reading {}", path.display()))?,
+                )
+                .with_context(|| format!("parsing {}", path.display()))?;
+                Some((
+                    silo_conformance::effects::parse_spec(&reference)?,
+                    silo_conformance::effects::parse_spec(&candidate)?,
+                    config,
+                ))
+            }
+            (None, None) => None,
+            _ => bail!("lane effects_reference and effects_candidate go together"),
+        };
+        Ok(cfg)
+    }
 }
 
 fn run(args: RunArgs) -> Result<ExitCode> {
@@ -272,7 +369,15 @@ fn run(args: RunArgs) -> Result<ExitCode> {
         .iter()
         .map(|p| Baseline::load(p))
         .collect::<Result<Vec<_>>>()?;
-    for b in &mut baselines {
+    for (path, b) in args.baseline.iter().zip(&mut baselines) {
+        if b.scope != args.scope {
+            bail!(
+                "{} was recorded with scope {}; pass --scope {} or record it again",
+                path.display(),
+                b.scope.name(),
+                b.scope.name()
+            );
+        }
         manual.merge_into(&mut b.known_flakes);
     }
 
@@ -284,14 +389,6 @@ fn run(args: RunArgs) -> Result<ExitCode> {
         None => BTreeMap::new(),
     };
 
-    if let Some(addr) = &args.reference_forwarded_for {
-        http::set_reference_headers(
-            urls.values()
-                .map(|(reference, _)| reference.clone())
-                .collect(),
-            vec![("X-Forwarded-For".to_string(), addr.clone())],
-        );
-    }
     let rules = if peer_sources.is_empty() && args.reference_forwarded_for.is_none() {
         rules
     } else {
@@ -316,7 +413,8 @@ fn run(args: RunArgs) -> Result<ExitCode> {
         _ => bail!("--effects-reference and --effects-candidate go together"),
     };
     let src = sources::load(&repo)?;
-    let p = plan::build(&src);
+    let mut p = plan::build(&src);
+    p.cases = scope::select(p.cases, &src.routes, args.scope);
     let cfg = Config {
         effects,
         urls,
@@ -334,18 +432,62 @@ fn run(args: RunArgs) -> Result<ExitCode> {
         sources: peer_sources,
         pace: std::time::Duration::from_millis(args.pace_ms),
     };
+    let mut configs = vec![cfg.clone()];
+    for path in &args.lane {
+        let lane: Lane = serde_json::from_str(
+            &fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?,
+        )
+        .with_context(|| format!("parsing {}", path.display()))?;
+        configs.push(lane.config(&cfg, &repo)?);
+    }
+    if args.record_baseline.is_some()
+        && configs
+            .iter()
+            .any(|cfg| cfg.reset_reference.is_none() || cfg.reset_candidate.is_none())
+    {
+        bail!("recording a baseline needs both reset commands on every lane");
+    }
+    if let Some(addr) = &args.reference_forwarded_for {
+        http::set_reference_headers(
+            configs
+                .iter()
+                .flat_map(|cfg| cfg.urls.values().map(|(reference, _)| reference.clone()))
+                .collect(),
+            vec![("X-Forwarded-For".to_string(), addr.clone())],
+        );
+    }
+    let units = runner::units(&p.cases);
     let mut runs: Vec<RunOutput> = Vec::new();
     for n in 0..args.runs.max(1) {
+        let clock = Instant::now();
+        let start = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
+        let output = lanes::run(&configs, &src.routes, &p.cases, &units, start, clock)?;
         if !args.quiet {
             eprintln!(
-                "[conformance] run {} of {}: {} cases",
+                "[conformance] run {} of {}: {} cases in {:.3} s over {} lane(s)",
                 n + 1,
                 args.runs.max(1),
-                p.cases.len()
+                output.results.len(),
+                output.elapsed_ms as f64 / 1000.0,
+                configs.len()
             );
         }
-        let start = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
-        runs.push(Runner::new(&cfg, &src.routes, start)?.run(&p.cases)?);
+        runs.push(output);
+    }
+    let scoped_keys: std::collections::BTreeSet<_> = src
+        .routes
+        .iter()
+        .filter(|r| args.scope.includes(r.surface))
+        .map(|r| r.key())
+        .collect();
+    for output in &mut runs {
+        output
+            .results
+            .retain(|r| scoped_keys.contains(&r.route_key));
+        output.not_run.retain(|key, _| {
+            key.split_once('#')
+                .is_some_and(|(route, _)| scoped_keys.contains(route))
+        });
     }
     // The report and cases.jsonl keep the last run; a flake seen in an earlier one needs its cases too.
     if runs.len() > 1 {
@@ -365,7 +507,10 @@ fn run(args: RunArgs) -> Result<ExitCode> {
     }
     let last = runs.last().expect("at least one run");
     let flakes = baseline::flake_set(&baselines);
-    let reports: Vec<RouteReport> = report::route_reports(&src.routes, last, &flakes);
+    let reports: Vec<RouteReport> = report::route_reports(&src.routes, last, &flakes)
+        .into_iter()
+        .filter(|r| args.scope.includes(r.surface))
+        .collect();
     let surfaces = report::surface_counts(&reports);
     let all: Vec<&RouteReport> = reports.iter().collect();
     let overall = report::count(&all);
@@ -384,6 +529,7 @@ fn run(args: RunArgs) -> Result<ExitCode> {
     if let Some(path) = &args.record_baseline {
         let recorded = baseline::record(
             kind,
+            args.scope,
             &runs,
             &reports,
             surfaces.clone(),
@@ -405,6 +551,7 @@ fn run(args: RunArgs) -> Result<ExitCode> {
     }
     let report_doc = Report {
         schema_version: 1,
+        scope: args.scope,
         partial,
         surfaces,
         overall,
@@ -442,5 +589,37 @@ fn run(args: RunArgs) -> Result<ExitCode> {
         Ok(ExitCode::SUCCESS)
     } else {
         Ok(ExitCode::from(1))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lane_requires_both_main_urls_and_defaults_optional_fields() {
+        assert!(serde_json::from_str::<Lane>(r#"{"reference":"http://reference"}"#).is_err());
+        let lane: Lane = serde_json::from_str(
+            r#"{"reference":"http://reference","candidate":"http://candidate"}"#,
+        )
+        .unwrap();
+        assert!(lane.surfaces.is_empty());
+        assert!(lane.reset_reference.is_none());
+        assert!(lane.effects_candidate.is_none());
+        assert!(lane.origin_log.is_none());
+    }
+
+    #[test]
+    fn lane_surfaces_use_two_urls() {
+        let lane: Lane = serde_json::from_str(r#"{"reference":"http://reference","candidate":"http://candidate","surfaces":{"jellycompat":["http://ref-jf","http://cand-jf"]}}"#).unwrap();
+        assert_eq!(
+            lane.surfaces["jellycompat"],
+            ("http://ref-jf".into(), "http://cand-jf".into())
+        );
+        assert!(validate_surfaces(&BTreeMap::from([(
+            Surface::ApiV2,
+            ("http://same/".into(), "http://same".into())
+        )]))
+        .is_err());
     }
 }

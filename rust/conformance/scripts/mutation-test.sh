@@ -3,7 +3,10 @@
 # sides and conformance-mutproxy in front of the candidate, once per fault, then
 # checks that every fault it applied was reported on its case.
 #
-#   mutation-test.sh [--baseline FILE] [--out DIR] [--salt N] FAULT...
+#   mutation-test.sh [--baseline FILE] [--out DIR] [--salt N] [--scope v2|full] FAULT...
+#
+# The scope defaults to v2; a --baseline must have been recorded with the same scope. CONF_PAIR moves the
+# stacks and the proxy's listeners (see lib.sh).
 #
 # FAULT is a name from `conformance-mutproxy list`, or `all` (every fault in one run,
 # one per case), `none` or `reserialize` (controls that must report nothing), or
@@ -13,25 +16,20 @@
 # control reported a regression, or a refusal run read any parity.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-B_PROJECT="${CONF_B_PROJECT:-silo-conformance-b}"
-B_RUN="${CONF_B_RUN:-$CONF_ROOT/.run/stack-b}"
-B_API="${CONF_B_API_PORT:-38080}"
-B_JF="${CONF_B_JF_PORT:-38096}"
-B_ABS="${CONF_B_ABS_PORT:-38378}"
-B_METRICS="${CONF_B_METRICS_PORT:-39090}"
-b_env=(
-  "CONF_PROJECT=$B_PROJECT" "CONF_RUN=$B_RUN"
-  "CONF_PG_PORT=${CONF_B_PG_PORT:-35432}" "CONF_REDIS_PORT=${CONF_B_REDIS_PORT:-36379}"
-  "CONF_API_PORT=$B_API" "CONF_JF_PORT=$B_JF"
-  "CONF_ABS_PORT=$B_ABS" "CONF_METRICS_PORT=$B_METRICS"
-)
-P_API="${CONF_MUT_API_PORT:-48080}"
-P_JF="${CONF_MUT_JF_PORT:-48096}"
-P_ABS="${CONF_MUT_ABS_PORT:-48378}"
-P_METRICS="${CONF_MUT_METRICS_PORT:-49090}"
+B_PROJECT="$CONF_B_PROJECT"
+B_API="$CONF_B_API_PORT"
+B_JF="$CONF_B_JF_PORT"
+B_ABS="$CONF_B_ABS_PORT"
+B_METRICS="$CONF_B_METRICS_PORT"
+b_env=("${conf_b_env[@]}")
+P_API="$CONF_MUT_API_PORT"
+P_JF="$CONF_MUT_JF_PORT"
+P_ABS="$CONF_MUT_ABS_PORT"
+P_METRICS="$CONF_MUT_METRICS_PORT"
 
 baseline=()
-out="$CONF_ROOT/.run/mutation"
+out="$CONF_PAIR_RUN/mutation"
+scope=(--scope v2)
 salt=0
 faults=()
 while [ $# -gt 0 ]; do
@@ -39,14 +37,15 @@ while [ $# -gt 0 ]; do
     --baseline) baseline=(--baseline "$2"); shift 2 ;;
     --out) out="$2"; shift 2 ;;
     --salt) salt="$2"; shift 2 ;;
+    --scope) scope=(--scope "$2"); shift 2 ;;
     *) faults+=("$1"); shift ;;
   esac
 done
 [ "${#faults[@]}" -gt 0 ] || conf_die "name at least one fault"
 
 cd "$CONF_REPO" || exit 1
-cargo build --quiet --manifest-path rust/Cargo.toml -j 3
-proxy=rust/target/debug/conformance-mutproxy
+conf_build -p silo-conformance --bin silo-conformance --bin conformance-mutproxy
+proxy="$CONF_BIN/conformance-mutproxy"
 proxy_pid=""
 stop_proxy() {
   if [ -n "$proxy_pid" ]; then
@@ -78,7 +77,7 @@ for fault in "${faults[@]}"; do
         kill -0 "$proxy_pid" 2>/dev/null || conf_die "the proxy did not start for $fault"
       done
       set +e
-      rust/target/debug/silo-conformance run --quiet \
+      "$CONF_BIN/silo-conformance" run --quiet "${scope[@]}" \
         --reference "http://127.0.0.1:$((P_API + 100))" --candidate "http://127.0.0.1:$P_API" \
         --surface "jellycompat=http://127.0.0.1:$((P_JF + 100)),http://127.0.0.1:$P_JF" \
         --surface "abs=http://127.0.0.1:$((P_ABS + 100)),http://127.0.0.1:$P_ABS" \
@@ -111,7 +110,7 @@ for fault in "${faults[@]}"; do
 
   started=$SECONDS
   set +e
-  rust/target/debug/silo-conformance run --quiet --tag-cases \
+  "$CONF_BIN/silo-conformance" run --quiet --tag-cases "${scope[@]}" \
     --reference "http://127.0.0.1:$CONF_API_PORT" \
     --candidate "http://127.0.0.1:$P_API" \
     --surface "jellycompat=http://127.0.0.1:$CONF_JF_PORT,http://127.0.0.1:$P_JF" \
@@ -122,7 +121,7 @@ for fault in "${faults[@]}"; do
     --empty-users-reference "$CONF_SCRIPTS_DIR/empty-users.sh $CONF_PROJECT" \
     --empty-users-candidate "$CONF_SCRIPTS_DIR/empty-users.sh $B_PROJECT" \
     --effects-reference "pg=postgres://silo:silo@127.0.0.1:$CONF_PG_PORT/silo?sslmode=disable,redis=127.0.0.1:$CONF_REDIS_PORT" \
-    --effects-candidate "pg=postgres://silo:silo@127.0.0.1:${CONF_B_PG_PORT:-35432}/silo?sslmode=disable,redis=127.0.0.1:${CONF_B_REDIS_PORT:-36379}" \
+    --effects-candidate "pg=postgres://silo:silo@127.0.0.1:$CONF_B_PG_PORT/silo?sslmode=disable,redis=127.0.0.1:$CONF_B_REDIS_PORT" \
     ${CONF_MUT_ONLY:+--only "$CONF_MUT_ONLY"} \
     --out "$dir/report" ${baseline[@]+"${baseline[@]}"} >"$dir/run.txt" 2>&1
   run_exit=$?
