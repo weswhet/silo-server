@@ -75,6 +75,7 @@ func init() {
 // operations. Every field is optional: a missing gate never removes a route,
 // it makes the operations behind that gate fail closed with a typed problem.
 type Dependencies struct {
+	Playlists         PlaylistService
 	ThemeSongs        ThemeSongService
 	ObserveThemeAudio func(string, http.Handler) http.Handler
 	// ObserveDownloadDelivery wraps the managed-download file and subtitle

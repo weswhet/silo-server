@@ -612,6 +612,7 @@ func registerAll(reg *Registry) {
 	registerLibraryMonitoring(reg)
 	registerLibraryJobs(reg)
 	registerLibraryViews(reg)
+	registerPlaylists(reg)
 	registerPersonalCollections(reg)
 	registerAdminCollections(reg)
 	registerAdminSections(reg)

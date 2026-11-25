@@ -29,6 +29,9 @@ import (
 
 // ProfileHandler handles profile CRUD endpoints.
 type ProfileHandler struct {
+	PlaylistPurger interface {
+		PurgeProfile(context.Context, int, string) error
+	}
 	storeProvider  userstore.UserStoreProvider
 	SessionsReader playbackSessionsReader
 	UserRepo       interface {
@@ -905,6 +908,14 @@ func (h *ProfileHandler) DeleteProfile(ctx context.Context, cmd ProfileDeleteCom
 			slog.WarnContext(ctx, "profile ebook reader purge failed after delete", "component", "api", "user_id", userID, "profile_id", profileID, "error", purgeErr)
 		}
 	}
+	if h.PlaylistPurger != nil {
+		purgeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		if err := h.PlaylistPurger.PurgeProfile(purgeCtx, userID, profileID); err != nil {
+			slog.WarnContext(ctx, "profile playlist purge failed after delete", "component", "api", "user_id", userID, "profile_id", profileID, "error", err)
+		}
+	}
+
 	if h.RecommendationsPurger != nil {
 		purgeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		defer cancel()

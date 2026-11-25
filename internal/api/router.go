@@ -75,6 +75,7 @@ import (
 	"github.com/Silo-Server/silo-server/internal/playback"
 	"github.com/Silo-Server/silo-server/internal/playback/connectionstore"
 	"github.com/Silo-Server/silo-server/internal/playback/planstore"
+	"github.com/Silo-Server/silo-server/internal/playlists"
 	"github.com/Silo-Server/silo-server/internal/plugins"
 	"github.com/Silo-Server/silo-server/internal/policy"
 	"github.com/Silo-Server/silo-server/internal/progresssync"
@@ -3404,6 +3405,12 @@ func newChiRouter(deps Dependencies) chi.Router {
 			}); ok {
 				watchSync.SetWatchlistTitles(watchlistTitles.WatchSync(watchlistSyncRequests{requests: requestSvc}))
 			}
+		}
+	}
+	if deps.DB != nil {
+		v2deps.Playlists = &playlists.Store{Pool: deps.DB}
+		if profileHandler != nil {
+			profileHandler.PlaylistPurger = &playlists.Store{Pool: deps.DB}
 		}
 	}
 	if collectionHandler != nil {

@@ -1609,3 +1609,5 @@
 ./internal/api/handlers TestPlaybackHistoryEntrySkipsTheReadGateDB
 ./internal/backup TestCarryCredentialsReconcilesRestoredStreamNodesDB
 ./internal/backup TestCarryCredentialsKeepsNodeSamplesWithoutDailyArchiveDB
+
+./internal/playlists TestPlaylistIsolationConcurrencyDB
