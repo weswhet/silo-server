@@ -152973,6 +152973,132 @@
       "value": "Зрители"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "Добавить в плейлист"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "Добавлено в плейлист"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "Этот плейлист был изменён в другом месте. Просмотрите последнюю версию и повторите попытку."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "Создать плейлист"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "Создать и добавить"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "Удалить плейлист"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "Будут удалены плейлист и его элементы, но не ваши медиафайлы."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "Плейлистов пока нет."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "Добавляйте фильмы или серии с их страниц."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "Не удалось обновить плейлист. Повторите попытку."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "Плейлист закончился."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "Не удалось загрузить плейлисты."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "Переместить вниз"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "Переместить вверх"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "Название плейлиста"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "Не удалось продолжить воспроизведение плейлиста. Повторите попытку."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "Удалить элемент"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "Переименовать плейлист"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "Личные плейлисты этого профиля."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "Плейлисты"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "Недоступный элемент"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

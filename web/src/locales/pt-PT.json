@@ -140246,6 +140246,132 @@
       "value": "Espetadores"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "Adicionar à lista de reprodução"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "Adicionado à lista de reprodução"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "Esta lista de reprodução foi alterada noutro local. Reveja a versão mais recente e tente novamente."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "Criar lista de reprodução"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "Criar e adicionar"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "Eliminar lista de reprodução"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "Esta ação remove a lista de reprodução e as respetivas entradas, mas não os seus conteúdos multimédia."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "Ainda não há listas de reprodução."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "Adicione filmes ou episódios a partir das respetivas páginas de detalhes."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "Não foi possível atualizar a lista de reprodução. Tente novamente."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "Lista de reprodução concluída."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "Não foi possível carregar as listas de reprodução."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "Mover para baixo"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "Mover para cima"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "Nome da lista de reprodução"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "Não foi possível continuar a lista de reprodução. Tente novamente."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "Remover entrada"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "Mudar o nome da lista de reprodução"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "Listas de reprodução privadas deste perfil."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "Listas de reprodução"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "Entrada indisponível"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

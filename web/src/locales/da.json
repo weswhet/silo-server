@@ -128545,6 +128545,132 @@
       "value": "Seere"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "Tilføj til playliste"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "Tilføjet til playliste"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "Playlisten er blevet ændret et andet sted. Se den nyeste version, og prøv igen."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "Opret playliste"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "Opret og tilføj"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "Slet playliste"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "Dette fjerner playlisten og dens elementer, men ikke dine medier."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "Ingen playlister endnu."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "Tilføj film eller afsnit fra deres detaljesider."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "Kunne ikke opdatere playlisten. Prøv igen."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "Playlisten er slut."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "Kunne ikke indlæse playlister."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "Flyt ned"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "Flyt op"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "Playlistens navn"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "Kunne ikke fortsætte playlisten. Prøv igen."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "Fjern element"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "Omdøb playliste"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "Private playlister for denne profil."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "Playlister"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "Element ikke tilgængeligt"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

@@ -1,3 +1,4 @@
+import { usePlaylistCapabilities } from "@/hooks/queries/playlists";
 import { useState, useCallback, useEffect, useId, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 import { Link, useLocation, useParams } from "react-router";
@@ -225,6 +226,7 @@ export default function AppSidebar({ onNavigate, collapsed = false, swap }: AppS
   const params = useParams<{ libraryId: string }>();
   const { user, logout, clearProfile } = useAuth();
   const { profile } = useCurrentProfile();
+  const { data: playlistCapabilities } = usePlaylistCapabilities();
   // The sidebar stays mounted, so it refetches a stale household on focus:
   // otherwise a limit raised elsewhere would keep Switch Profile hidden
   // until a reload.
@@ -1004,6 +1006,19 @@ export default function AppSidebar({ onNavigate, collapsed = false, swap }: AppS
                   <SidebarLabel show={showLabels}>{t("web.shell.sidebar.watchParty")}</SidebarLabel>
                 </ViewTransitionLink>
               </li>
+              {playlistCapabilities?.available && (
+                <li>
+                  <ViewTransitionLink
+                    to="/playlists"
+                    onClick={onNavigate}
+                    className={navLinkClass("/playlists")}
+                    aria-current={isActive("/playlists") ? "page" : undefined}
+                  >
+                    <FolderOpen className="h-[18px] w-[18px] shrink-0" />
+                    <SidebarLabel show={showLabels}>{t("web.playlists.title")}</SidebarLabel>
+                  </ViewTransitionLink>
+                </li>
+              )}
               <li>
                 <ViewTransitionLink
                   to="/collections"

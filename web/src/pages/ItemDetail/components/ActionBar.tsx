@@ -1,3 +1,5 @@
+import AddToPlaylistDialog from "@/components/AddToPlaylistDialog";
+import { usePlaylistCapabilities } from "@/hooks/queries/playlists";
 import {
   type ComponentProps,
   Fragment,
@@ -208,6 +210,7 @@ export interface ActionBarProps {
   compactMobile?: boolean;
   contentId?: string;
   canAddToCollection?: boolean;
+  canAddToPlaylist?: boolean;
   /** The item's title, named by Add to collection. */
   itemTitle?: string;
   watchTogether?: ActionBarWatchTogether;
@@ -322,6 +325,7 @@ export default function ActionBar({
   compactMobile = false,
   contentId,
   canAddToCollection = true,
+  canAddToPlaylist = false,
   itemTitle,
   watchTogether,
   primaryAction,
@@ -412,6 +416,8 @@ export default function ActionBar({
   const typeaheadRef = useRef<{ query: string; at: number }>({ query: "", at: 0 });
   const [refreshDialogOpen, setRefreshDialogOpen] = useState(false);
   const [redetectDialogOpen, setRedetectDialogOpen] = useState(false);
+  const { data: playlistCapabilities } = usePlaylistCapabilities();
+  const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
   const [addToCollectionOpen, setAddToCollectionOpen] = useState(false);
   const [markerEditorOpen, setMarkerEditorOpen] = useState(false);
   const [trickplayOpen, setTrickplayOpen] = useState(false);
@@ -810,6 +816,16 @@ export default function ActionBar({
     ),
   ];
   const libraryItems = [
+    contentId && canAddToPlaylist && playlistCapabilities?.available && (
+      <DetailOverflowMenuItem
+        key="playlist"
+        closeMenu={closeOverflowMenu}
+        onAction={() => setAddToPlaylistOpen(true)}
+      >
+        <FolderPlus className="size-4" />
+        {t("web.playlists.add")}
+      </DetailOverflowMenuItem>
+    ),
     onToggleWatchlist && (
       <DetailOverflowMenuItem
         key="watchlist"
@@ -1362,6 +1378,13 @@ export default function ActionBar({
             onOpenChange={setRedetectDialogOpen}
             onConfirm={handleRedetectConfirm}
             isPending={isRedetectingMarkers}
+          />
+        )}
+        {contentId && canAddToPlaylist && (
+          <AddToPlaylistDialog
+            open={addToPlaylistOpen}
+            onOpenChange={setAddToPlaylistOpen}
+            contentId={contentId}
           />
         )}
         {contentId && canAddToCollection && (

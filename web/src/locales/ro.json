@@ -140374,6 +140374,132 @@
       "value": "Spectatori"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "Adăugați în playlist"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "S-a adăugat în playlist"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "Acest playlist a fost modificat în altă parte. Examinați cea mai recentă versiune și încercați din nou."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "Creați un playlist"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "Creați și adăugați"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "Ștergeți playlistul"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "Se elimină playlistul și intrările sale, nu și conținutul dvs. media."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "Nu există încă playlisturi."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "Adăugați filme sau episoade din paginile lor de detalii."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "Nu s-a putut actualiza playlistul. Încercați din nou."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "Playlistul s-a încheiat."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "Nu s-au putut încărca playlisturile."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "Mutați în jos"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "Mutați în sus"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "Numele playlistului"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "Nu s-a putut continua playlistul. Încercați din nou."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "Eliminați intrarea"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "Redenumiți playlistul"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "Playlisturi private pentru acest profil."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "Playlisturi"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "Intrare indisponibilă"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

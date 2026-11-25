@@ -118786,6 +118786,132 @@
       "value": "ผู้ชม"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "เพิ่มลงในเพลย์ลิสต์"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "เพิ่มลงในเพลย์ลิสต์แล้ว"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "เพลย์ลิสต์นี้มีการเปลี่ยนแปลงจากที่อื่น ตรวจสอบเวอร์ชันล่าสุดแล้วโปรดลองอีกครั้ง"
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "สร้างเพลย์ลิสต์"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "สร้างและเพิ่ม"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "ลบเพลย์ลิสต์"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "การดำเนินการนี้จะลบเพลย์ลิสต์และรายการในเพลย์ลิสต์ แต่ไม่ลบสื่อของคุณ"
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "ยังไม่มีเพลย์ลิสต์"
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "เพิ่มภาพยนตร์หรือตอนได้จากหน้ารายละเอียดของแต่ละรายการ"
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "อัปเดตเพลย์ลิสต์ไม่ได้ โปรดลองอีกครั้ง"
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "เล่นเพลย์ลิสต์จบแล้ว"
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "โหลดเพลย์ลิสต์ไม่ได้"
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "ย้ายลง"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "ย้ายขึ้น"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "ชื่อเพลย์ลิสต์"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "เล่นเพลย์ลิสต์ต่อไม่ได้ โปรดลองอีกครั้ง"
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "นำรายการออก"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "เปลี่ยนชื่อเพลย์ลิสต์"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "เพลย์ลิสต์ส่วนตัวสำหรับโปรไฟล์นี้"
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "เพลย์ลิสต์"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "รายการที่ไม่พร้อมใช้งาน"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

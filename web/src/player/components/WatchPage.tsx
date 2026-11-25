@@ -1,3 +1,4 @@
+import { isUnavailablePlaybackFailure } from "../playback-errors";
 import { CircleAlert } from "lucide-react";
 import "@/styles/player-hud.css";
 import { isTransientV2Error } from "@/api/v2/request";
@@ -198,6 +199,7 @@ function WatchPagePlayer({
   seriesContext,
   onNavigateEpisode,
   onEnded,
+  onUnavailable,
   onExit,
   onMinimize,
   resumeHints,
@@ -249,6 +251,16 @@ function WatchPagePlayer({
     versionPicked,
     networkTier,
   );
+
+  useEffect(() => {
+    if (
+      !session.loading &&
+      !session.plan &&
+      isUnavailablePlaybackFailure(session.errorStatus, session.errorReason)
+    ) {
+      onUnavailable?.();
+    }
+  }, [session.loading, session.plan, session.errorStatus, session.errorReason, onUnavailable]);
 
   const fallbackHandledRef = useRef<string | null>(null);
   const [pendingFallbackKey, setPendingFallbackKey] = useState<string | null>(null);

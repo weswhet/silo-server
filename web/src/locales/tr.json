@@ -127325,6 +127325,132 @@
       "value": "İzleyiciler"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "Oynatma listesine ekle"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "Oynatma listesine eklendi"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "Bu oynatma listesi başka bir yerde değiştirildi. En son sürümü inceleyip tekrar deneyin."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "Oynatma listesi oluştur"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "Oluştur ve ekle"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "Oynatma listesini sil"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "Bu işlem oynatma listesini ve öğelerini kaldırır, medyanızı kaldırmaz."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "Henüz oynatma listesi yok."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "Film veya bölümleri ayrıntı sayfalarından ekleyin."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "Oynatma listesi güncellenemedi. Tekrar deneyin."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "Oynatma listesi bitti."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "Oynatma listeleri yüklenemedi."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "Aşağı taşı"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "Yukarı taşı"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "Oynatma listesi adı"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "Oynatma listesine devam edilemedi. Tekrar deneyin."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "Öğeyi kaldır"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "Oynatma listesini yeniden adlandır"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "Bu profile özel oynatma listeleri."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "Oynatma listeleri"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "Kullanılamayan öğe"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

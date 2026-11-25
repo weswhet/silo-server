@@ -129109,6 +129109,132 @@
       "value": "Người xem"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "Thêm vào danh sách phát"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "Đã thêm vào danh sách phát"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "Danh sách phát này đã thay đổi ở nơi khác. Xem lại phiên bản mới nhất rồi thử lại."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "Tạo danh sách phát"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "Tạo và thêm"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "Xóa danh sách phát"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "Thao tác này xóa danh sách phát và các mục trong đó, không xóa nội dung đa phương tiện của bạn."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "Chưa có danh sách phát nào."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "Thêm phim hoặc tập từ trang chi tiết của chúng."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "Không thể cập nhật danh sách phát. Vui lòng thử lại."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "Đã phát hết danh sách phát."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "Không thể tải danh sách phát."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "Di chuyển xuống"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "Di chuyển lên"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "Tên danh sách phát"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "Không thể tiếp tục danh sách phát. Vui lòng thử lại."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "Gỡ mục"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "Đổi tên danh sách phát"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "Danh sách phát riêng tư cho hồ sơ này."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "Danh sách phát"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "Mục không khả dụng"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

@@ -128225,6 +128225,132 @@
       "value": "Nézők"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "Hozzáadás lejátszási listához"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "Hozzáadva a lejátszási listához"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "Ez a lejátszási lista máshol módosult. Tekintse át a legújabb verziót, és próbálja újra."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "Lejátszási lista létrehozása"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "Létrehozás és hozzáadás"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "Lejátszási lista törlése"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "Ez a lejátszási listát és az elemeit törli, a médiafájlokat nem."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "Még nincs lejátszási lista."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "Filmeket vagy epizódokat a részletes oldalukon adhat hozzá."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "Nem sikerült frissíteni a lejátszási listát. Próbálja újra."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "A lejátszási lista véget ért."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "Nem sikerült betölteni a lejátszási listákat."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "Mozgatás lefelé"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "Mozgatás felfelé"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "Lejátszási lista neve"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "Nem sikerült folytatni a lejátszási listát. Próbálja újra."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "Elem eltávolítása"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "Lejátszási lista átnevezése"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "Privát lejátszási listák ehhez a profilhoz."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "Lejátszási listák"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "Nem elérhető elem"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

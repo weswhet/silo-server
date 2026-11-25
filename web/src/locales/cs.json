@@ -151849,6 +151849,132 @@
       "value": "Diváci"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "Přidat do playlistu"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "Přidáno do playlistu"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "Tento playlist byl změněn jinde. Zkontrolujte nejnovější verzi a zkuste to znovu."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "Vytvořit playlist"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "Vytvořit a přidat"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "Smazat playlist"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "Tím se odebere playlist a jeho položky, ne vaše média."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "Zatím žádné playlisty."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "Přidejte filmy nebo díly z jejich stránek s podrobnostmi."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "Playlist se nepodařilo aktualizovat. Zkuste to znovu."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "Playlist skončil."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "Playlisty se nepodařilo načíst."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "Posunout dolů"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "Posunout nahoru"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "Název playlistu"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "V playlistu se nepodařilo pokračovat. Zkuste to znovu."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "Odebrat položku"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "Přejmenovat playlist"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "Soukromé playlisty pro tento profil."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "Playlisty"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "Nedostupná položka"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

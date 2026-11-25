@@ -223,3 +223,17 @@ function terminalMessage(terminal: TerminalV3, id: MessageKey): string {
   const english = terminal.message?.trim();
   return english ? serverText(id, undefined, english) : t(id);
 }
+
+/** An unavailable title may be skipped in an ordered queue; transport failures may not. */
+export function isUnavailablePlaybackFailure(
+  status?: number | null,
+  reason?: string | null,
+): boolean {
+  return (
+    status === 403 ||
+    status === 404 ||
+    reason === "policy_denied" ||
+    reason === "source_unavailable" ||
+    reason === "source_unreadable"
+  );
+}

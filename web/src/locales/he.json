@@ -138732,6 +138732,132 @@
       "value": "צופים"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "הוספה לרשימת השמעה"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "הפריט נוסף לרשימת ההשמעה"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "רשימת ההשמעה הזו השתנתה במקום אחר. יש לעיין בגרסה העדכנית ולנסות שוב."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "יצירת רשימת השמעה"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "יצירה והוספה"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "מחיקת רשימת השמעה"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "פעולה זו מסירה את רשימת ההשמעה ואת הפריטים שבה, אבל לא את המדיה שלך."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "אין עדיין רשימות השמעה."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "אפשר להוסיף סרטים או פרקים מדפי הפרטים שלהם."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "לא ניתן היה לעדכן את רשימת ההשמעה. אפשר לנסות שוב."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "רשימת ההשמעה הסתיימה."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "לא ניתן היה לטעון את רשימות ההשמעה."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "הזזה למטה"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "הזזה למעלה"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "שם רשימת ההשמעה"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "לא ניתן היה להמשיך את רשימת ההשמעה. אפשר לנסות שוב."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "הסרת פריט"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "שינוי שם רשימת ההשמעה"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "רשימות השמעה פרטיות לפרופיל הזה."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "רשימות השמעה"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "פריט לא זמין"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

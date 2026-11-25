@@ -140039,6 +140039,132 @@
       "value": "⟦Ṽîéŵéŕš~~~⟧"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "⟦Åđđ ţö þļåýļîšţ~~~~~~⟧"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "⟦Åđđéđ ţö þļåýļîšţ~~~~~~~⟧"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "⟦Ţĥîš þļåýļîšţ çĥåñĝéđ éļšéŵĥéŕé. Ŕéṽîéŵ ţĥé ļåţéšţ ṽéŕšîöñ åñđ ţŕý åĝåîñ.~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~⟧"
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "⟦Çŕéåţé þļåýļîšţ~~~~~~⟧"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "⟦Çŕéåţé åñđ åđđ~~~~~~⟧"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "⟦Đéļéţé þļåýļîšţ~~~~~~⟧"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "⟦Ţĥîš ŕéɱöṽéš ţĥé þļåýļîšţ åñđ îţš éñţŕîéš, ñöţ ýöûŕ ɱéđîå.~~~~~~~~~~~~~~~~~~~~~~~~⟧"
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "⟦Ñö þļåýļîšţš ýéţ.~~~~~~~⟧"
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "⟦Åđđ ɱöṽîéš öŕ éþîšöđéš ƒŕöɱ ţĥéîŕ đéţåîļ þåĝéš.~~~~~~~~~~~~~~~~~~~⟧"
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "⟦Çöûļđ ñöţ ûþđåţé ţĥé þļåýļîšţ. Ţŕý åĝåîñ.~~~~~~~~~~~~~~~~~⟧"
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "⟦Þļåýļîšţ ƒîñîšĥéđ.~~~~~~~~⟧"
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "⟦Çöûļđ ñöţ ļöåđ þļåýļîšţš.~~~~~~~~~~⟧"
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "⟦Ṁöṽé đöŵñ~~~~⟧"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "⟦Ṁöṽé ûþ~~~⟧"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "⟦Þļåýļîšţ ñåɱé~~~~~~⟧"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "⟦Çöûļđ ñöţ çöñţîñûé ţĥé þļåýļîšţ. Ţŕý åĝåîñ.~~~~~~~~~~~~~~~~~~⟧"
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "⟦Ŕéɱöṽé éñţŕý~~~~~⟧"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "⟦Ŕéñåɱé þļåýļîšţ~~~~~~⟧"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "⟦Þŕîṽåţé þļåýļîšţš ƒöŕ ţĥîš þŕöƒîļé.~~~~~~~~~~~~~~⟧"
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "⟦Þļåýļîšţš~~~~⟧"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "⟦Ûñåṽåîļåƀļé éñţŕý~~~~~~~⟧"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

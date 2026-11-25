@@ -117402,6 +117402,132 @@
       "value": "Penonton"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "Tambahkan ke playlist"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "Ditambahkan ke playlist"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "Playlist ini diubah di tempat lain. Tinjau versi terbaru, lalu coba lagi."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "Buat playlist"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "Buat dan tambahkan"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "Hapus playlist"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "Tindakan ini menghapus playlist beserta entrinya, bukan media Anda."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "Belum ada playlist."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "Tambahkan film atau episode dari halaman detailnya."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "Tidak dapat memperbarui playlist. Coba lagi."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "Playlist selesai."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "Tidak dapat memuat playlist."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "Pindahkan ke bawah"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "Pindahkan ke atas"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "Nama playlist"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "Tidak dapat melanjutkan playlist. Coba lagi."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "Hapus entri"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "Ganti nama playlist"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "Playlist pribadi untuk profil ini."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "Playlist"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "Entri tidak tersedia"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

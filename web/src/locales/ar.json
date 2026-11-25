@@ -171136,6 +171136,132 @@
       "value": "المشاهدون"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "إضافة إلى قائمة التشغيل"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "تمت الإضافة إلى قائمة التشغيل"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "تغيّرت قائمة التشغيل هذه في مكان آخر. راجع أحدث إصدار وحاول مرة أخرى."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "إنشاء قائمة تشغيل"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "إنشاء وإضافة"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "حذف قائمة التشغيل"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "يؤدي هذا إلى إزالة قائمة التشغيل وعناصرها، وليس الوسائط الخاصة بك."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "لا توجد قوائم تشغيل بعد."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "أضف أفلامًا أو حلقات من صفحات تفاصيلها."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "تعذّر تحديث قائمة التشغيل. حاول مرة أخرى."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "انتهت قائمة التشغيل."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "تعذّر تحميل قوائم التشغيل."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "نقل للأسفل"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "نقل للأعلى"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "اسم قائمة التشغيل"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "تعذّر متابعة قائمة التشغيل. حاول مرة أخرى."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "إزالة العنصر"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "إعادة تسمية قائمة التشغيل"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "قوائم تشغيل خاصة بهذا الملف الشخصي."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "قوائم التشغيل"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "عنصر غير متاح"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

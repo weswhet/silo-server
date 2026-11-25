@@ -129121,6 +129121,132 @@
       "value": "Зрители"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "Добавяне към плейлист"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "Добавено към плейлиста"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "Този плейлист е променен на друго място. Прегледайте най-новата версия и опитайте отново."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "Създаване на плейлист"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "Създаване и добавяне"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "Изтриване на плейлиста"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "Това премахва плейлиста и елементите в него, но не и вашето съдържание."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "Все още няма плейлисти."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "Добавете филми или епизоди от страниците им с подробности."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "Не можа да се актуализира плейлистът. Опитайте отново."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "Плейлистът приключи."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "Не можаха да се заредят плейлистите."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "Преместване надолу"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "Преместване нагоре"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "Име на плейлиста"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "Не можа да продължи възпроизвеждането на плейлиста. Опитайте отново."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "Премахване на елемента"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "Преименуване на плейлиста"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "Лични плейлисти за този профил."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "Плейлисти"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "Недостъпен елемент"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

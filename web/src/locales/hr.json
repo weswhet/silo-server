@@ -140225,6 +140225,132 @@
       "value": "Gledatelji"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "Dodaj na popis za reprodukciju"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "Dodano na popis za reprodukciju"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "Ovaj popis za reprodukciju promijenjen je negdje drugdje. Pregledajte najnoviju verziju i pokušajte ponovno."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "Izradi popis za reprodukciju"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "Izradi i dodaj"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "Izbriši popis za reprodukciju"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "Time se uklanjaju popis za reprodukciju i njegove stavke, ali ne i vaši mediji."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "Još nema popisa za reprodukciju."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "Dodajte filmove ili epizode s njihovih stranica s pojedinostima."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "Nije moguće ažurirati popis za reprodukciju. Pokušajte ponovno."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "Popis za reprodukciju je završen."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "Nije moguće učitati popise za reprodukciju."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "Pomakni dolje"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "Pomakni gore"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "Naziv popisa za reprodukciju"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "Nije moguće nastaviti popis za reprodukciju. Pokušajte ponovno."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "Ukloni stavku"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "Preimenuj popis za reprodukciju"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "Privatni popisi za reprodukciju za ovaj profil."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "Popisi za reprodukciju"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "Nedostupna stavka"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

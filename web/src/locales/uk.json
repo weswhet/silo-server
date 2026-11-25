@@ -151551,6 +151551,132 @@
       "value": "Глядачі"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "Додати до плейлиста"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "Додано до плейлиста"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "Цей плейлист змінено в іншому місці. Перегляньте найновішу версію та спробуйте ще раз."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "Створити плейлист"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "Створити й додати"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "Видалити плейлист"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "Буде видалено плейлист і його записи, але не ваші медіафайли."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "Плейлистів ще немає."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "Додайте фільми або епізоди на їхніх сторінках із подробицями."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "Не вдалося оновити плейлист. Спробуйте ще раз."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "Плейлист завершено."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "Не вдалося завантажити плейлисти."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "Перемістити вниз"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "Перемістити вгору"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "Назва плейлиста"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "Не вдалося продовжити плейлист. Спробуйте ще раз."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "Вилучити запис"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "Перейменувати плейлист"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "Приватні плейлисти для цього профілю."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "Плейлисти"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "Недоступний запис"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

@@ -135227,6 +135227,132 @@
       "value": "\u200F\u202EViewers\u202C"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "\u200F\u202EAdd to playlist\u202C"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "\u200F\u202EAdded to playlist\u202C"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "\u200F\u202EThis playlist changed elsewhere. Review the latest version and try again.\u202C"
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "\u200F\u202ECreate playlist\u202C"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "\u200F\u202ECreate and add\u202C"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "\u200F\u202EDelete playlist\u202C"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "\u200F\u202EThis removes the playlist and its entries, not your media.\u202C"
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "\u200F\u202ENo playlists yet.\u202C"
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "\u200F\u202EAdd movies or episodes from their detail pages.\u202C"
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "\u200F\u202ECould not update the playlist. Try again.\u202C"
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "\u200F\u202EPlaylist finished.\u202C"
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "\u200F\u202ECould not load playlists.\u202C"
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "\u200F\u202EMove down\u202C"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "\u200F\u202EMove up\u202C"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "\u200F\u202EPlaylist name\u202C"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "\u200F\u202ECould not continue the playlist. Try again.\u202C"
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "\u200F\u202ERemove entry\u202C"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "\u200F\u202ERename playlist\u202C"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "\u200F\u202EPrivate playlists for this profile.\u202C"
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "\u200F\u202EPlaylists\u202C"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "\u200F\u202EUnavailable entry\u202C"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

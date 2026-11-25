@@ -140300,6 +140300,132 @@
       "value": "Espectadors"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "Afegeix a la llista de reproducció"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "S’ha afegit a la llista de reproducció"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "Aquesta llista de reproducció s’ha modificat en un altre lloc. Revisa’n la versió més recent i torna-ho a provar."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "Crea una llista de reproducció"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "Crea i afegeix"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "Elimina la llista de reproducció"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "Això elimina la llista de reproducció i els seus elements, no el teu contingut multimèdia."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "Encara no hi ha cap llista de reproducció."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "Afegeix pel·lícules o episodis des de les seves pàgines de detalls."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "No s’ha pogut actualitzar la llista de reproducció. Torna-ho a provar."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "La llista de reproducció ha acabat."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "No s’han pogut carregar les llistes de reproducció."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "Mou avall"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "Mou amunt"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "Nom de la llista de reproducció"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "No s’ha pogut continuar la llista de reproducció. Torna-ho a provar."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "Treu l’element"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "Canvia el nom de la llista de reproducció"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "Llistes de reproducció privades per a aquest perfil."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "Llistes de reproducció"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "Element no disponible"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

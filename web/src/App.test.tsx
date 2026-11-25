@@ -74,6 +74,18 @@ describe("QueryCacheManager", () => {
     expect(clear).toHaveBeenCalledTimes(1);
   });
 
+  it("drops private playlist entries and previews on a profile switch", () => {
+    const { queryClient, signIn } = renderManager();
+    signIn({ user: makeUser(1), profile: makeProfile("p-1") });
+    const detail = ["playlists", "p-1", "list"];
+    const next = ["playlists", "p-1", "list", "next", "entry"];
+    queryClient.setQueryData(detail, { name: "Private", entries: [{ title: "Private movie" }] });
+    queryClient.setQueryData(next, { entry: { title: "Private movie" } });
+    signIn({ user: makeUser(1), profile: makeProfile("p-2") });
+    expect(queryClient.getQueryData(detail)).toBeUndefined();
+    expect(queryClient.getQueryData(next)).toBeUndefined();
+  });
+
   it("drops the last profile's Home rows poster peeks on a profile switch", () => {
     const { queryClient, signIn } = renderManager();
     signIn({ user: makeUser(1), profile: makeProfile("p-1") });

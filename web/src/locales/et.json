@@ -129555,6 +129555,132 @@
       "value": "Vaatajad"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "Lisa esitusloendisse"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "Lisatud esitusloendisse"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "Seda esitusloendit muudeti mujal. Vaadake üle uusim versioon ja proovige uuesti."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "Loo esitusloend"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "Loo ja lisa"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "Kustuta esitusloend"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "See eemaldab esitusloendi ja selle kirjed, kuid mitte teie meediat."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "Esitusloendeid veel pole."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "Lisage filme või osi nende üksikasjade lehtedelt."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "Esitusloendi värskendamine ebaõnnestus. Proovige uuesti."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "Esitusloend on lõppenud."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "Esitusloendite laadimine ebaõnnestus."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "Liiguta alla"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "Liiguta üles"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "Esitusloendi nimi"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "Esitusloendi jätkamine ebaõnnestus. Proovige uuesti."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "Eemalda kirje"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "Nimeta esitusloend ümber"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "Selle profiili privaatsed esitusloendid."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "Esitusloendid"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "Kirje pole saadaval"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

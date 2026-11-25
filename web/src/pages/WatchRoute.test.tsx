@@ -75,6 +75,14 @@ describe("buildWatchRouteRequest", () => {
     expect(buildWatchHref(makeRequest())).toBe("/watch/movie-1");
   });
 
+  it("preserves playlist position and restarts duplicate titles as distinct requests", () => {
+    const first = makeRequest("playlist=list-1&entry=entry-1&restart=1");
+    const duplicate = makeRequest("playlist=list-1&entry=entry-2&restart=1");
+    expect(buildWatchHref(first)).toBe("/watch/movie-1?playlist=list-1&entry=entry-1&restart=1");
+    expect(first.requestKey).not.toBe(duplicate.requestKey);
+    expect(first.requestKey).not.toBe(makeRequest("restart=1").requestKey);
+  });
+
   it("keeps a shuffle in the watch href and the request key", () => {
     const shuffled = makeRequest("shuffle=shuffle-1");
 

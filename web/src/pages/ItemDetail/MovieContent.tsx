@@ -281,6 +281,7 @@ export default function MovieContent({
             <MediaUserActionBar
               item={item}
               contentId={item.content_id}
+              canAddToPlaylist
               watchTogether={watchTogether.menu}
               playHref={item.versions.length > 0 ? `/watch/${item.content_id}` : undefined}
               playLabel={primaryAction.label}

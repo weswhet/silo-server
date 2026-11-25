@@ -354,6 +354,8 @@ export interface WatchPageProps {
   seriesContext?: SeriesContext;
   onNavigateEpisode?: (contentId: string, trigger: PlaybackStartTrigger) => void;
   onEnded?: (state?: PlaybackExitState) => void | Promise<void>;
+  /** Lets an ordered queue skip a title refused at start, not network failures. */
+  onUnavailable?: () => void;
   onExit: (state?: PlaybackExitState) => void | Promise<void>;
   onMinimize?: (state?: PlaybackExitState) => void | Promise<void>;
   resumeHints?: ResumeHints;

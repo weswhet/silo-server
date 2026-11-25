@@ -117034,6 +117034,132 @@
       "value": "視聴者"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "プレイリストに追加"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "プレイリストに追加しました"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "このプレイリストは別の場所で変更されました。最新の内容を確認して、もう一度お試しください。"
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "プレイリストを作成"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "作成して追加"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "プレイリストを削除"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "プレイリストとその項目が削除されます。メディアは削除されません。"
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "プレイリストはまだありません。"
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "映画やエピソードの詳細ページから追加してください。"
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "プレイリストを更新できませんでした。もう一度お試しください。"
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "プレイリストの再生が終了しました。"
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "プレイリストを読み込めませんでした。"
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "下へ移動"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "上へ移動"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "プレイリスト名"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "プレイリストの再生を続行できませんでした。もう一度お試しください。"
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "項目を外す"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "プレイリスト名を変更"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "このプロフィール専用のプレイリストです。"
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "プレイリスト"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "利用できない項目"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

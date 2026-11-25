@@ -96,6 +96,7 @@ const EbookReader = lazy(() => import("@/pages/EbookReader"));
 const PersonDetail = lazy(importPersonDetail);
 const BoxSetPage = lazy(() => import("@/pages/BoxSetPage"));
 const Collections = lazy(importCollections);
+const Playlists = lazy(() => import("@/pages/Playlists"));
 const CollectionEditorPage = lazy(() => import("@/pages/CollectionEditorPage"));
 const Notifications = lazy(() => import("@/pages/Notifications"));
 const DeviceSettings = lazy(() => import("@/pages/settings/DeviceSettings"));
@@ -385,6 +386,7 @@ export function QueryCacheManager() {
       qc.removeQueries({ queryKey: ["notInterested"] });
       qc.removeQueries({ queryKey: ["history"] });
       qc.removeQueries({ queryKey: ["collections"] });
+      qc.removeQueries({ queryKey: ["playlists"] });
       qc.removeQueries({ queryKey: ["libraryPlaybackPreferences"] });
       qc.removeQueries({ queryKey: ["progress"] });
       qc.removeQueries({ queryKey: ["sections"] });
@@ -726,6 +728,8 @@ function AppRoutes() {
                             element={<LegacyPersonalCatalogRedirect source="history" />}
                           />
                           <Route path="/collections" element={<Collections />} />
+                          <Route path="/playlists" element={<Playlists />} />
+                          <Route path="/playlists/:id" element={<Playlists />} />
                           <Route element={<CollectionEditorPage scope="personal" />}>
                             <Route path="/collections/new" />
                             <Route path="/collections/:id/edit" />

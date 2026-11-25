@@ -127943,6 +127943,132 @@
       "value": "दर्शक"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "प्लेलिस्ट में जोड़ें"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "प्लेलिस्ट में जोड़ा गया"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "यह प्लेलिस्ट कहीं और बदल दी गई है। सबसे नया वर्शन देखें और फिर से कोशिश करें।"
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "प्लेलिस्ट बनाएँ"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "बनाएँ और जोड़ें"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "प्लेलिस्ट मिटाएँ"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "इससे प्लेलिस्ट और उसकी एंट्री हट जाती हैं, आपका मीडिया नहीं।"
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "अभी तक कोई प्लेलिस्ट नहीं है।"
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "फ़िल्में या एपिसोड उनके डिटेल पेज से जोड़ें।"
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "प्लेलिस्ट अपडेट नहीं की जा सकी। फिर से कोशिश करें।"
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "प्लेलिस्ट पूरी हुई।"
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "प्लेलिस्ट लोड नहीं की जा सकीं।"
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "नीचे ले जाएँ"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "ऊपर ले जाएँ"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "प्लेलिस्ट का नाम"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "प्लेलिस्ट जारी नहीं रखी जा सकी। फिर से कोशिश करें।"
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "एंट्री हटाएँ"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "प्लेलिस्ट का नाम बदलें"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "इस प्रोफ़ाइल के लिए निजी प्लेलिस्ट।"
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "प्लेलिस्ट"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "अनुपलब्ध एंट्री"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

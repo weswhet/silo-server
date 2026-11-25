@@ -405,6 +405,19 @@ describe("routeEventPlanIdentityV3", () => {
   });
 });
 
+describe("playback-start failure identity", () => {
+  it.each([403, 404, 503])("retains HTTP %s separately from its shown message", async (status) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ error: "start_failed" }, { status })),
+    );
+    const { result, unmount } = renderSession();
+    await waitFor(() => expect(result.current.errorStatus).toBe(status));
+    expect(result.current.plan).toBeNull();
+    unmount();
+  });
+});
+
 describe("usePlaybackSession quality changes", () => {
   it("rolls back a rejected quality and keeps it out of later replans", async () => {
     const plan = fixturePlanV3();

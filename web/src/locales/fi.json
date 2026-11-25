@@ -128857,6 +128857,132 @@
       "value": "Katsojat"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "Lisää soittolistaan"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "Lisätty soittolistaan"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "Soittolistaa on muutettu muualla. Tarkista uusin versio ja yritä uudelleen."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "Luo soittolista"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "Luo ja lisää"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "Poista soittolista"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "Tämä poistaa soittolistan ja sen kohteet, mutta ei mediaasi."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "Ei vielä soittolistoja."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "Lisää elokuvia tai jaksoja niiden tietosivuilta."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "Soittolistan päivittäminen epäonnistui. Yritä uudelleen."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "Soittolista päättyi."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "Soittolistojen lataaminen epäonnistui."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "Siirrä alas"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "Siirrä ylös"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "Soittolistan nimi"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "Soittolistan jatkaminen epäonnistui. Yritä uudelleen."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "Poista kohde"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "Nimeä soittolista uudelleen"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "Tämän profiilin yksityiset soittolistat."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "Soittolistat"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "Kohde ei saatavilla"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

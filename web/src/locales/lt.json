@@ -153367,6 +153367,132 @@
       "value": "Žiūrovai"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "Pridėti į grojaraštį"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "Pridėta į grojaraštį"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "Šis grojaraštis buvo pakeistas kitur. Peržiūrėkite naujausią versiją ir bandykite dar kartą."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "Sukurti grojaraštį"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "Sukurti ir pridėti"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "Ištrinti grojaraštį"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "Bus pašalintas grojaraštis ir jo įrašai, bet ne jūsų medija."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "Grojaraščių dar nėra."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "Pridėkite filmų ar epizodų iš jų išsamios informacijos puslapių."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "Nepavyko atnaujinti grojaraščio. Bandykite dar kartą."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "Grojaraštis baigtas."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "Nepavyko įkelti grojaraščių."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "Perkelti žemyn"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "Perkelti aukštyn"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "Grojaraščio pavadinimas"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "Nepavyko tęsti grojaraščio. Bandykite dar kartą."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "Pašalinti įrašą"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "Pervadinti grojaraštį"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "Privatūs šio profilio grojaraščiai."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "Grojaraščiai"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "Nepasiekiamas įrašas"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

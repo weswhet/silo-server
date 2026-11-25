@@ -118198,6 +118198,132 @@
       "value": "观众"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "添加到播放列表"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "已添加到播放列表"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "此播放列表已在别处更改。请查看最新版本后重试。"
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "创建播放列表"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "创建并添加"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "删除播放列表"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "这会删除播放列表及其中的条目，但不会删除你的媒体。"
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "还没有播放列表。"
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "在电影或集的详情页中添加。"
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "无法更新播放列表。请重试。"
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "播放列表已播放完毕。"
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "无法加载播放列表。"
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "下移"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "上移"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "播放列表名称"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "无法继续播放此播放列表。请重试。"
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "移除条目"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "重命名播放列表"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "此个人资料的私人播放列表。"
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "播放列表"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "不可用的条目"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

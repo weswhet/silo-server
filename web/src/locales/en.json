@@ -128727,6 +128727,132 @@
       "value": "Viewers"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "Add to playlist"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "Added to playlist"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "This playlist changed elsewhere. Review the latest version and try again."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "Create playlist"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "Create and add"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "Delete playlist"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "This removes the playlist and its entries, not your media."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "No playlists yet."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "Add movies or episodes from their detail pages."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "Could not update the playlist. Try again."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "Playlist finished."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "Could not load playlists."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "Move down"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "Move up"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "Playlist name"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "Could not continue the playlist. Try again."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "Remove entry"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "Rename playlist"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "Private playlists for this profile."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "Playlists"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "Unavailable entry"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

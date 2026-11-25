@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { useRootHeightProperty } from "@/hooks/useRootHeightProperty";
 import {
   consumeAutomaticStart,
@@ -24,7 +25,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Pause, PictureInPicture2, Play, SkipBack, SkipForward, Tv, X } from "lucide-react";
 import { useLocation } from "react-router";
 import type { WatchDetail } from "@/api/types";
-import { isNotFoundProblem } from "@/api/v2/request";
+import { isNotFoundProblem, V2ProblemError } from "@/api/v2/request";
+import { resolvePlaylistEntry } from "@/api/v2/playlists";
+import { isUnavailablePlaybackFailure } from "@/player/playback-errors";
 import {
   getAccessToken,
   getAuthContextVersion,
@@ -109,6 +112,7 @@ const PlayingNextScreen = lazy(() =>
 // A shuffle's post-roll wraps the same screen; it loads only during shuffles.
 const importShufflePlayingNext = () => import("./ShufflePlayingNext");
 const ShufflePlayingNext = lazy(importShufflePlayingNext);
+const PlaylistPlayingNext = lazy(() => import("./PlaylistPlayingNext"));
 
 let playingNextScreenPrefetched = false;
 let shufflePlayingNextPrefetched = false;
@@ -208,7 +212,10 @@ function findNextPlaybackPartFileId(
 }
 
 function buildPlaybackReturnHref(request: WatchRouteRequest): string {
-  return request.returnHref ?? buildWatchItemHref(request);
+  return (
+    request.returnHref ??
+    (request.playlistId ? `/playlists/${request.playlistId}` : buildWatchItemHref(request))
+  );
 }
 
 /**
@@ -593,6 +600,7 @@ export function WatchPlaybackHost() {
 }
 
 function WatchPlaybackHostContent() {
+  const t = useT();
   // The host is mounted on every screen, the login screen included; its
   // settings reads wait for a session instead of answering 401.
   const { user } = useAuth();
@@ -712,6 +720,57 @@ function WatchPlaybackHostContent() {
     error,
     isFetching: isFetchingItem,
   } = useWatchDetail(request?.contentId, request?.fileId, request?.libraryId);
+  const currentRequestKey = useRef(request?.requestKey);
+  const skippedRequest = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    currentRequestKey.current = request?.requestKey;
+    skippedRequest.current = undefined;
+    return () => {
+      currentRequestKey.current = undefined;
+    };
+  }, [request?.requestKey]);
+  const skipUnavailablePlaylistEntry = useCallback(() => {
+    if (
+      !request?.playlistId ||
+      !request.playlistEntryId ||
+      skippedRequest.current === request.requestKey
+    )
+      return;
+    skippedRequest.current = request.requestKey;
+    void resolvePlaylistEntry(request.playlistId, request.playlistEntryId, true)
+      .then(({ entry }) => {
+        if (currentRequestKey.current !== request.requestKey) return;
+        if (entry?.item_id) {
+          controller.startPlayback(
+            {
+              contentId: entry.item_id,
+              playlistId: request.playlistId,
+              playlistEntryId: entry.id,
+              restart: true,
+              returnHref: request.returnHref,
+            },
+            "automatic",
+          );
+        } else {
+          stopPlayback();
+          navigate(`/playlists/${request.playlistId}`, { replace: true });
+        }
+      })
+      .catch(() => {
+        if (currentRequestKey.current === request.requestKey)
+          toast.error(t("web.playlists.playbackFailed"));
+      });
+  }, [request, controller, stopPlayback, navigate, t]);
+  useEffect(() => {
+    if (
+      !isFetchingItem &&
+      error instanceof V2ProblemError &&
+      isUnavailablePlaybackFailure(error.status)
+    ) {
+      skipUnavailablePlaylistEntry();
+    }
+  }, [error, isFetchingItem, skipUnavailablePlaylistEntry]);
+
   const [renderedSession, setRenderedSession] = useState<{
     request: WatchRouteRequest;
     item: WatchDetail;
@@ -936,6 +995,7 @@ function WatchPlaybackHostContent() {
 
   // -- Shuffle: the server picks what plays next --
   const shuffleId = activeRequest?.shuffleId;
+  const playlistId = activeRequest?.playlistId;
 
   // A series-owned extra (trailer, featurette, ...) carries the series' id,
   // but it has no place in the episode order: it plays to its end and goes
@@ -946,7 +1006,7 @@ function WatchPlaybackHostContent() {
   // -- Series episodes for next-episode navigation --
   // A shuffle replaces the series order, so it loads none and the player
   // offers no sequential next or previous episode.
-  const seriesId = shuffleId ? undefined : episodeSeriesId;
+  const seriesId = shuffleId || playlistId ? undefined : episodeSeriesId;
   const currentSeason = activeItem?.season_number ?? 0;
   const { episodes: seriesEpisodes } = useSeriesEpisodes(
     seriesId,
@@ -1007,11 +1067,11 @@ function WatchPlaybackHostContent() {
   const activeItemRef = useRef(activeItem);
   const requestFileIdRef = useRef(activeRequest?.fileId);
   useEffect(() => {
-    hasPostRollRef.current = Boolean(episodeSeriesId || shuffleId);
+    hasPostRollRef.current = Boolean(episodeSeriesId || shuffleId || playlistId);
     shuffledRef.current = Boolean(shuffleId);
     activeItemRef.current = activeItem;
     requestFileIdRef.current = activeRequest?.fileId;
-  }, [activeItem, activeRequest?.fileId, episodeSeriesId, shuffleId]);
+  }, [activeItem, activeRequest?.fileId, episodeSeriesId, shuffleId, playlistId]);
 
   // Reset post-roll tracking when the playback session changes.
   useEffect(() => {
@@ -1048,6 +1108,8 @@ function WatchPlaybackHostContent() {
             roomId: activeRequest.roomId,
             roomToken: activeRequest.roomToken,
             shuffleId: activeRequest.shuffleId,
+            playlistId: activeRequest.playlistId,
+            playlistEntryId: activeRequest.playlistEntryId,
             returnHref: activeRequest.returnHref,
           },
           "automatic",
@@ -1067,7 +1129,7 @@ function WatchPlaybackHostContent() {
       // what plays next. An extra has no detail page of its own, so it goes
       // back to the page it was started from, or to its series when opened
       // from a direct link.
-      if (!episodeSeriesId && !activeRequest?.shuffleId) {
+      if (!episodeSeriesId && !activeRequest?.shuffleId && !activeRequest?.playlistId) {
         if (activeRequest) {
           stopPlayback();
           const ownerId = isExtra ? activeItem?.series_id : undefined;
@@ -1110,7 +1172,7 @@ function WatchPlaybackHostContent() {
       // A shuffle returns to the library, series, or collection it started
       // from rather than to whichever item happened to play last.
       navigate(
-        activeRequest.shuffleId
+        activeRequest.shuffleId || activeRequest.playlistId
           ? buildPlaybackReturnHref(activeRequest)
           : buildWatchItemHref(activeRequest),
         { up: true },
@@ -1308,6 +1370,7 @@ function WatchPlaybackHostContent() {
           playbackRequestKey={requestKeyValue}
           onNavigateEpisode={handleNavigateEpisode}
           onEnded={handleEnded}
+          onUnavailable={activeRequest.playlistId ? skipUnavailablePlaylistEntry : undefined}
           onExit={handleExit}
           onMinimize={handleMinimize}
           displayMode={playerDisplayMode}
@@ -1322,7 +1385,14 @@ function WatchPlaybackHostContent() {
       {isPostRoll && (
         <LocalErrorBoundary onError={handlePostRollUnavailable}>
           <Suspense fallback={null}>
-            {activeRequest.shuffleId ? (
+            {activeRequest.playlistId && activeRequest.playlistEntryId ? (
+              <PlaylistPlayingNext
+                key={activeRequest.requestKey}
+                request={activeRequest}
+                videoEnded={postRollVideoEnded}
+                onClose={handlePostRollClose}
+              />
+            ) : activeRequest.shuffleId ? (
               <ShufflePlayingNext
                 request={activeRequest}
                 shuffleId={activeRequest.shuffleId}

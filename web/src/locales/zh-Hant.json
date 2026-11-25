@@ -118704,6 +118704,132 @@
       "value": "觀眾"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "加入播放清單"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "已加入播放清單"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "此播放清單已在其他地方變更。請查看最新版本，然後再試一次。"
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "建立播放清單"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "建立並加入"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "刪除播放清單"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "這會移除播放清單及其項目，但不會移除你的媒體。"
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "尚無播放清單。"
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "從電影或集的詳細資料頁面將其加入。"
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "無法更新播放清單。請再試一次。"
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "播放清單已播放完畢。"
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "無法載入播放清單。"
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "下移"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "上移"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "播放清單名稱"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "無法繼續播放清單。請再試一次。"
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "移除項目"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "重新命名播放清單"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "此個人檔案的私人播放清單。"
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "播放清單"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "無法使用的項目"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

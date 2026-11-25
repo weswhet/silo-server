@@ -128611,6 +128611,132 @@
       "value": "Tittare"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "Lägg till i spellista"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "Tillagd i spellistan"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "Spellistan har ändrats någon annanstans. Granska den senaste versionen och försök igen."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "Skapa spellista"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "Skapa och lägg till"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "Radera spellista"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "Det här tar bort spellistan och dess poster, men inte dina medier."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "Inga spellistor än."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "Lägg till filmer eller avsnitt från deras detaljsidor."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "Det gick inte att uppdatera spellistan. Försök igen."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "Spellistan är slut."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "Det gick inte att läsa in spellistor."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "Flytta ned"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "Flytta upp"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "Spellistans namn"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "Det gick inte att fortsätta spellistan. Försök igen."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "Ta bort post"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "Byt namn på spellista"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "Privata spellistor för den här profilen."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "Spellistor"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "Post inte tillgänglig"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

@@ -129259,6 +129259,132 @@
       "value": "Θεατές"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "Προσθήκη σε λίστα αναπαραγωγής"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "Προστέθηκε στη λίστα αναπαραγωγής"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "Η λίστα αναπαραγωγής άλλαξε από αλλού. Ελέγξτε την πιο πρόσφατη έκδοση και δοκιμάστε ξανά."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "Δημιουργία λίστας αναπαραγωγής"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "Δημιουργία και προσθήκη"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "Διαγραφή λίστας αναπαραγωγής"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "Αφαιρούνται η λίστα αναπαραγωγής και οι καταχωρίσεις της, όχι τα πολυμέσα σας."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "Δεν υπάρχουν ακόμη λίστες αναπαραγωγής."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "Προσθέστε ταινίες ή επεισόδια από τις σελίδες λεπτομερειών τους."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "Δεν ήταν δυνατή η ενημέρωση της λίστας αναπαραγωγής. Δοκιμάστε ξανά."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "Η λίστα αναπαραγωγής ολοκληρώθηκε."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "Δεν ήταν δυνατή η φόρτωση των λιστών αναπαραγωγής."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "Μετακίνηση προς τα κάτω"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "Μετακίνηση προς τα πάνω"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "Όνομα λίστας αναπαραγωγής"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "Δεν ήταν δυνατή η συνέχιση της λίστας αναπαραγωγής. Δοκιμάστε ξανά."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "Αφαίρεση καταχώρισης"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "Μετονομασία λίστας αναπαραγωγής"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "Ιδιωτικές λίστες αναπαραγωγής για αυτό το προφίλ."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "Λίστες αναπαραγωγής"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "Μη διαθέσιμη καταχώριση"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

@@ -87,6 +87,8 @@ interface PlaybackSessionState {
   replanning: boolean;
   errorTitle: string | null;
   errorReason?: string | null;
+  /** HTTP status of a refused initial start, separate from transport failures. */
+  errorStatus?: number | null;
   error: string | null;
   initialSubtitleErrorTitle: string | null;
   initialSubtitleError: string | null;
@@ -1247,6 +1249,7 @@ export function usePlaybackSession(
         replacing: hasExistingSession,
         errorTitle: hasExistingSession ? current.errorTitle : null,
         errorReason: null,
+        errorStatus: null,
         error: hasExistingSession ? current.error : null,
         initialSubtitleErrorTitle: hasExistingSession ? current.initialSubtitleErrorTitle : null,
         initialSubtitleError: hasExistingSession ? current.initialSubtitleError : null,
@@ -1452,6 +1455,10 @@ export function usePlaybackSession(
         }
         const nextError = describePlaybackSessionError(err, initialErrorMessage);
         retirePreviousSession(nextError);
+        setState((current) => ({
+          ...current,
+          errorStatus: err instanceof PlayerFetchError ? err.status : null,
+        }));
         return { kind: "failed", error: err };
       } finally {
         endAdoption(loadSequence);

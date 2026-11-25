@@ -128699,6 +128699,132 @@
       "value": "Seere"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "Legg til i spilleliste"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "Lagt til i spillelisten"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "Denne spillelisten ble endret et annet sted. Se gjennom den nyeste versjonen, og prøv igjen."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "Opprett spilleliste"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "Opprett og legg til"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "Slett spillelisten"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "Dette fjerner spillelisten og oppføringene i den, ikke mediene dine."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "Ingen spillelister ennå."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "Legg til filmer eller episoder fra detaljsidene deres."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "Kunne ikke oppdatere spillelisten. Prøv igjen."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "Spillelisten er ferdig."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "Kunne ikke laste inn spillelister."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "Flytt ned"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "Flytt opp"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "Navn på spillelisten"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "Kunne ikke fortsette spillelisten. Prøv igjen."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "Fjern oppføring"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "Gi spillelisten nytt navn"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "Private spillelister for denne profilen."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "Spillelister"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "Utilgjengelig oppføring"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

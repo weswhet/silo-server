@@ -342,6 +342,7 @@ export default function EpisodeContent({
               compactMobile
               item={item}
               contentId={item.content_id}
+              canAddToPlaylist
               canAddToCollection={false}
               watchTogether={watchTogether.menu}
               playHref={

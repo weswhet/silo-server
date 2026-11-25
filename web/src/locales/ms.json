@@ -117288,6 +117288,132 @@
       "value": "Penonton"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "Tambah ke senarai main"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "Ditambah ke senarai main"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "Senarai main ini telah diubah di tempat lain. Semak versi terkini dan cuba lagi."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "Cipta senarai main"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "Cipta dan tambah"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "Padam senarai main"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "Tindakan ini mengalih keluar senarai main dan entrinya, bukan media anda."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "Belum ada senarai main."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "Tambah filem atau episod daripada halaman butiran masing-masing."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "Tidak dapat mengemas kini senarai main. Sila cuba lagi."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "Senarai main selesai."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "Tidak dapat memuatkan senarai main."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "Alih ke bawah"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "Alih ke atas"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "Nama senarai main"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "Tidak dapat meneruskan senarai main. Sila cuba lagi."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "Alih keluar entri"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "Namakan semula senarai main"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "Senarai main peribadi untuk profil ini."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "Senarai main"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "Entri tidak tersedia"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,

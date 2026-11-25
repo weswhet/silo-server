@@ -22,6 +22,8 @@ export interface WatchRouteRequest {
   roomToken?: string;
   /** The shuffle this playback belongs to; the post-roll plays its next pick. */
   shuffleId?: string;
+  playlistId?: string;
+  playlistEntryId?: string;
   restart: boolean;
   audioTrackIndex?: number;
   prePlaySubtitleMode?: "auto" | "off" | "explicit";
@@ -39,6 +41,8 @@ export interface WatchPlaybackStartInput {
   roomId?: string;
   roomToken?: string;
   shuffleId?: string;
+  playlistId?: string;
+  playlistEntryId?: string;
   restart?: boolean;
   audioTrackIndex?: number;
   prePlaySubtitleMode?: "auto" | "off" | "explicit";
@@ -61,6 +65,8 @@ function buildWatchRouteRequestKey(
   roomId: string | undefined,
   roomToken: string | undefined,
   shuffleId: string | undefined,
+  playlistId: string | undefined,
+  playlistEntryId: string | undefined,
   restart: boolean,
   audioTrackIndex: number | undefined,
   prePlaySubtitleMode: "auto" | "off" | "explicit" | undefined,
@@ -74,6 +80,8 @@ function buildWatchRouteRequestKey(
     roomId ?? null,
     roomToken ?? null,
     shuffleId ?? null,
+    playlistId ?? null,
+    playlistEntryId ?? null,
     restart,
     audioTrackIndex ?? null,
     prePlaySubtitleMode ?? null,
@@ -89,6 +97,8 @@ export function createWatchRouteRequest({
   roomId,
   roomToken,
   shuffleId,
+  playlistId,
+  playlistEntryId,
   restart = false,
   audioTrackIndex,
   prePlaySubtitleMode,
@@ -103,6 +113,8 @@ export function createWatchRouteRequest({
     roomId,
     roomToken,
     shuffleId,
+    playlistId,
+    playlistEntryId,
     restart,
     audioTrackIndex,
     prePlaySubtitleMode,
@@ -116,6 +128,8 @@ export function createWatchRouteRequest({
       roomId,
       roomToken,
       shuffleId,
+      playlistId,
+      playlistEntryId,
       restart,
       audioTrackIndex,
       prePlaySubtitleMode,
@@ -136,6 +150,8 @@ export function buildWatchRouteRequest(
     roomId: searchParams.get("room_id") ?? undefined,
     roomToken: searchParams.get("room_token") ?? undefined,
     shuffleId: searchParams.get("shuffle") ?? undefined,
+    playlistId: searchParams.get("playlist") ?? undefined,
+    playlistEntryId: searchParams.get("entry") ?? undefined,
     restart: searchParams.get("restart") === "1",
   });
 }
@@ -151,6 +167,8 @@ export function buildWatchHref(request: WatchRouteRequest): string {
   if (request.roomId) searchParams.set("room_id", request.roomId);
   if (request.roomToken) searchParams.set("room_token", request.roomToken);
   if (request.shuffleId) searchParams.set("shuffle", request.shuffleId);
+  if (request.playlistId) searchParams.set("playlist", request.playlistId);
+  if (request.playlistEntryId) searchParams.set("entry", request.playlistEntryId);
   if (request.restart) searchParams.set("restart", "1");
   const query = searchParams.toString();
 

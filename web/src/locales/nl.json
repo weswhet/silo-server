@@ -127923,6 +127923,132 @@
       "value": "Kijkers"
     }
   ],
+  "web.playlists.add": [
+    {
+      "type": 0,
+      "value": "Toevoegen aan afspeellijst"
+    }
+  ],
+  "web.playlists.added": [
+    {
+      "type": 0,
+      "value": "Toegevoegd aan afspeellijst"
+    }
+  ],
+  "web.playlists.conflict": [
+    {
+      "type": 0,
+      "value": "Deze afspeellijst is ergens anders gewijzigd. Bekijk de nieuwste versie en probeer het opnieuw."
+    }
+  ],
+  "web.playlists.create": [
+    {
+      "type": 0,
+      "value": "Afspeellijst maken"
+    }
+  ],
+  "web.playlists.createAndAdd": [
+    {
+      "type": 0,
+      "value": "Maken en toevoegen"
+    }
+  ],
+  "web.playlists.delete": [
+    {
+      "type": 0,
+      "value": "Afspeellijst verwijderen"
+    }
+  ],
+  "web.playlists.deleteDescription": [
+    {
+      "type": 0,
+      "value": "Hiermee verwijder je de afspeellijst en de items erin, niet je media."
+    }
+  ],
+  "web.playlists.empty": [
+    {
+      "type": 0,
+      "value": "Nog geen afspeellijsten."
+    }
+  ],
+  "web.playlists.emptyEntries": [
+    {
+      "type": 0,
+      "value": "Voeg films of afleveringen toe vanaf hun detailpagina’s."
+    }
+  ],
+  "web.playlists.failed": [
+    {
+      "type": 0,
+      "value": "Kan de afspeellijst niet bijwerken. Probeer het opnieuw."
+    }
+  ],
+  "web.playlists.finished": [
+    {
+      "type": 0,
+      "value": "Afspeellijst afgelopen."
+    }
+  ],
+  "web.playlists.loadFailed": [
+    {
+      "type": 0,
+      "value": "Kan afspeellijsten niet laden."
+    }
+  ],
+  "web.playlists.moveDown": [
+    {
+      "type": 0,
+      "value": "Omlaag verplaatsen"
+    }
+  ],
+  "web.playlists.moveUp": [
+    {
+      "type": 0,
+      "value": "Omhoog verplaatsen"
+    }
+  ],
+  "web.playlists.name": [
+    {
+      "type": 0,
+      "value": "Naam van afspeellijst"
+    }
+  ],
+  "web.playlists.playbackFailed": [
+    {
+      "type": 0,
+      "value": "Kan de afspeellijst niet voortzetten. Probeer het opnieuw."
+    }
+  ],
+  "web.playlists.remove": [
+    {
+      "type": 0,
+      "value": "Item verwijderen"
+    }
+  ],
+  "web.playlists.rename": [
+    {
+      "type": 0,
+      "value": "Afspeellijst hernoemen"
+    }
+  ],
+  "web.playlists.subtitle": [
+    {
+      "type": 0,
+      "value": "Privéafspeellijsten voor dit profiel."
+    }
+  ],
+  "web.playlists.title": [
+    {
+      "type": 0,
+      "value": "Afspeellijsten"
+    }
+  ],
+  "web.playlists.unavailable": [
+    {
+      "type": 0,
+      "value": "Item niet beschikbaar"
+    }
+  ],
   "web.profiles.allow.allowCurrent": [
     {
       "type": 0,
