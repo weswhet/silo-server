@@ -24,6 +24,8 @@ export function usePlaylist(id: string | undefined) {
   return useQuery({
     queryKey: ["playlists", profile?.id, id],
     queryFn: () => getPlaylist(id!),
+    refetchOnMount: "always",
+    retry: false,
     enabled: !!id && !!profile,
   });
 }

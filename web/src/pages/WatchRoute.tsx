@@ -1,5 +1,9 @@
 import { useContext, useEffect, useMemo } from "react";
-import { useLocation, useParams, useSearchParams } from "react-router";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
+import { captureProfileRequestContext, isCapturedProfileAuthorityActive } from "@/api/client";
+import { resolvePlaylistEntry } from "@/api/v2/playlists";
+import { toast } from "sonner";
+import { useT } from "@/i18n";
 import { WatchPlaybackControllerContext } from "@/playback/watchPlaybackContext";
 import { buildWatchRouteRequest, createWatchRouteRequest } from "./watchRouteHelpers";
 
@@ -8,9 +12,13 @@ import { buildWatchRouteRequest, createWatchRouteRequest } from "./watchRouteHel
  * The app-level playback host owns the persistent player instance.
  */
 export default function WatchRoute() {
+  const navigate = useNavigate();
+  const t = useT();
   const controller = useContext(WatchPlaybackControllerContext);
   const syncRouteRequest = controller?.syncRouteRequest;
   const handleRouteExit = controller?.handleRouteExit;
+  const stopPlayback = controller?.stopPlayback;
+  const startPlayback = controller?.startPlayback;
   const location = useLocation();
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
@@ -51,8 +59,53 @@ export default function WatchRoute() {
       return;
     }
 
-    syncRouteRequest(request);
-  }, [request, syncRouteRequest]);
+    if (!request.playlistId) {
+      syncRouteRequest(request);
+      return;
+    }
+    // A URL is not playback authority: history and refreshed links must resolve
+    // their owner and cursor before the persistent host adopts any content.
+    let active = true;
+    const authority = captureProfileRequestContext();
+    const isCurrent = () => active && !!authority && isCapturedProfileAuthorityActive(authority);
+    const stop = () => {
+      stopPlayback?.();
+      navigate(`/playlists/${request.playlistId}`, { replace: true });
+    };
+    if (!request.playlistEntryId || !authority) {
+      stop();
+      return;
+    }
+    void resolvePlaylistEntry(request.playlistId, request.playlistEntryId)
+      .then(({ entry }) => {
+        if (!isCurrent()) return;
+        if (!entry?.item_id) {
+          stop();
+        } else if (entry.id === request.playlistEntryId && entry.item_id === request.contentId) {
+          // Keep explicit multipart/version selection only for this same item.
+          syncRouteRequest(request);
+        } else {
+          startPlayback?.(
+            {
+              contentId: entry.item_id,
+              playlistId: request.playlistId,
+              playlistEntryId: entry.id,
+              restart: true,
+              returnHref: `/playlists/${request.playlistId}`,
+            },
+            "automatic",
+          );
+        }
+      })
+      .catch(() => {
+        if (!isCurrent()) return;
+        toast.error(t("web.playlists.playbackFailed"));
+        stop();
+      });
+    return () => {
+      active = false;
+    };
+  }, [request, syncRouteRequest, startPlayback, stopPlayback, navigate, t]);
 
   useEffect(() => {
     if (!handleRouteExit || !request) {

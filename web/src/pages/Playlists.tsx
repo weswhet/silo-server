@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, Play, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { v2, V2ProblemError } from "@/api/v2/request";
+import { captureProfileRequestContext, isCapturedProfileAuthorityActive } from "@/api/client";
 import { resolvePlaylistEntry } from "@/api/v2/playlists";
 import { usePlaylist, usePlaylistCapabilities, usePlaylists } from "@/hooks/queries/playlists";
 import { useCurrentProfile } from "@/hooks/useCurrentProfile";
@@ -52,9 +53,22 @@ function PlaylistPage() {
       void qc.invalidateQueries({ queryKey: ["playlists"] });
     },
   });
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const play = useMutation({
-    mutationFn: (entryId: string) => resolvePlaylistEntry(id!, entryId),
-    onSuccess: ({ entry }) => {
+    mutationFn: ({
+      entryId,
+    }: {
+      entryId: string;
+      authority: ReturnType<typeof captureProfileRequestContext>;
+    }) => resolvePlaylistEntry(id!, entryId),
+    onSuccess: ({ entry }, { authority }) => {
+      if (!mounted.current || !authority || !isCapturedProfileAuthorityActive(authority)) return;
       if (!entry?.item_id) {
         toast(t("web.playlists.finished"));
         return;
@@ -72,7 +86,7 @@ function PlaylistPage() {
     },
     onError: () => toast.error(t("web.playlists.playbackFailed")),
   });
-  const playlist = detail.data?.body;
+  const playlist = !detail.isFetching && !detail.isError ? detail.data?.body : undefined;
   const headers = { "If-Match": detail.data?.etag ?? "" };
   function move(entryId: string, direction: number) {
     if (!playlist || !id) return;
@@ -109,7 +123,7 @@ function PlaylistPage() {
           <Link to="/playlists" className="text-primary underline">
             {t("web.playlists.title")}
           </Link>
-          {detail.isPending && <p>{t("common.loading")}</p>}
+          {(detail.isPending || detail.isFetching) && <p>{t("common.loading")}</p>}
           {detail.isError && (
             <Button variant="outline" onClick={() => void detail.refetch()}>
               {t("common.retry")}
@@ -175,7 +189,12 @@ function PlaylistPage() {
                       variant="outline"
                       aria-label={t("web.detail.actions.play")}
                       disabled={!entry.available || play.isPending}
-                      onClick={() => play.mutate(entry.id)}
+                      onClick={() =>
+                        play.mutate({
+                          entryId: entry.id,
+                          authority: captureProfileRequestContext(),
+                        })
+                      }
                     >
                       <Play aria-hidden />
                     </Button>
