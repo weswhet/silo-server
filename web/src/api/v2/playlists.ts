@@ -7,4 +7,3 @@ export const resolvePlaylistEntry = (id: string, entryId: string, after = false)
     path: { id },
     query: { entry_id: entryId, after },
   });
-export type PlaylistSnapshot = Awaited<ReturnType<typeof getPlaylist>>;
