@@ -1,7 +1,7 @@
 import { useContext, useEffect, useMemo } from "react";
 import { useLocation, useParams, useSearchParams } from "react-router";
 import { WatchPlaybackControllerContext } from "@/playback/watchPlaybackContext";
-import { createWatchRouteRequest } from "./watchRouteHelpers";
+import { buildWatchRouteRequest, createWatchRouteRequest } from "./watchRouteHelpers";
 
 /**
  * WatchRoute is a route controller only.
@@ -19,8 +19,6 @@ export default function WatchRoute() {
       return null;
     }
 
-    const fileIdParam = searchParams.get("fileId");
-    const libraryIdParam = searchParams.get("libraryId");
     const locationState = location.state as {
       watchReturnHref?: string;
       audioTrackIndex?: number;
@@ -39,13 +37,7 @@ export default function WatchRoute() {
     } | null;
 
     return createWatchRouteRequest({
-      contentId: id,
-      fileId: fileIdParam ? Number.parseInt(fileIdParam, 10) : undefined,
-      libraryId: libraryIdParam ? Number.parseInt(libraryIdParam, 10) : undefined,
-      roomId: searchParams.get("room_id") ?? undefined,
-      roomToken: searchParams.get("room_token") ?? undefined,
-      shuffleId: searchParams.get("shuffle") ?? undefined,
-      restart: searchParams.get("restart") === "1",
+      ...buildWatchRouteRequest(id, searchParams),
       audioTrackIndex: locationState?.audioTrackIndex,
       prePlaySubtitleMode: locationState?.prePlaySubtitleMode,
       prePlaySubtitleSelection: locationState?.prePlaySubtitleSelection,
