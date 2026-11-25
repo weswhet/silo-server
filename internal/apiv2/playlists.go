@@ -54,10 +54,7 @@ type PlaylistCapabilities struct {
 }
 
 func (c PlaylistCapabilities) capabilityState() string {
-	if c.Available {
-		return StateAvailable
-	}
-	return StateNotConfigured
+	return configuredCapabilityState(c.Available)
 }
 
 type PlaylistCapabilitiesOutput struct {

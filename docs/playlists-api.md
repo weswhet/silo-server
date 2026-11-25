@@ -65,3 +65,11 @@ update with a deferred unique position constraint. This works across server
 nodes without process-local locks. Account deletion cascades to its playlists; profile deletion purges them through
 the profile service because profiles can use per-account SQLite stores;
 catalog removal leaves an unavailable entry that the owner can remove.
+
+Profile cleanup follows the existing post-delete purge boundary. Failures are
+logged and can leave unreachable playlist rows. Normal profile creation assigns
+a new UUID in `ProfileHandler.CreateProfile`; backup restore also creates a new
+UUID through `pgstore.NewProfileID` when it needs a new profile. Neither API lets
+a caller choose a deleted profile's ID, so recreating a profile with the same
+name does not inherit its playlists. Account deletion still removes these rows
+through the account foreign key.
