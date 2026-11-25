@@ -38,7 +38,7 @@ func TestPlaylistCardsBoundedQueriesDB(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer pool.Close()
+	t.Cleanup(pool.Close)
 	prefix := fmt.Sprintf("playlist-cards-%d-", time.Now().UnixNano())
 	ids, files, allowed, disabled := seedPlaylistCardsDB(t, pool, prefix)
 	handler := NewCatalogResourceHandler(&ItemsHandler{itemRepo: catalog.NewItemRepository(pool), fileRepo: files})
@@ -73,6 +73,29 @@ func seedPlaylistCardsDB(t *testing.T, pool *pgxpool.Pool, prefix string) ([]str
 			t.Fatal(err)
 		}
 	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		for _, query := range []string{
+			"DELETE FROM episodes WHERE content_id LIKE $1",
+			"DELETE FROM media_items WHERE content_id LIKE $1",
+			"DELETE FROM media_folders WHERE name LIKE $1",
+		} {
+			if _, err := pool.Exec(ctx, query, prefix+"%"); err != nil {
+				t.Errorf("cleaning playlist fixture: %v", err)
+			}
+		}
+		var remaining int
+		err := pool.QueryRow(ctx, `SELECT
+   (SELECT count(*) FROM episodes WHERE content_id LIKE $1) +
+   (SELECT count(*) FROM media_items WHERE content_id LIKE $1) +
+   (SELECT count(*) FROM media_folders WHERE name LIKE $1)`, prefix+"%").Scan(&remaining)
+		if err != nil {
+			t.Errorf("checking playlist fixture cleanup: %v", err)
+		} else if remaining != 0 {
+			t.Errorf("playlist fixture left %d rows", remaining)
+		}
+	})
 	var allowed, disabled int
 	if err := pool.QueryRow(ctx, "INSERT INTO media_folders(type,name,enabled) VALUES('movies',$1,true) RETURNING id", prefix+"allowed").Scan(&allowed); err != nil {
 		t.Fatal(err)
@@ -80,11 +103,7 @@ func seedPlaylistCardsDB(t *testing.T, pool *pgxpool.Pool, prefix string) ([]str
 	if err := pool.QueryRow(ctx, "INSERT INTO media_folders(type,name,enabled) VALUES('movies',$1,true) RETURNING id", prefix+"disabled").Scan(&disabled); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), "DELETE FROM episodes WHERE content_id LIKE $1", prefix+"%")
-		_, _ = pool.Exec(context.Background(), "DELETE FROM media_items WHERE content_id LIKE $1", prefix+"%")
-		_, _ = pool.Exec(context.Background(), "DELETE FROM media_folders WHERE id=ANY($1)", []int{allowed, disabled})
-	})
+
 	exec("INSERT INTO media_items(content_id,type,title) SELECT $1||i,'movie','Movie' FROM generate_series(1,499) i", prefix)
 	for _, suffix := range []string{"series", "hidden-series"} {
 		exec("INSERT INTO media_items(content_id,type,title) VALUES($1,'series','Series')", prefix+suffix)
