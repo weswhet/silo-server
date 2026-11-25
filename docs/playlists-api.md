@@ -26,7 +26,9 @@ Paths above are relative to `/api/v2`. Every mutation of an existing playlist
 requires the exact current `If-Match` validator. Missing preconditions return
 428; stale preconditions return 412. Wildcard preconditions are rejected so an
 editor cannot accidentally overwrite an intervening edit. Both DELETE operations return 204; fetch the detail again after removing an
-entry. Other mutations return the updated detail and validator. Reload after a
+entry. Create returns the new detail and validator. Rename, append, and reorder return a
+committed receipt `{ "id": "...", "revision": 4 }` and the new ETag; fetch detail
+separately when needed. These edits never read catalog metadata after committing. Reload after a
 conflict and let the user reapply the edit; do not retry it blindly.
 
 Names contain 1–200 characters after trimming. A playlist has at most 500
@@ -73,3 +75,9 @@ UUID through `pgstore.NewProfileID` when it needs a new profile. Neither API let
 a caller choose a deleted profile's ID, so recreating a profile with the same
 name does not inherit its playlists. Account deletion still removes these rows
 through the account foreign key.
+
+Detail and playback resolution authorize one deduplicated item batch per request.
+The catalog hydrates movie and episode cards together, applies current profile
+access, and checks readable files in separate movie and episode batches. This
+path does not perform full item-detail enrichment or trigger metadata refreshes.
+Authorization and cards are not cached across requests.

@@ -4,20 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
-	"strings"
+	"strconv"
 	"testing"
 
 	"github.com/Silo-Server/silo-server/internal/api/handlers"
-	catalogpkg "github.com/Silo-Server/silo-server/internal/catalog"
 	"github.com/Silo-Server/silo-server/internal/playlists"
 )
 
 type playlistTestStore struct {
-	p       playlists.Playlist
-	owner   string
-	applied int
-	stale   bool
+	p          playlists.Playlist
+	owner      string
+	applied    int
+	stale      bool
+	afterApply func()
 }
 
 func (s *playlistTestStore) List(_ context.Context, owner playlists.Owner) ([]playlists.Playlist, error) {
@@ -40,26 +41,37 @@ func (s *playlistTestStore) Apply(_ context.Context, owner playlists.Owner, id s
 	if s.stale || revision != s.p.Revision {
 		return playlists.Playlist{}, playlists.ErrStale
 	}
+	if s.afterApply != nil {
+		s.afterApply()
+	}
+	s.p.Revision++
 	return s.p, nil
 }
 
-type playlistCatalog struct{ fakeCatalog }
+type playlistCatalog struct {
+	fakeCatalog
+	calls int
+	ids   []string
+}
 
-func (f *playlistCatalog) ItemDetail(ctx context.Context, v handlers.ItemViewer, id string) (*catalogpkg.ItemDetail, error) {
-	if id == "restricted" {
-		return nil, &handlers.APIError{Status: 404, Code: "not_found"}
+func (f *playlistCatalog) PlaylistCards(_ context.Context, _ handlers.ItemViewer, ids []string) (map[string]handlers.CollectionItemView, error) {
+	f.calls++
+	f.ids = ids
+	if f.err != nil {
+		return nil, f.err
 	}
-	if id == "unreadable" {
-		return &catalogpkg.ItemDetail{ContentID: id, Title: "Hidden title", Type: "movie", Versions: []catalogpkg.FileVersion{{Unreadable: true}}}, nil
-	}
-	d, err := f.fakeCatalog.ItemDetail(ctx, v, "movie:heat-1995")
-	if d != nil {
-		d.ContentID = id
-		if strings.HasPrefix(id, "episode") {
-			d.Type = "episode"
+	cards := map[string]handlers.CollectionItemView{}
+	for _, id := range ids {
+		if id == "restricted" || id == "unreadable" {
+			continue
 		}
+		card := fakeListingCard(id)
+		if id == "episode:other-series" {
+			card.Type = "episode"
+		}
+		cards[id] = card
 	}
-	return d, err
+	return cards, nil
 }
 func TestPlaylistRedactionAndPlaybackOrder(t *testing.T) {
 	deps, _ := catalogDeps(t)
@@ -115,4 +127,67 @@ func TestPlaylistRedactionAndPlaybackOrder(t *testing.T) {
 		t.Fatalf("removal depends on catalog after commit: %d %s", removed.Code, removed.Body.String())
 	}
 
+}
+
+func TestPlaylistMutationReceiptsDoNotReadAfterCommit(t *testing.T) {
+	for _, tc := range []struct {
+		method, path, body string
+		reads              int
+	}{
+		{http.MethodPatch, "/api/v2/playlists/list", `{"name":"New"}`, 0},
+		{http.MethodPost, "/api/v2/playlists/list/entries", `{"item_id":"movie"}`, 1},
+		{http.MethodPut, "/api/v2/playlists/list/entries/order", `{"entry_ids":["a"]}`, 0},
+	} {
+		t.Run(tc.method, func(t *testing.T) {
+			deps, _ := catalogDeps(t)
+			cat := &playlistCatalog{}
+			store := &playlistTestStore{owner: "p-owner", p: playlists.Playlist{ID: "list", Revision: 3, Entries: []playlists.Entry{{ID: "a", ItemID: "movie"}}}}
+			store.afterApply = func() { cat.err = errors.New("catalog failed after commit") }
+			deps.Playlists, deps.CatalogItems = store, cat
+			h := newTestHandler(t, deps)
+			before := do(t, h, http.MethodGet, "/api/v2/playlists/list", "", viewerHeaders())
+			cat.calls = 0
+			result := do(t, h, tc.method, tc.path, tc.body, with(viewerHeaders(), "If-Match", before.Header().Get("ETag")))
+			if result.Code != 200 {
+				t.Fatalf("committed mutation: %d %s", result.Code, result.Body.String())
+			}
+			var receipt map[string]any
+			if err := json.Unmarshal(result.Body.Bytes(), &receipt); err != nil {
+				t.Fatal(err)
+			}
+			if len(receipt) != 2 || receipt["id"] != "list" || receipt["revision"] != float64(4) {
+				t.Fatalf("receipt: %v", receipt)
+			}
+			if cat.calls != tc.reads {
+				t.Fatalf("catalog calls=%d want%d", cat.calls, tc.reads)
+			}
+			if result.Header().Get("ETag") == before.Header().Get("ETag") || result.Header().Get("ETag") == "" {
+				t.Fatal("missing committed ETag")
+			}
+			if result.Header().Get("Cache-Control") != playlistCacheControl {
+				t.Fatal("receipt can be cached")
+			}
+		})
+	}
+}
+
+func TestPlaylistReadsBatchDistinctItems(t *testing.T) {
+	deps, _ := catalogDeps(t)
+	cat := &playlistCatalog{}
+	store := &playlistTestStore{owner: "p-owner", p: playlists.Playlist{ID: "list", Revision: 1}}
+	for i := range 500 {
+		store.p.Entries = append(store.p.Entries, playlists.Entry{ID: strconv.Itoa(i), ItemID: fmt.Sprintf("movie-%d", i%499)})
+	}
+	deps.Playlists, deps.CatalogItems = store, cat
+	h := newTestHandler(t, deps)
+	for _, path := range []string{"/api/v2/playlists/list", "/api/v2/playlists/list/playback?entry_id=0"} {
+		cat.calls = 0
+		result := do(t, h, http.MethodGet, path, "", viewerHeaders())
+		if result.Code != 200 {
+			t.Fatalf("%d %s", result.Code, result.Body.String())
+		}
+		if cat.calls != 1 || len(cat.ids) != 499 {
+			t.Fatalf("calls=%d IDs=%d", cat.calls, len(cat.ids))
+		}
+	}
 }

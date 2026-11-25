@@ -33957,6 +33957,11 @@ export interface components {
         item_id?: string;
       } | null;
     };
+    PlaylistReceipt: {
+      id: string;
+      /** Format: int64 */
+      revision: number;
+    };
     PlaylistRenameInputBody: {
       name: string;
     };
@@ -138411,7 +138416,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["Playlist"];
+          "application/json": components["schemas"]["PlaylistReceipt"];
         };
       };
       /** @description Bad Request */
@@ -138574,7 +138579,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["Playlist"];
+          "application/json": components["schemas"]["PlaylistReceipt"];
         };
       };
       /** @description Bad Request */
@@ -138869,7 +138874,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["Playlist"];
+          "application/json": components["schemas"]["PlaylistReceipt"];
         };
       };
       /** @description Bad Request */

@@ -1611,3 +1611,4 @@
 ./internal/backup TestCarryCredentialsKeepsNodeSamplesWithoutDailyArchiveDB
 
 ./internal/playlists TestPlaylistIsolationConcurrencyDB
+./internal/api/handlers TestPlaylistCardsBoundedQueriesDB

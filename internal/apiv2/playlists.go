@@ -45,6 +45,17 @@ type PlaylistOutput struct {
 	ETag         string `header:"ETag"`
 	Body         Playlist
 }
+
+// PlaylistReceipt acknowledges a committed edit without reading catalog metadata.
+type PlaylistReceipt struct {
+	ID       string `json:"id"`
+	Revision int64  `json:"revision"`
+}
+type PlaylistReceiptOutput struct {
+	CacheControl string `header:"Cache-Control"`
+	ETag         string `header:"ETag"`
+	Body         PlaylistReceipt
+}
 type PlaylistListOutput struct {
 	CacheControl string `header:"Cache-Control"`
 	Body         struct {
@@ -193,59 +204,53 @@ func (reg *Registry) listPlaylists(ctx context.Context, _ *struct{}) (*PlaylistL
 func playlistTag(ctx context.Context, p playlists.Playlist) EntityTag {
 	return RenderETag("playlist:"+strconv.Itoa(claimsFrom(ctx).UserID)+":"+profileFrom(ctx), p.ID, p.Revision)
 }
-func (reg *Registry) playlistEntry(ctx context.Context, e playlists.Entry) (PlaylistEntry, error) {
-	out := PlaylistEntry{ID: e.ID}
-	if reg.deps.CatalogItems == nil || reg.deps.CatalogAccess == nil {
-		return out, unavailable("catalog")
+
+type playlistCatalogService interface {
+	PlaylistCards(context.Context, handlers.ItemViewer, []string) (map[string]handlers.CollectionItemView, error)
+}
+
+func (reg *Registry) playlistEntries(ctx context.Context, entries []playlists.Entry) ([]PlaylistEntry, error) {
+	out := make([]PlaylistEntry, 0, len(entries))
+	if len(entries) == 0 {
+		return out, nil
 	}
-	viewer, p := reg.itemViewer(ctx, imagesize.Request{}, "", "")
-	if p != nil {
-		return out, p
+	svc, ok := reg.deps.CatalogItems.(playlistCatalogService)
+	if !ok || reg.deps.CatalogAccess == nil {
+		return nil, unavailable("catalog")
 	}
-	detail, err := reg.deps.CatalogItems.ItemDetail(ctx, viewer, e.ItemID)
+	viewer, problem := reg.itemViewer(ctx, imagesize.Request{}, "", "")
+	if problem != nil {
+		return nil, problem
+	}
+	ids := make([]string, 0, len(entries))
+	seen := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		if !seen[e.ItemID] {
+			ids = append(ids, e.ItemID)
+			seen[e.ItemID] = true
+		}
+	}
+	cards, err := svc.PlaylistCards(ctx, viewer, ids)
 	if err != nil {
-		var apiErr *handlers.APIError
-		if errors.As(err, &apiErr) && (apiErr.Status == http.StatusNotFound || apiErr.Status == http.StatusForbidden) {
-			return out, nil
+		return nil, serviceProblem(err)
+	}
+	selection := reg.ratingSelection(ctx)
+	for _, e := range entries {
+		entry := PlaylistEntry{ID: e.ID}
+		if card, ok := cards[e.ItemID]; ok {
+			item := catalogItemOfListing(card, selection)
+			entry.Available, entry.ItemID, entry.Item = true, e.ItemID, &item
 		}
-		return out, serviceProblem(err)
+		out = append(out, entry)
 	}
-	if detail == nil || (detail.Type != "movie" && detail.Type != "episode") || len(detail.Versions) == 0 {
-		return out, nil
-	}
-	readable := false
-	for _, version := range detail.Versions {
-		if !version.Unreadable {
-			readable = true
-			break
-		}
-	}
-	if !readable {
-		return out, nil
-	}
-	card := catalogItemDetailOf(detail, reg.ratingSelection(ctx)).CatalogItem
-	out.Available = true
-	out.ItemID = e.ItemID
-	out.Item = &card
 	return out, nil
 }
 func (reg *Registry) playlistOutput(ctx context.Context, p playlists.Playlist) (*PlaylistOutput, error) {
-	out := &PlaylistOutput{CacheControl: playlistCacheControl, ETag: playlistTag(ctx, p).String(), Body: Playlist{PlaylistSummary: playlistSummary(p), Entries: []PlaylistEntry{}}}
-	cache := make(map[string]PlaylistEntry)
-	for _, e := range p.Entries {
-		entry, ok := cache[e.ItemID]
-		if !ok {
-			var err error
-			entry, err = reg.playlistEntry(ctx, e)
-			if err != nil {
-				return nil, err
-			}
-			cache[e.ItemID] = entry
-		}
-		entry.ID = e.ID
-		out.Body.Entries = append(out.Body.Entries, entry)
+	entries, err := reg.playlistEntries(ctx, p.Entries)
+	if err != nil {
+		return nil, err
 	}
-	return out, nil
+	return &PlaylistOutput{CacheControl: playlistCacheControl, ETag: playlistTag(ctx, p).String(), Body: Playlist{PlaylistSummary: playlistSummary(p), Entries: entries}}, nil
 }
 func (reg *Registry) getPlaylist(ctx context.Context, in *PlaylistReadInput) (*PlaylistOutput, error) {
 	svc, err := reg.playlistStore()
@@ -269,7 +274,7 @@ func (reg *Registry) createPlaylist(ctx context.Context, in *PlaylistCreateInput
 	}
 	return reg.playlistOutput(ctx, p)
 }
-func (reg *Registry) editPlaylist(ctx context.Context, in PlaylistIDInput, m playlists.Mutation) (*PlaylistOutput, error) {
+func (reg *Registry) editPlaylist(ctx context.Context, in PlaylistIDInput, m playlists.Mutation) (*PlaylistReceiptOutput, error) {
 	svc, err := reg.playlistStore()
 	if err != nil {
 		return nil, err
@@ -286,11 +291,11 @@ func (reg *Registry) editPlaylist(ctx context.Context, in PlaylistIDInput, m pla
 		return nil, problem
 	}
 	if m.AddItem != "" {
-		e, err := reg.playlistEntry(ctx, playlists.Entry{ItemID: m.AddItem})
+		entries, err := reg.playlistEntries(ctx, []playlists.Entry{{ItemID: m.AddItem}})
 		if err != nil {
 			return nil, err
 		}
-		if !e.Available {
+		if !entries[0].Available {
 			return nil, NewProblem(TypeNotFound, "Item not found.")
 		}
 	}
@@ -301,15 +306,15 @@ func (reg *Registry) editPlaylist(ctx context.Context, in PlaylistIDInput, m pla
 	if m.Delete || m.RemoveEntry != "" {
 		return nil, nil
 	}
-	return reg.playlistOutput(ctx, p)
+	return &PlaylistReceiptOutput{CacheControl: playlistCacheControl, ETag: playlistTag(ctx, p).String(), Body: PlaylistReceipt{ID: p.ID, Revision: p.Revision}}, nil
 }
-func (reg *Registry) renamePlaylist(ctx context.Context, in *PlaylistRenameInput) (*PlaylistOutput, error) {
+func (reg *Registry) renamePlaylist(ctx context.Context, in *PlaylistRenameInput) (*PlaylistReceiptOutput, error) {
 	return reg.editPlaylist(ctx, PlaylistIDInput{ID: in.ID, IfMatch: in.IfMatch, IfNoneMatch: in.IfNoneMatch}, playlists.Mutation{Name: &in.Body.Name})
 }
-func (reg *Registry) addPlaylistEntry(ctx context.Context, in *PlaylistAddInput) (*PlaylistOutput, error) {
+func (reg *Registry) addPlaylistEntry(ctx context.Context, in *PlaylistAddInput) (*PlaylistReceiptOutput, error) {
 	return reg.editPlaylist(ctx, PlaylistIDInput{ID: in.ID, IfMatch: in.IfMatch, IfNoneMatch: in.IfNoneMatch}, playlists.Mutation{AddItem: in.Body.ItemID})
 }
-func (reg *Registry) reorderPlaylistEntries(ctx context.Context, in *PlaylistOrderInput) (*PlaylistOutput, error) {
+func (reg *Registry) reorderPlaylistEntries(ctx context.Context, in *PlaylistOrderInput) (*PlaylistReceiptOutput, error) {
 	order := append([]string{}, in.Body.EntryIDs...)
 	return reg.editPlaylist(ctx, PlaylistIDInput{ID: in.ID, IfMatch: in.IfMatch, IfNoneMatch: in.IfNoneMatch}, playlists.Mutation{Order: order})
 }
@@ -344,11 +349,11 @@ func (reg *Registry) resolvePlaylistPlayback(ctx context.Context, in *PlaylistPl
 		start++
 	}
 	out := &PlaylistPlaybackOutput{CacheControl: playlistCacheControl}
-	for _, e := range p.Entries[start:] {
-		entry, err := reg.playlistEntry(ctx, e)
-		if err != nil {
-			return nil, err
-		}
+	entries, err := reg.playlistEntries(ctx, p.Entries[start:])
+	if err != nil {
+		return nil, err
+	}
+	for _, entry := range entries {
 		if entry.Available {
 			out.Body.Entry.Value = &entry
 			break
