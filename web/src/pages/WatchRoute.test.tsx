@@ -434,11 +434,13 @@ describe("playlist multipart restart", () => {
   });
   it("preserves an explicit multipart handoff", () => {
     const props = buildWatchPageProps({
-      request: makeRequest("playlist=list&entry=again&restart=1&fileId=12"),
+      request: makeRequest("playlist=list&entry=again&fileId=12"),
       item,
       currentProfile: profile,
     });
     expect(props.fileId).toBe(12);
+    expect(props.initialPosition).toBe(0);
+    expect(props.forceInitialPosition).toBe(true);
     expect(props.resumeHints?.lastFileId).toBe(12);
   });
   it("keeps ordinary part-two resume unchanged", () => {

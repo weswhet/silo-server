@@ -394,7 +394,8 @@ export function buildWatchPageProps({
   const autoSkipRecap = currentProfile?.auto_skip_recap ?? false;
   // Watched items store position 0, so any nonzero position is a live resume
   // point — including a rewatch in flight (played stays true).
-  const initialPosition = request.restart ? 0 : (item.user_data?.position_seconds ?? 0);
+  const restart = request.restart || !!request.playlistId;
+  const initialPosition = restart ? 0 : (item.user_data?.position_seconds ?? 0);
 
   const resumeHints: ResumeHints | undefined =
     item.user_data?.last_file_id != null ||
@@ -421,7 +422,7 @@ export function buildWatchPageProps({
           }
         : undefined;
 
-  if (request.playlistId && request.restart && request.fileId == null && resumeHints) {
+  if (request.playlistId && request.fileId == null && resumeHints) {
     // Each occurrence starts from part one, retaining the bookmarked edition.
     // Explicit file handoffs between parts and ordinary resume remain untouched.
     const variant =
@@ -453,7 +454,7 @@ export function buildWatchPageProps({
     playbackVariants: item.playback_variants ?? [],
     subtitles,
     initialPosition,
-    forceInitialPosition: request.restart,
+    forceInitialPosition: restart,
     qualityPreference,
     explicitAudioTrackIndex: request.audioTrackIndex ?? null,
     initialSubtitleTrackIndexByFileId: initialSubtitleTrackIndexes.start,
