@@ -1,11 +1,16 @@
+vi.mock("@/hooks/queries/playlists", () => ({ usePlaylistAuthorityKey: () => "owner" }));
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider, onlineManager } from "@tanstack/react-query";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createWatchRouteRequest } from "@/pages/watchRouteHelpers";
 import PlaylistPlayingNext from "./PlaylistPlayingNext";
 
-const mocks = vi.hoisted(() => ({ resolve: vi.fn(), start: vi.fn() }));
-vi.mock("@/api/v2/playlists", () => ({ resolvePlaylistEntry: mocks.resolve }));
+const mocks = vi.hoisted(() => ({ resolve: vi.fn(), start: vi.fn(), current: vi.fn() }));
+vi.mock("@/api/v2/playlists", () => ({
+  isPlaylistAuthorityCurrent: mocks.current,
+  playlistAuthorityKey: () => [],
+  resolvePlaylistEntry: mocks.resolve,
+}));
 vi.mock("@/hooks/useCurrentProfile", () => ({
   useCurrentProfile: () => ({ profile: { id: "profile" } }),
 }));
@@ -57,6 +62,7 @@ function setup() {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.current.mockReturnValue(true);
 });
 describe("playlist continuation", () => {
   it("does not reveal a cached next title while rechecking profile access", () => {
@@ -117,4 +123,41 @@ describe("playlist continuation", () => {
     });
     expect(mocks.start).not.toHaveBeenCalled();
   });
+});
+
+afterEach(() => onlineManager.setOnline(true));
+it.each(["offline", "disabled"])(
+  "withholds a seeded successful preview when its mount is %s",
+  (state) => {
+    onlineManager.setOnline(state !== "offline");
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { initialData: { entry }, retry: false, enabled: state !== "disabled" },
+      },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <PlaylistPlayingNext request={request} videoEnded onClose={() => {}} />
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByText("Movie")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Play next" })).not.toBeInTheDocument();
+  },
+);
+
+it("does not adopt a Play result after its authority generation changed", async () => {
+  let finish!: (value: unknown) => void;
+  mocks.resolve.mockResolvedValueOnce({ entry }).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  setup();
+  await screen.findByText("Movie");
+  fireEvent.click(screen.getByText("Play next"));
+  await waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(2));
+  mocks.current.mockReturnValue(false);
+  await act(async () => finish({ entry }));
+  expect(mocks.start).not.toHaveBeenCalled();
 });

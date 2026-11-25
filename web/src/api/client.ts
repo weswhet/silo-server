@@ -102,9 +102,21 @@ let pendingRefresh: {
  */
 let sessionRestore: Promise<boolean> | null = null;
 
+const profileAuthorityListeners = new Set<() => void>();
+export function subscribeProfileAuthority(listener: () => void): () => void {
+  profileAuthorityListeners.add(listener);
+  return () => {
+    profileAuthorityListeners.delete(listener);
+  };
+}
+function notifyProfileAuthority() {
+  for (const listener of profileAuthorityListeners) listener();
+}
+
 export function setAccessToken(token: string | null) {
   if (accessToken !== token) authContextVersion += 1;
   accessToken = token;
+  notifyProfileAuthority();
 }
 
 function refreshCurrentAccessToken(token: string): void {
@@ -140,6 +152,7 @@ export function setProfileId(id: string | null) {
   } else {
     storage.remove(storage.KEYS.PROFILE_ID);
   }
+  notifyProfileAuthority();
 }
 
 // Restore once during module initialization, before query/render consumers can
@@ -196,6 +209,7 @@ export function setProfileToken(token: string | null) {
       // Storage unavailable
     }
   }
+  notifyProfileAuthority();
 }
 
 export function getProfileToken(): string | null {

@@ -421,6 +421,26 @@ export function buildWatchPageProps({
           }
         : undefined;
 
+  if (request.playlistId && request.restart && request.fileId == null && resumeHints) {
+    // Each occurrence starts from part one, retaining the bookmarked edition.
+    // Explicit file handoffs between parts and ordinary resume remain untouched.
+    const variant =
+      item.playback_variants?.find((candidate) =>
+        candidate.parts.some((part) =>
+          part.versions.some((version) => version.file_id === resumeHints.lastFileId),
+        ),
+      ) ??
+      item.playback_variants?.find(
+        (candidate) => candidate.edition_key === resumeHints.lastEditionKey,
+      );
+    const first = variant?.parts.length
+      ? variant.parts.reduce((earliest, part) =>
+          part.part_index < earliest.part_index ? part : earliest,
+        )
+      : undefined;
+    resumeHints.lastFileId = first?.default_file_id ?? first?.versions[0]?.file_id;
+  }
+
   return {
     contentId: request.contentId,
     title: item.title,

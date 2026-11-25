@@ -1,3 +1,4 @@
+vi.mock("@/hooks/queries/playlists", () => ({ usePlaylistAuthorityKey: () => "owner" }));
 import { act, render, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,7 +17,10 @@ vi.mock("@/api/client", () => ({
   captureProfileRequestContext: () => ({}),
   isCapturedProfileAuthorityActive: calls.current,
 }));
-vi.mock("@/api/v2/playlists", () => ({ resolvePlaylistEntry: calls.resolve }));
+vi.mock("@/api/v2/playlists", () => ({
+  isPlaylistAuthorityCurrent: calls.current,
+  resolvePlaylistEntry: calls.resolve,
+}));
 vi.mock("@/playback/watchPlaybackContext", async () => ({
   WatchPlaybackControllerContext: (await import("react")).createContext({
     syncRouteRequest: calls.sync,

@@ -390,3 +390,60 @@ describe("initial subtitle track", () => {
     expect(props.initialSubtitleTrackIndexByFileId).toEqual({ 7: 1 });
   });
 });
+
+describe("playlist multipart restart", () => {
+  const version = (file_id: number): FileVersion => ({
+    file_id,
+    resolution: "1080p",
+    codec_video: "h264",
+    codec_audio: "aac",
+    hdr: false,
+    container: "mkv",
+    file_size: 1,
+    duration: 100,
+    bitrate: 1000,
+  });
+  const item = makeWatchDetail({
+    versions: [version(11), version(12)],
+    user_data: {
+      played: false,
+      position_seconds: 45,
+      last_file_id: 12,
+      last_edition_key: "director",
+    },
+    playback_variants: [
+      {
+        variant_id: "director",
+        edition_key: "director",
+        part_count: 2,
+        parts: [
+          { part_index: 2, default_file_id: 12, versions: [version(12)] },
+          { part_index: 1, default_file_id: 11, versions: [version(11)] },
+        ],
+      },
+    ],
+  });
+  it("starts a fresh occurrence at first part of its bookmarked edition", () => {
+    const props = buildWatchPageProps({
+      request: makeRequest("playlist=list&entry=again&restart=1"),
+      item,
+      currentProfile: profile,
+    });
+    expect(props.initialPosition).toBe(0);
+    expect(props.resumeHints).toMatchObject({ lastFileId: 11, lastEditionKey: "director" });
+  });
+  it("preserves an explicit multipart handoff", () => {
+    const props = buildWatchPageProps({
+      request: makeRequest("playlist=list&entry=again&restart=1&fileId=12"),
+      item,
+      currentProfile: profile,
+    });
+    expect(props.fileId).toBe(12);
+    expect(props.resumeHints?.lastFileId).toBe(12);
+  });
+  it("keeps ordinary part-two resume unchanged", () => {
+    const props = buildWatchPageProps({ request: makeRequest(), item, currentProfile: profile });
+    expect(props.initialPosition).toBe(45);
+    expect(props.resumeHints?.lastFileId).toBe(12);
+  });
+});

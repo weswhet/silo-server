@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
       etag: "1",
     },
     isFetching: false,
+    isFetchedAfterMount: true,
+    fetchStatus: "idle",
     isError: false,
     isPending: false,
     refetch: vi.fn(),
@@ -27,7 +29,11 @@ vi.mock("@/api/client", () => ({
   captureProfileRequestContext: () => ({}),
   isCapturedProfileAuthorityActive: mocks.current,
 }));
-vi.mock("@/api/v2/playlists", () => ({ resolvePlaylistEntry: mocks.resolve }));
+vi.mock("@/api/v2/playlists", () => ({
+  isPlaylistAuthorityCurrent: mocks.current,
+  playlistAuthorityKey: () => [],
+  resolvePlaylistEntry: mocks.resolve,
+}));
 vi.mock("@/hooks/queries/playlists", () => ({
   usePlaylist: () => mocks.detail,
   usePlaylistCapabilities: () => ({ data: { available: true } }),
@@ -55,13 +61,18 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.current.mockReturnValue(true);
   mocks.detail.isFetching = false;
+  mocks.detail.fetchStatus = "idle";
+  mocks.detail.isFetchedAfterMount = true;
   mocks.detail.isError = false;
 });
 describe("playlist detail authority", () => {
-  it.each(["fetching", "denied"])(
+  it.each(["fetching", "denied", "paused", "unvalidated"])(
     "withholds cached names and cards while access is %s",
     (state) => {
       mocks.detail.isFetching = state === "fetching";
+      mocks.detail.fetchStatus =
+        state === "fetching" ? "fetching" : state === "paused" ? "paused" : "idle";
+      mocks.detail.isFetchedAfterMount = state !== "unvalidated";
       mocks.detail.isError = state === "denied";
       mount();
       expect(screen.queryByText("Restricted title")).not.toBeInTheDocument();

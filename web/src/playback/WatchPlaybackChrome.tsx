@@ -26,7 +26,7 @@ import { Pause, PictureInPicture2, Play, SkipBack, SkipForward, Tv, X } from "lu
 import { useLocation } from "react-router";
 import type { WatchDetail } from "@/api/types";
 import { isNotFoundProblem, V2ProblemError } from "@/api/v2/request";
-import { resolvePlaylistEntry } from "@/api/v2/playlists";
+import { resolvePlaylistEntry, isPlaylistAuthorityCurrent } from "@/api/v2/playlists";
 import { isUnavailablePlaybackFailure } from "@/player/playback-errors";
 import {
   getAccessToken,
@@ -738,8 +738,12 @@ function WatchPlaybackHostContent() {
       return;
     skippedRequest.current = request.requestKey;
     void resolvePlaylistEntry(request.playlistId, request.playlistEntryId, true)
-      .then(({ entry }) => {
-        if (currentRequestKey.current !== request.requestKey) return;
+      .then(({ entry, authority }) => {
+        if (
+          currentRequestKey.current !== request.requestKey ||
+          !isPlaylistAuthorityCurrent(authority)
+        )
+          return;
         if (entry?.item_id) {
           controller.startPlayback(
             {

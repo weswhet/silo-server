@@ -1,8 +1,9 @@
 import { useContext, useEffect, useMemo } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
-import { captureProfileRequestContext, isCapturedProfileAuthorityActive } from "@/api/client";
-import { resolvePlaylistEntry } from "@/api/v2/playlists";
+import { captureProfileRequestContext } from "@/api/client";
+import { resolvePlaylistEntry, isPlaylistAuthorityCurrent } from "@/api/v2/playlists";
 import { toast } from "sonner";
+import { usePlaylistAuthorityKey } from "@/hooks/queries/playlists";
 import { useT } from "@/i18n";
 import { WatchPlaybackControllerContext } from "@/playback/watchPlaybackContext";
 import { buildWatchRouteRequest, createWatchRouteRequest } from "./watchRouteHelpers";
@@ -13,6 +14,7 @@ import { buildWatchRouteRequest, createWatchRouteRequest } from "./watchRouteHel
  */
 export default function WatchRoute() {
   const navigate = useNavigate();
+  const authorityKey = usePlaylistAuthorityKey();
   const t = useT();
   const controller = useContext(WatchPlaybackControllerContext);
   const syncRouteRequest = controller?.syncRouteRequest;
@@ -67,7 +69,7 @@ export default function WatchRoute() {
     // their owner and cursor before the persistent host adopts any content.
     let active = true;
     const authority = captureProfileRequestContext();
-    const isCurrent = () => active && !!authority && isCapturedProfileAuthorityActive(authority);
+    const isCurrent = () => active && !!authority && isPlaylistAuthorityCurrent(authority);
     const stop = () => {
       stopPlayback?.();
       navigate(`/playlists/${request.playlistId}`, { replace: true });
@@ -77,8 +79,8 @@ export default function WatchRoute() {
       return;
     }
     void resolvePlaylistEntry(request.playlistId, request.playlistEntryId)
-      .then(({ entry }) => {
-        if (!isCurrent()) return;
+      .then(({ entry, authority: resolvedAuthority }) => {
+        if (!isCurrent() || !isPlaylistAuthorityCurrent(resolvedAuthority)) return;
         if (!entry?.item_id) {
           stop();
         } else if (entry.id === request.playlistEntryId && entry.item_id === request.contentId) {
@@ -105,7 +107,7 @@ export default function WatchRoute() {
     return () => {
       active = false;
     };
-  }, [request, syncRouteRequest, startPlayback, stopPlayback, navigate, t]);
+  }, [request, syncRouteRequest, startPlayback, stopPlayback, navigate, t, authorityKey]);
 
   useEffect(() => {
     if (!handleRouteExit || !request) {

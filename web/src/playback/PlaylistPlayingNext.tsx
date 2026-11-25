@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { captureProfileRequestContext, StaleApiRequestContextError } from "@/api/client";
 import { toast } from "sonner";
-import { resolvePlaylistEntry } from "@/api/v2/playlists";
+import { resolvePlaylistEntry, isPlaylistAuthorityCurrent } from "@/api/v2/playlists";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { usePlaylistAuthorityKey } from "@/hooks/queries/playlists";
 import { useCurrentProfile } from "@/hooks/useCurrentProfile";
 import { useT } from "@/i18n";
 import type { WatchRouteRequest } from "@/pages/watchRouteHelpers";
@@ -29,6 +31,8 @@ export default function PlaylistPlayingNext({
   onClose: () => void;
 }) {
   const t = useT();
+  const view = useId();
+  const authority = usePlaylistAuthorityKey();
   const { profile } = useCurrentProfile();
   const controller = useWatchPlaybackController();
   const active = useRef(true);
@@ -39,17 +43,39 @@ export default function PlaylistPlayingNext({
     };
   }, []);
   const next = useQuery({
-    queryKey: ["playlists", profile?.id, request.playlistId, "next", request.playlistEntryId],
+    queryKey: [
+      "playlists",
+      profile?.id,
+      request.playlistId,
+      "next",
+      request.playlistEntryId,
+      view,
+      authority,
+    ],
     queryFn: () => resolvePlaylistEntry(request.playlistId!, request.playlistEntryId!, true),
     staleTime: 0,
   });
   const play = useMutation({
-    mutationFn: async (trigger: PlaybackStartTrigger) => ({
-      result: await resolvePlaylistEntry(request.playlistId!, request.playlistEntryId!, true),
+    mutationFn: async ({
       trigger,
-    }),
-    onSuccess: ({ result, trigger }) => {
-      if (!active.current) return;
+      authority,
+    }: {
+      trigger: PlaybackStartTrigger;
+      authority: ReturnType<typeof captureProfileRequestContext>;
+    }) => {
+      if (!isPlaylistAuthorityCurrent(authority)) throw new StaleApiRequestContextError();
+      return {
+        result: await resolvePlaylistEntry(request.playlistId!, request.playlistEntryId!, true),
+        trigger,
+      };
+    },
+    onSuccess: ({ result, trigger }, { authority }) => {
+      if (
+        !active.current ||
+        !isPlaylistAuthorityCurrent(authority) ||
+        !isPlaylistAuthorityCurrent(result.authority)
+      )
+        return;
       if (!result.entry?.item_id) {
         onClose();
         return;
@@ -71,10 +97,15 @@ export default function PlaylistPlayingNext({
     },
   });
   // Do not announce a cached title while its current access is being checked.
-  const entry = next.isError || next.isFetching ? undefined : next.data?.entry;
+  const validated =
+    next.isFetchedAfterMount &&
+    next.fetchStatus === "idle" &&
+    !next.isError &&
+    isPlaylistAuthorityCurrent(next.data?.authority);
+  const entry = validated ? next.data?.entry : undefined;
   const item = entry?.item;
   const episode = item?.type === "episode";
-  if (next.isFetching || next.isError || !entry?.item_id || !item) {
+  if (!validated || !entry?.item_id || !item) {
     return (
       <Dialog
         open
@@ -91,7 +122,7 @@ export default function PlaylistPlayingNext({
           </DialogHeader>
           <DialogDescription role="status">
             {t(
-              next.isFetching
+              !validated && !next.isError
                 ? "common.loading"
                 : next.isError
                   ? "web.playlists.playbackFailed"
@@ -137,7 +168,7 @@ export default function PlaylistPlayingNext({
       continueWatchingItems={[]}
       videoEnded={videoEnded && !play.isPending && !play.isError}
       onPlayNow={(trigger) => {
-        if (!play.isPending) play.mutate(trigger);
+        if (!play.isPending) play.mutate({ trigger, authority: captureProfileRequestContext() });
       }}
       onPlayItem={() => undefined}
       onClose={() => {
