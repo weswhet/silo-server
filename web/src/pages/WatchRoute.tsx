@@ -1,7 +1,10 @@
 import { useContext, useEffect, useMemo } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
-import { captureProfileRequestContext } from "@/api/client";
-import { resolvePlaylistEntry, isPlaylistAuthorityCurrent } from "@/api/v2/playlists";
+import {
+  resolvePlaylistEntry,
+  isPlaylistAuthorityCurrent,
+  capturePlaylistAuthority,
+} from "@/api/v2/playlists";
 import { toast } from "sonner";
 import { usePlaylistAuthorityKey } from "@/hooks/queries/playlists";
 import { useT } from "@/i18n";
@@ -68,7 +71,7 @@ export default function WatchRoute() {
     // A URL is not playback authority: history and refreshed links must resolve
     // their owner and cursor before the persistent host adopts any content.
     let active = true;
-    const authority = captureProfileRequestContext();
+    const authority = capturePlaylistAuthority();
     const isCurrent = () => active && !!authority && isPlaylistAuthorityCurrent(authority);
     const stop = () => {
       stopPlayback?.();

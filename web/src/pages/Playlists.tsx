@@ -4,8 +4,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, Play, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { v2, V2ProblemError } from "@/api/v2/request";
-import { captureProfileRequestContext } from "@/api/client";
-import { resolvePlaylistEntry, isPlaylistAuthorityCurrent } from "@/api/v2/playlists";
+import {
+  resolvePlaylistEntry,
+  isPlaylistAuthorityCurrent,
+  capturePlaylistAuthority,
+} from "@/api/v2/playlists";
 import { usePlaylist, usePlaylistCapabilities, usePlaylists } from "@/hooks/queries/playlists";
 import { useCurrentProfile } from "@/hooks/useCurrentProfile";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -65,7 +68,7 @@ function PlaylistPage() {
       entryId,
     }: {
       entryId: string;
-      authority: ReturnType<typeof captureProfileRequestContext>;
+      authority: ReturnType<typeof capturePlaylistAuthority>;
     }) => resolvePlaylistEntry(id!, entryId),
     onSuccess: ({ entry, authority: resolvedAuthority }, { authority }) => {
       if (
@@ -204,7 +207,7 @@ function PlaylistPage() {
                       onClick={() =>
                         play.mutate({
                           entryId: entry.id,
-                          authority: captureProfileRequestContext(),
+                          authority: capturePlaylistAuthority(),
                         })
                       }
                     >

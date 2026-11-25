@@ -18,6 +18,12 @@ vi.mock("@/api/client", () => ({
   isCapturedProfileAuthorityActive: calls.current,
 }));
 vi.mock("@/api/v2/playlists", () => ({
+  capturePlaylistAuthority: () => ({
+    serverOrigin: "https://test.invalid",
+    authContextVersion: 1,
+    profileId: "profile",
+    profileTokenGeneration: 1,
+  }),
   isPlaylistAuthorityCurrent: calls.current,
   resolvePlaylistEntry: calls.resolve,
 }));

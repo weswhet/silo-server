@@ -30,6 +30,12 @@ vi.mock("@/api/client", () => ({
   isCapturedProfileAuthorityActive: mocks.current,
 }));
 vi.mock("@/api/v2/playlists", () => ({
+  capturePlaylistAuthority: () => ({
+    serverOrigin: "https://test.invalid",
+    authContextVersion: 1,
+    profileId: "profile",
+    profileTokenGeneration: 1,
+  }),
   isPlaylistAuthorityCurrent: mocks.current,
   playlistAuthorityKey: () => [],
   resolvePlaylistEntry: mocks.resolve,
@@ -47,8 +53,9 @@ vi.mock("@/playback/watchPlaybackContext", () => ({
   useWatchPlaybackController: () => ({ startPlayback: mocks.start }),
 }));
 function mount() {
-  return render(
-    <QueryClientProvider client={new QueryClient()}>
+  const client = new QueryClient();
+  const view = render(
+    <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={["/playlists/queue"]}>
         <Routes>
           <Route path="/playlists/:id" element={<Playlists />} />
@@ -56,6 +63,7 @@ function mount() {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return { ...view, client };
 }
 beforeEach(() => {
   vi.clearAllMocks();
@@ -91,6 +99,15 @@ describe("playlist detail authority", () => {
       const view = mount();
       fireEvent.click(screen.getByRole("button", { name: "Play" }));
       await act(async () => {});
+      expect(view.client.getMutationCache().getAll()[0]?.state.variables).toEqual({
+        entryId: "entry",
+        authority: {
+          serverOrigin: "https://test.invalid",
+          authContextVersion: 1,
+          profileId: "profile",
+          profileTokenGeneration: 1,
+        },
+      });
       if (change === "unmount") view.unmount();
       else mocks.current.mockReturnValue(false);
       await act(async () => finish({ entry: { id: "entry", item_id: "movie" } }));

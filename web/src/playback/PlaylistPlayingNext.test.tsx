@@ -7,6 +7,12 @@ import PlaylistPlayingNext from "./PlaylistPlayingNext";
 
 const mocks = vi.hoisted(() => ({ resolve: vi.fn(), start: vi.fn(), current: vi.fn() }));
 vi.mock("@/api/v2/playlists", () => ({
+  capturePlaylistAuthority: () => ({
+    serverOrigin: "https://test.invalid",
+    authContextVersion: 1,
+    profileId: "profile",
+    profileTokenGeneration: 1,
+  }),
   isPlaylistAuthorityCurrent: mocks.current,
   playlistAuthorityKey: () => [],
   resolvePlaylistEntry: mocks.resolve,
@@ -58,7 +64,7 @@ function setup() {
       <PlaylistPlayingNext request={request} videoEnded onClose={close} />
     </QueryClientProvider>,
   );
-  return { close, ...view };
+  return { close, client, ...view };
 }
 beforeEach(() => {
   vi.clearAllMocks();
@@ -80,7 +86,7 @@ describe("playlist continuation", () => {
 
   it("rechecks access at Play and retains a duplicate title's distinct entry", async () => {
     mocks.resolve.mockResolvedValue({ entry });
-    setup();
+    const { client } = setup();
     await screen.findByText("Movie");
     fireEvent.click(screen.getByText("Play next"));
     await waitFor(() =>
@@ -94,6 +100,15 @@ describe("playlist continuation", () => {
         "viewer",
       ),
     );
+    expect(client.getMutationCache().getAll()[0]?.state.variables).toEqual({
+      trigger: "viewer",
+      authority: {
+        serverOrigin: "https://test.invalid",
+        authContextVersion: 1,
+        profileId: "profile",
+        profileTokenGeneration: 1,
+      },
+    });
     expect(mocks.resolve).toHaveBeenCalledTimes(2);
     expect(mocks.resolve).toHaveBeenLastCalledWith("list", "first", true);
   });

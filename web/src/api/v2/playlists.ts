@@ -1,24 +1,43 @@
 import {
   captureProfileRequestContext,
-  isCapturedProfileAuthorityActive,
-  getProfileTokenGeneration,
   StaleApiRequestContextError,
   type ProfileRequestContextSnapshot,
 } from "@/api/client";
 import { v2 } from "./request";
 import { withETag } from "./etag";
 
-export function isPlaylistAuthorityCurrent(
-  authority: ProfileRequestContextSnapshot | null | undefined,
-) {
+export type PlaylistAuthority = Pick<
+  ProfileRequestContextSnapshot,
+  "serverOrigin" | "authContextVersion" | "profileId" | "profileTokenGeneration"
+>;
+
+function ownerStamp(snapshot: ProfileRequestContextSnapshot): PlaylistAuthority {
+  return {
+    serverOrigin: snapshot.serverOrigin,
+    authContextVersion: snapshot.authContextVersion,
+    profileId: snapshot.profileId,
+    profileTokenGeneration: snapshot.profileTokenGeneration,
+  };
+}
+
+/** Nonsecret owner identity only; safe for query data and mutation variables. */
+export function capturePlaylistAuthority(): PlaylistAuthority | null {
+  const snapshot = captureProfileRequestContext();
+  return snapshot ? ownerStamp(snapshot) : null;
+}
+export function isPlaylistAuthorityCurrent(authority: PlaylistAuthority | null | undefined) {
+  const current = capturePlaylistAuthority();
   return (
     !!authority &&
-    isCapturedProfileAuthorityActive(authority) &&
-    authority.profileTokenGeneration === getProfileTokenGeneration()
+    !!current &&
+    authority.serverOrigin === current.serverOrigin &&
+    authority.authContextVersion === current.authContextVersion &&
+    authority.profileId === current.profileId &&
+    authority.profileTokenGeneration === current.profileTokenGeneration
   );
 }
 export function playlistAuthorityKey() {
-  const authority = captureProfileRequestContext();
+  const authority = capturePlaylistAuthority();
   return authority
     ? [
         authority.serverOrigin,
@@ -40,7 +59,7 @@ export const getPlaylist = async (id: string) => {
     profileContext: authority,
   });
   if (!isPlaylistAuthorityCurrent(authority)) throw new StaleApiRequestContextError();
-  return { ...result, authority };
+  return { ...result, authority: ownerStamp(authority) };
 };
 export const resolvePlaylistEntry = async (id: string, entryId: string, after = false) => {
   const authority = requireAuthority();
@@ -50,5 +69,5 @@ export const resolvePlaylistEntry = async (id: string, entryId: string, after = 
     profileContext: authority,
   });
   if (!isPlaylistAuthorityCurrent(authority)) throw new StaleApiRequestContextError();
-  return { ...result, authority };
+  return { ...result, authority: ownerStamp(authority) };
 };

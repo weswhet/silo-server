@@ -1,8 +1,12 @@
 import { useEffect, useId, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { captureProfileRequestContext, StaleApiRequestContextError } from "@/api/client";
+import { StaleApiRequestContextError } from "@/api/client";
 import { toast } from "sonner";
-import { resolvePlaylistEntry, isPlaylistAuthorityCurrent } from "@/api/v2/playlists";
+import {
+  resolvePlaylistEntry,
+  isPlaylistAuthorityCurrent,
+  capturePlaylistAuthority,
+} from "@/api/v2/playlists";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -61,7 +65,7 @@ export default function PlaylistPlayingNext({
       authority,
     }: {
       trigger: PlaybackStartTrigger;
-      authority: ReturnType<typeof captureProfileRequestContext>;
+      authority: ReturnType<typeof capturePlaylistAuthority>;
     }) => {
       if (!isPlaylistAuthorityCurrent(authority)) throw new StaleApiRequestContextError();
       return {
@@ -168,7 +172,7 @@ export default function PlaylistPlayingNext({
       continueWatchingItems={[]}
       videoEnded={videoEnded && !play.isPending && !play.isError}
       onPlayNow={(trigger) => {
-        if (!play.isPending) play.mutate({ trigger, authority: captureProfileRequestContext() });
+        if (!play.isPending) play.mutate({ trigger, authority: capturePlaylistAuthority() });
       }}
       onPlayItem={() => undefined}
       onClose={() => {
