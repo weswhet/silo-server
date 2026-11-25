@@ -3,7 +3,13 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { resolvePlaylistEntry } from "@/api/v2/playlists";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useCurrentProfile } from "@/hooks/useCurrentProfile";
 import { useT } from "@/i18n";
 import type { WatchRouteRequest } from "@/pages/watchRouteHelpers";
@@ -83,7 +89,7 @@ export default function PlaylistPlayingNext({
           <DialogHeader>
             <DialogTitle>{t("web.playlists.title")}</DialogTitle>
           </DialogHeader>
-          <p role="status">
+          <DialogDescription role="status">
             {t(
               next.isFetching
                 ? "common.loading"
@@ -91,7 +97,7 @@ export default function PlaylistPlayingNext({
                   ? "web.playlists.playbackFailed"
                   : "web.playlists.finished",
             )}
-          </p>
+          </DialogDescription>
           {next.isError && <Button onClick={() => void next.refetch()}>{t("common.retry")}</Button>}
           <Button
             variant="outline"

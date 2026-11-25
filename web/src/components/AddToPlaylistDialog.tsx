@@ -9,7 +9,13 @@ import { useCurrentProfile } from "@/hooks/useCurrentProfile";
 import { useT } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export default function AddToPlaylistDialog({
   open,
@@ -27,6 +33,7 @@ export default function AddToPlaylistDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t("web.playlists.add")}</DialogTitle>
+          <DialogDescription>{t("web.playlists.subtitle")}</DialogDescription>
         </DialogHeader>
         {open && (
           <AddPanel key={profile?.id} contentId={contentId} onDone={() => onOpenChange(false)} />

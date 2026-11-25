@@ -164,6 +164,11 @@ function PlaylistPage() {
                       <span dir="auto" className="block truncate">
                         {entry.available ? entry.item?.title : t("web.playlists.unavailable")}
                       </span>
+                      {entry.available && entry.item?.series_title && (
+                        <span dir="auto" className="text-muted-foreground block truncate text-sm">
+                          {entry.item.series_title}
+                        </span>
+                      )}
                     </span>
                     <Button
                       size="icon"
