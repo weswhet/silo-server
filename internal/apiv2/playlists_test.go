@@ -65,7 +65,8 @@ func TestPlaylistRedactionAndPlaybackOrder(t *testing.T) {
 	deps, _ := catalogDeps(t)
 	store := &playlistTestStore{owner: "p-owner", p: playlists.Playlist{ID: "list", Name: "Evening", Revision: 3, Entries: []playlists.Entry{{ID: "a", ItemID: "movie"}, {ID: "b", ItemID: "restricted"}, {ID: "c", ItemID: "unreadable"}, {ID: "d", ItemID: "episode:other-series"}, {ID: "e", ItemID: "movie"}}}}
 	deps.Playlists = store
-	deps.CatalogItems = &playlistCatalog{}
+	catalog := &playlistCatalog{}
+	deps.CatalogItems = catalog
 	h := newTestHandler(t, deps)
 	rec := do(t, h, http.MethodGet, "/api/v2/playlists/list", "", viewerHeaders())
 	if rec.Code != 200 {
@@ -108,7 +109,7 @@ func TestPlaylistRedactionAndPlaybackOrder(t *testing.T) {
 	store.stale = true
 	requireProblem(t, do(t, h, http.MethodPatch, "/api/v2/playlists/list", `{"name":"New"}`, with(viewerHeaders(), "If-Match", rec.Header().Get("ETag"))), TypePreconditionFailed)
 	store.stale = false
-	deps.CatalogItems.(*playlistCatalog).err = errors.New("catalog unavailable")
+	catalog.err = errors.New("catalog unavailable")
 	removed := do(t, h, http.MethodDelete, "/api/v2/playlists/list/entries/a", "", with(viewerHeaders(), "If-Match", rec.Header().Get("ETag")))
 	if removed.Code != http.StatusNoContent {
 		t.Fatalf("removal depends on catalog after commit: %d %s", removed.Code, removed.Body.String())

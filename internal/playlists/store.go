@@ -97,7 +97,7 @@ func (s *Store) Get(ctx context.Context, owner Owner, id string) (Playlist, erro
 	if err != nil {
 		return Playlist{}, err
 	}
-	defer tx.Rollback(ctx) //nolint:errcheck
+	defer func() { _ = tx.Rollback(ctx) }()
 	p, err := read(ctx, tx, owner, id, false)
 	if err != nil {
 		return p, err
@@ -121,7 +121,7 @@ func (s *Store) Apply(ctx context.Context, owner Owner, id string, revision int6
 	if err != nil {
 		return Playlist{}, err
 	}
-	defer tx.Rollback(ctx) //nolint:errcheck
+	defer func() { _ = tx.Rollback(ctx) }()
 	p, err := read(ctx, tx, owner, id, true)
 	if err != nil {
 		return p, err

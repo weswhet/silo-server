@@ -4,16 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/danielgtaylor/huma/v2"
 	"net/http"
 	"reflect"
 	"strconv"
 	"strings"
 
+	"github.com/danielgtaylor/huma/v2"
+
 	"github.com/Silo-Server/silo-server/internal/api/handlers"
 	"github.com/Silo-Server/silo-server/internal/imagesize"
 	"github.com/Silo-Server/silo-server/internal/playlists"
 )
+
+const playlistCacheControl = "private, no-store"
 
 type PlaylistService interface {
 	List(context.Context, playlists.Owner) ([]playlists.Playlist, error)
@@ -180,7 +183,7 @@ func (reg *Registry) listPlaylists(ctx context.Context, _ *struct{}) (*PlaylistL
 	if err != nil {
 		return nil, playlistProblem(err)
 	}
-	out := &PlaylistListOutput{CacheControl: "private, no-store"}
+	out := &PlaylistListOutput{CacheControl: playlistCacheControl}
 	out.Body.Items = []PlaylistSummary{}
 	for _, p := range ps {
 		out.Body.Items = append(out.Body.Items, playlistSummary(p))
@@ -227,7 +230,7 @@ func (reg *Registry) playlistEntry(ctx context.Context, e playlists.Entry) (Play
 	return out, nil
 }
 func (reg *Registry) playlistOutput(ctx context.Context, p playlists.Playlist) (*PlaylistOutput, error) {
-	out := &PlaylistOutput{CacheControl: "private, no-store", ETag: playlistTag(ctx, p).String(), Body: Playlist{PlaylistSummary: playlistSummary(p), Entries: []PlaylistEntry{}}}
+	out := &PlaylistOutput{CacheControl: playlistCacheControl, ETag: playlistTag(ctx, p).String(), Body: Playlist{PlaylistSummary: playlistSummary(p), Entries: []PlaylistEntry{}}}
 	cache := make(map[string]PlaylistEntry)
 	for _, e := range p.Entries {
 		entry, ok := cache[e.ItemID]
@@ -340,7 +343,7 @@ func (reg *Registry) resolvePlaylistPlayback(ctx context.Context, in *PlaylistPl
 	if in.After {
 		start++
 	}
-	out := &PlaylistPlaybackOutput{CacheControl: "private, no-store"}
+	out := &PlaylistPlaybackOutput{CacheControl: playlistCacheControl}
 	for _, e := range p.Entries[start:] {
 		entry, err := reg.playlistEntry(ctx, e)
 		if err != nil {
